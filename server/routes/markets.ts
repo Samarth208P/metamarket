@@ -6,20 +6,26 @@ import multer from "multer";
 import User from "../models/User";
 import Market, { calculateYesPrice, calculateNoPrice } from "../models/Market";
 import Comment from "../models/Comment";
+import { v2 as cloudinary } from 'cloudinary';
+import { CloudinaryStorage } from 'multer-storage-cloudinary';
 
 const router = Router();
 
-// ── Image upload setup ────────────────────────────────────────────────────────
-const UPLOADS_DIR = path.join(process.cwd(), "public", "uploads");
-if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
-
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, UPLOADS_DIR),
-  filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    cb(null, `${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`);
-  },
+// ── Cloudinary Configuration ───────────────────────────────────────────────
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET
 });
+
+const storage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: {
+    folder: 'metamarket',
+    allowed_formats: ['jpg', 'png', 'jpeg', 'webp'],
+  } as any,
+});
+
 const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 } });
 
 function ensureAuthenticated(req, res, next) {
@@ -88,7 +94,8 @@ router.get("/markets", async (req, res) => {
 // ── Image upload ────────────────────────────────────────────────────────────
 router.post("/upload", ensureAuthenticated, ensureAdmin, upload.single("image"), (req, res) => {
   if (!req.file) return res.status(400).json({ error: "No file uploaded" });
-  const url = `/uploads/${req.file.filename}`;
+  // For Cloudinary, path is the full URL
+  const url = (req.file as any).path;
   return res.json({ url });
 });
 

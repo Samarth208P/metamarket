@@ -5,6 +5,7 @@ import session from "express-session";
 import passport from "passport";
 import mongoose from "mongoose";
 import path from "path";
+import MongoStore from 'connect-mongo';
 import { connectDB } from "./database";
 
 import marketRoutes from "./routes/markets";
@@ -38,10 +39,15 @@ export async function createServer() {
     secret: process.env.SESSION_SECRET || 'metamarket-secret-key',
     resave: false,
     saveUninitialized: false,
+    store: MongoStore.create({
+      mongoUrl: process.env.MONGODB_URI || 'mongodb://localhost:27017/metamarket',
+      ttl: 14 * 24 * 60 * 60, // 14 days
+      autoRemove: 'native'
+    }),
     cookie: {
-      secure: false, // Set to true in production with HTTPS
+      secure: process.env.NODE_ENV === 'production', 
       httpOnly: true,
-      maxAge: 24 * 60 * 60 * 1000 // 24 hours
+      maxAge: 14 * 24 * 60 * 60 * 1000 
     }
   }));
 
