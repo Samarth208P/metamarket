@@ -7,12 +7,13 @@ const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
 
 // Configure Passport Google Strategy
+// Configure Passport Google Strategy
 passport.use(new GoogleStrategy({
-    clientID: GOOGLE_CLIENT_ID,
-    clientSecret: GOOGLE_CLIENT_SECRET,
+    clientID: GOOGLE_CLIENT_ID!,
+    clientSecret: GOOGLE_CLIENT_SECRET!,
     callbackURL: '/auth/google/callback'
   },
-  async (accessToken, refreshToken, profile, done) => {
+  async (accessToken: string, refreshToken: string, profile: any, done: any) => {
     try {
       const email = profile.emails?.[0]?.value;
       if (!email || (!email.endsWith('@iitr.ac.in') && !email.endsWith('@mt.iitr.ac.in'))) {
@@ -47,7 +48,7 @@ passport.use(new GoogleStrategy({
       return done(error as Error, null);
     }
   }
-));
+) as any);
 
 // Serialize user for session
 passport.serializeUser((user: any, done) => {
