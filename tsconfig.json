@@ -30,7 +30,7 @@
     "paths": {
       "@/*": ["./client/*"],
       "@shared/*": ["./shared/*"],
-      "@server/*": ["./server/*"]
+      "@server/*": ["./api/server/*"]
     }
   },
   "include": [
