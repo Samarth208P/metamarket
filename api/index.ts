@@ -1,6 +1,6 @@
 import "dotenv/config";
-import { connectDB } from '../server/database.ts';
-import { createServer } from '../server/index.ts';
+import { connectDB } from './server/database.ts';
+import { createServer } from './server/index.ts';
 
 // Vercel serverless entry point
 let appInstance: any = null;
