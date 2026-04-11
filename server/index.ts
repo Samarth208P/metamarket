@@ -55,10 +55,9 @@ export async function createServer() {
     }
   }));
 
-  // Initialize Passport
+  // Initialize Passport (but not passport.session())
   initializePassport();
   app.use(passport.initialize());
-  app.use(passport.session());
 
   // Example API routes
   app.get("/api/ping", (_req, res) => {
@@ -95,7 +94,7 @@ export async function createServer() {
   app.post('/auth/logout', handleLogout);
   app.get('/api/user', handleGetUser);
   app.post('/api/user/bookmarks', async (req, res) => {
-    if (!req.isAuthenticated() || !req.user) {
+    if (!req.session || !(req.session as any).userId) {
       return res.status(401).json({ error: "Unauthorized" });
     }
     const { marketId } = req.body;
@@ -103,7 +102,7 @@ export async function createServer() {
       return res.status(400).json({ error: "Market ID required" });
     }
     try {
-      const user = await User.findById((req.user as any).id || (req.user as any)._id);
+      const user = await User.findById((req.session as any).userId);
       if (!user) return res.status(404).json({ error: "User not found" });
       
       if (!user.bookmarks) {
