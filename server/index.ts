@@ -7,6 +7,7 @@ import mongoose from "mongoose";
 import path from "path";
 import MongoStore from 'connect-mongo';
 import { connectDB } from "./database";
+import { initializePassport } from "./routes/auth";
 
 import marketRoutes from "./routes/markets";
 import {
@@ -55,6 +56,7 @@ export async function createServer() {
   }));
 
   // Initialize Passport
+  initializePassport();
   app.use(passport.initialize());
   app.use(passport.session());
 
