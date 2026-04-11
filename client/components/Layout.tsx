@@ -1,7 +1,8 @@
-import { Link } from "react-router-dom";
-import { Menu, X, User, LogOut, Settings } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useNavigate, useLocation, Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import { Search, Menu, X, User, LogOut, Settings } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,7 +19,24 @@ interface LayoutProps {
 
 export function Layout({ children }: LayoutProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (searchQuery.trim()) {
+      navigate(`/?q=${encodeURIComponent(searchQuery)}`);
+    } else {
+      navigate(`/`);
+    }
+  };
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    setSearchQuery(params.get("q") || "");
+  }, [location.search]);
 
   const navLinks = [
     { label: "Markets", href: "/" },
@@ -34,13 +52,26 @@ export function Layout({ children }: LayoutProps) {
       <header className="sticky top-0 z-50 border-b border-border bg-background">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           {/* Logo - Text only, clean */}
-          <Link to="/" className="flex items-center gap-2 font-bold text-xl tracking-tight text-foreground">
-            <img src="/Frame.svg" alt="MetaMarket" className="w-5 h-5 object-contain" />
+          <Link to="/" className="flex items-center gap-2 font-bold text-xl tracking-tight text-foreground shrink-0">
             MetaMarket
           </Link>
 
+          {/* Search Bar - Now next to logo */}
+          <div className="hidden md:flex flex-1 max-w-md ml-8 mr-auto">
+            <form onSubmit={handleSearch} className="relative w-full">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                type="text"
+                placeholder="Search markets..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-9 bg-muted/40 border-none h-9 text-sm rounded-lg focus-visible:ring-0 focus-visible:ring-offset-0 focus:bg-muted font-medium"
+              />
+            </form>
+          </div>
+
           {/* Desktop Navigation */}
-          <nav className="hidden md:flex items-center gap-6 ml-6 flex-1">
+          <nav className="hidden lg:flex items-center gap-6 ml-6 whitespace-nowrap">
             {currentNavLinks.map((link) => (
               <Link
                 key={link.href}
@@ -51,14 +82,16 @@ export function Layout({ children }: LayoutProps) {
               </Link>
             ))}
           </nav>
-
-          {/* Desktop User Info */}
-          <div className="hidden md:flex items-center gap-3">
+          
+          <div className="hidden md:flex items-center gap-6 ml-auto pl-6 border-l border-border/50">
             {user ? (
               <>
-                <Link to="/portfolio" className="flex items-center gap-2 px-3 py-1.5 bg-muted/50 hover:bg-muted rounded-md transition-colors font-semibold text-sm">
-                  Portfolio <span className="text-foreground">₹{user.balance.toLocaleString()}</span>
-                </Link>
+                <div className="flex items-center gap-4 mr-2">
+                  <Link to="/portfolio" className="flex flex-col items-center group transition-opacity hover:opacity-80">
+                    <span className="text-[10px] uppercase font-bold text-muted-foreground leading-none">Portfolio</span>
+                    <span className="text-sm font-bold text-yes">₹{user.balance.toLocaleString()}</span>
+                  </Link>
+                </div>
 
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>

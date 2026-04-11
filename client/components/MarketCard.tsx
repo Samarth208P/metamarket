@@ -25,6 +25,8 @@ interface MarketCardProps {
   priceHistory?: PriceHistoryPoint[];
   pool?: MarketPool;
   onTrade?: (marketId: string, tradeResult: any) => void;
+  status?: string;
+  resolvedOutcome?: "yes" | "no";
 }
 
 export function MarketCard({
@@ -44,6 +46,9 @@ export function MarketCard({
   teams,
   pool,
   onTrade,
+  priceHistory,
+  status,
+  resolvedOutcome,
 }: MarketCardProps) {
   const [showBetModal, setShowBetModal] = useState(false);
   const [selectedTeamIdx, setSelectedTeamIdx] = useState<number | null>(null);
@@ -78,10 +83,11 @@ export function MarketCard({
   };
 
   return (
-    <div
-      onClick={handleCardClick}
-      className="group flex flex-col bg-card border border-border rounded-xl p-4 transition-all cursor-pointer hover:border-primary/30 hover:shadow-sm"
-    >
+    <>
+      <div
+        onClick={handleCardClick}
+        className="group flex flex-col bg-card border border-border rounded-xl p-4 transition-all cursor-pointer hover:border-primary/30 hover:shadow-sm h-full"
+      >
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center gap-3">
           {logoUrl ? (
@@ -91,9 +97,6 @@ export function MarketCard({
               {category.charAt(0)}
             </div>
           )}
-          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-            {category} {marketType === 'multi' && '• Multi'}
-          </span>
         </div>
         <button
           onClick={handleBookmarkToggle}
@@ -126,27 +129,28 @@ export function MarketCard({
           <div className="grid grid-cols-2 gap-2">
             <button
               onClick={(e) => { e.stopPropagation(); setSelectedOutcome('yes'); setShowBetModal(true); }}
-              className="flex items-center justify-between p-2.5 rounded-lg bg-muted/40 hover:bg-yes/10 border border-transparent hover:border-yes/30 transition-all group/btn"
+              className="flex items-center justify-between p-2.5 rounded-lg bg-yes/20 hover:bg-yes text-yes hover:text-white border border-yes/40 transition-all group/btn"
             >
-              <span className="text-sm font-semibold text-muted-foreground group-hover/btn:text-yes">
+              <span className="text-sm font-black uppercase tracking-wider">
                 {marketType === 'versus' ? (shortA || optionA) : 'Yes'}
               </span>
-              <span className="text-sm font-bold text-foreground group-hover/btn:text-yes">{yesPrice.toFixed(0)}¢</span>
+              <span className="text-sm font-black text-yes group-hover/btn:text-white">{yesPrice.toFixed(0)}p</span>
             </button>
             <button
               onClick={(e) => { e.stopPropagation(); setSelectedOutcome('no'); setShowBetModal(true); }}
-              className="flex items-center justify-between p-2.5 rounded-lg bg-muted/40 hover:bg-no/10 border border-transparent hover:border-no/30 transition-all group/btn"
+              className="flex items-center justify-between p-2.5 rounded-lg bg-no/20 hover:bg-no text-no hover:text-white border border-no/40 transition-all group/btn"
             >
-              <span className="text-sm font-semibold text-muted-foreground group-hover/btn:text-no">
+              <span className="text-sm font-black uppercase tracking-wider">
                 {marketType === 'versus' ? (shortB || optionB) : 'No'}
               </span>
-              <span className="text-sm font-bold text-foreground group-hover/btn:text-no">{noPrice.toFixed(0)}¢</span>
+              <span className="text-sm font-black text-no group-hover/btn:text-white">{noPrice.toFixed(0)}p</span>
             </button>
           </div>
         )}
 
         <div className="flex items-center justify-between pt-3 border-t border-border text-xs font-medium text-muted-foreground">
           <span>₹{volume.toLocaleString()} Vol.</span>
+        </div>
         </div>
       </div>
 
@@ -163,10 +167,14 @@ export function MarketCard({
             teamIndex: selectedTeamIdx ?? undefined,
             teamName: selectedTeam?.name,
             pool: selectedTeam ? { yesPool: selectedTeam.yesPool, noPool: selectedTeam.noPool, totalLiquidity: selectedTeam.yesPool + selectedTeam.noPool } : (pool as MarketPool),
+            priceHistory: priceHistory,
+            status: status,
+            volume: volume,
+            resolvedOutcome: resolvedOutcome,
           }}
           onTrade={onTrade || (() => { })}
         />
       )}
-    </div>
+    </>
   );
 }

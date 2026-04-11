@@ -13,6 +13,7 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts";
+import { CommentsSection } from "@/components/CommentsSection";
 
 async function fetchMarket(id: string): Promise<Market> {
   const response = await fetch(`/api/markets/${id}`, {
@@ -82,11 +83,11 @@ export default function MarketDetail() {
                 <div className="space-y-3">
                   <div className="flex items-center justify-between p-4 border border-yes/30 bg-yes/5 rounded-lg">
                     <span className="font-bold text-yes">Yes</span>
-                    <span className="text-2xl font-bold">{market.yesPrice.toFixed(0)}¢</span>
+                    <span className="text-2xl font-bold">{market.yesPrice.toFixed(0)}p</span>
                   </div>
                   <div className="flex items-center justify-between p-4 border border-no/30 bg-no/5 rounded-lg">
                     <span className="font-bold text-no">No</span>
-                    <span className="text-2xl font-bold">{market.noPrice.toFixed(0)}¢</span>
+                    <span className="text-2xl font-bold">{market.noPrice.toFixed(0)}p</span>
                   </div>
                 </div>
                 {market.status === 'active' && (
@@ -105,7 +106,7 @@ export default function MarketDetail() {
                   <LineChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#333" opacity={0.2} />
                     <XAxis dataKey="time" tick={{ fill: '#888', fontSize: 12 }} axisLine={false} tickLine={false} />
-                    <YAxis tickFormatter={(value) => `${value.toFixed(0)}¢`} tick={{ fill: '#888', fontSize: 12 }} axisLine={false} tickLine={false} />
+                    <YAxis tickFormatter={(value) => `${value.toFixed(0)}p`} tick={{ fill: '#888', fontSize: 12 }} axisLine={false} tickLine={false} />
                     <Tooltip contentStyle={{ borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--card)' }} />
                     <Legend iconType="circle" wrapperStyle={{ fontSize: '12px', fontWeight: 600 }} />
                     <Line type="stepAfter" dataKey="yes" stroke="hsl(var(--yes-color))" strokeWidth={2} dot={false} name="YES" />
@@ -113,6 +114,9 @@ export default function MarketDetail() {
                   </LineChart>
                 </ResponsiveContainer>
               </div>
+            </div>
+            <div className="bg-card border border-border rounded-xl p-6">
+              <CommentsSection marketId={market.id} isLive={market.status === 'active'} />
             </div>
           </section>
         )}

@@ -5,6 +5,7 @@ import fs from "fs";
 import multer from "multer";
 import User from "../models/User";
 import Market, { calculateYesPrice, calculateNoPrice } from "../models/Market";
+import Comment from "../models/Comment";
 
 const router = Router();
 
@@ -384,15 +385,21 @@ router.post("/markets/:id/resolve", ensureAuthenticated, ensureAdmin, async (req
       }
     });
 
-    if (totalPayout > 0) {
-      user.balance += totalPayout;
+    // Even if payout is 0, we need to save the filtered holdings and the lose record
+    if (totalPayout > 0 || totalPayout === 0) {
+      if (totalPayout > 0) {
+        user.balance += totalPayout;
+      }
+      
+      const marketLabel = isMulti && !isNaN(tIdx) && market.teams ? ` [${market.teams[tIdx].name}]` : "";
+      
       user.tradeHistory.push({
         marketId: market.id,
-        marketTitle: market.title,
+        marketTitle: market.title + marketLabel,
         tradeType: "payout",
         outcome: outcome,
         amount: totalPayout,
-        cost: -totalPayout,
+        cost: -totalPayout, // Payout is negative cost
         timestamp: new Date(),
       });
       user.markModified("holdings");
@@ -417,6 +424,42 @@ router.get("/leaderboard", async (req, res) => {
     rank: index + 1,
   }));
   return res.json(leaderboard);
+});
+
+// ── Comments ──────────────────────────────────────────────────────────────
+router.get("/markets/:id/comments", async (req, res) => {
+  const marketId = req.params.id;
+  const comments = await Comment.find({ marketId }).sort({ createdAt: -1 });
+  res.json(comments);
+});
+
+router.post("/markets/:id/comments", ensureAuthenticated, async (req, res) => {
+  const marketId = req.params.id;
+  const { content } = req.body;
+
+  if (!content || content.trim().length === 0) {
+    return res.status(400).json({ error: "Comment content is required" });
+  }
+
+  const market = await Market.findById(marketId);
+  if (!market) return res.status(404).json({ error: "Market not found" });
+
+  if (market.status !== "active") {
+    return res.status(400).json({ error: "Cannot comment on a resolved market" });
+  }
+
+  const userId = (req.user as any)?.id || (req.user as any)?._id;
+  const user = await User.findById(userId);
+  if (!user) return res.status(401).json({ error: "User not found" });
+
+  const comment = await Comment.create({
+    marketId,
+    userId: user.id,
+    userName: user.name,
+    content: content.trim(),
+  });
+
+  res.status(201).json(comment);
 });
 
 export default router;

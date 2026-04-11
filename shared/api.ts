@@ -17,6 +17,12 @@ export interface User {
   balance: number;
   tradeHistory?: any[];
   bookmarks?: string[];
+  holdings?: {
+    marketId: string;
+    teamIndex?: number;
+    yesShares: number;
+    noShares: number;
+  }[];
 }
 
 export interface PriceHistoryPoint {

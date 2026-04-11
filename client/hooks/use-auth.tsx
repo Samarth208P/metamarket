@@ -6,6 +6,8 @@ interface AuthContextType {
   login: () => void;
   logout: () => Promise<void>;
   updateBalance: (newBalance: number) => void;
+  updateUser: (userData: User) => void;
+  refreshUser: () => Promise<void>;
   toggleBookmark: (marketId: string) => Promise<void>;
   isAuthenticated: boolean;
   isLoading: boolean;
@@ -56,10 +58,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const updateUser = (userData: User) => {
+    setUser(userData);
+  };
+
+  const refreshUser = async () => {
+    try {
+      const response = await fetch('/api/user', { credentials: 'include' });
+      if (response.ok) {
+        const userData = await response.json();
+        setUser(userData);
+      }
+    } catch (error) {
+      console.error('Manual user refresh failed:', error);
+    }
+  };
+
   const updateBalance = (newBalance: number) => {
     if (user) {
-      const updatedUser = { ...user, balance: newBalance };
-      setUser(updatedUser);
+      setUser({ ...user, balance: newBalance });
     }
   };
 
@@ -86,6 +103,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     login,
     logout,
     updateBalance,
+    updateUser,
+    refreshUser,
     toggleBookmark,
     isAuthenticated: !!user,
     isLoading,

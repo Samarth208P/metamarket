@@ -24,6 +24,10 @@ interface MarketProps {
   volume: number;
   marketType: 'binary' | 'versus' | 'multi';
   teams?: { name: string; imageUrl?: string }[];
+  optionA?: string;
+  optionB?: string;
+  shortA?: string;
+  shortB?: string;
 }
 
 interface TeamEntry {
@@ -431,9 +435,13 @@ export default function Admin() {
                         ) : (
                           <div className="flex gap-2">
                             <Button size="sm" variant="outline" className="text-yes border-yes hover:bg-yes/10"
-                              onClick={() => handleResolveMarket(market.id, 'yes')}>Resolve YES</Button>
+                              onClick={() => handleResolveMarket(market.id, 'yes')}>
+                              Resolve {market.marketType === 'versus' ? (market.shortA || market.optionA || 'A') : 'YES'}
+                            </Button>
                             <Button size="sm" variant="outline" className="text-no border-no hover:bg-no/10"
-                              onClick={() => handleResolveMarket(market.id, 'no')}>Resolve NO</Button>
+                              onClick={() => handleResolveMarket(market.id, 'no')}>
+                              Resolve {market.marketType === 'versus' ? (market.shortB || market.optionB || 'B') : 'NO'}
+                            </Button>
                           </div>
                         )}
                       </div>
