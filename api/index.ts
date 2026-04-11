@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { connectDB } from '../server/database.ts';
 import { createServer } from '../server/index.ts';
 
 // Vercel serverless entry point
@@ -9,6 +10,7 @@ export default async function handler(req: any, res: any) {
     if (!appInstance) {
       console.log('Metamarket: Initializing server instance...');
       const startTime = Date.now();
+      await connectDB();
       appInstance = await createServer();
       console.log(`Metamarket: Server created in ${Date.now() - startTime}ms`);
     }

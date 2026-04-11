@@ -5,7 +5,6 @@ import cookieParser from "cookie-parser";
 import passport from "passport";
 import mongoose from "mongoose";
 import path from "path";
-import { connectDB } from "./database";
 import { initializePassport } from "./routes/auth";
 
 import marketRoutes from "./routes/markets";
@@ -19,7 +18,6 @@ import {
 import User from "./models/User";
 
 export async function createServer() {
-  await connectDB();
 
   const app = express();
   
