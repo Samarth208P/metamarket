@@ -4,5 +4,10 @@
     { "source": "/api/(.*)", "destination": "/api" },
     { "source": "/auth/(.*)", "destination": "/api" },
     { "source": "/(.*)", "destination": "/" }
-  ]
+  ],
+  "functions": {
+    "api/index.ts": {
+      "includeFiles": ["server/**", "shared/**"]
+    }
+  }
 }

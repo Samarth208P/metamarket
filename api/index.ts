@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { createServer } from '../server/index';
+import { createServer } from '../server/index.ts';
 
 // Vercel serverless entry point
 let appInstance: any = null;
