@@ -85,9 +85,12 @@ export const handleGoogleAuth: RequestHandler = (req, res, next) => {
 
 export const handleGoogleCallback: RequestHandler = (req, res, next) => {
   passport.authenticate('google', {
-    failureRedirect: '/login?error=auth_failed',
-    successRedirect: '/'
+    failureRedirect: '/login?error=auth_failed'
   })(req, res, next);
+};
+
+export const handleAuthSuccess: RequestHandler = (req, res) => {
+  res.redirect(process.env.NODE_ENV === 'production' ? '/' : 'http://localhost:5173');
 };
 
 export const handleLogout: RequestHandler = (req, res) => {
