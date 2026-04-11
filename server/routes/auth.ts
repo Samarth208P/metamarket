@@ -49,7 +49,7 @@ export function initializePassport() {
           return done(error as Error, undefined);
         }
       }
-    ));
+    ) as any);
     console.log('✅ Google Auth strategy initialized');
   } catch (error) {
     console.error('❌ Google Auth initialization failed:', error);
