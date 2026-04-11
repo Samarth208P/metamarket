@@ -74,9 +74,9 @@ export async function createServer() {
   app.use("/api", marketRoutes);
 
   // Auth routes
-  app.get('/auth/google', handleGoogleAuth);
-  app.get('/auth/google/callback', handleGoogleCallback, handleAuthSuccess);
-  app.post('/auth/logout', handleLogout);
+  app.get('/api/auth/google', handleGoogleAuth);
+  app.get('/api/auth/google/callback', handleGoogleCallback, handleAuthSuccess);
+  app.post('/api/auth/logout', handleLogout);
   app.get('/api/user', handleGetUser);
   app.post('/api/user/bookmarks', async (req, res) => {
     const userId = req.signedCookies?.userId;

@@ -43,12 +43,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = () => {
     // Redirect to Google OAuth
-    window.location.href = '/auth/google';
+    window.location.href = '/api/auth/google';
   };
 
   const logout = async () => {
     try {
-      await fetch('/auth/logout', {
+      await fetch('/api/auth/logout', {
         method: 'POST',
         credentials: 'include',
       });
