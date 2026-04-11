@@ -1,11 +1,10 @@
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
-import session from "express-session";
+import cookieParser from "cookie-parser";
 import passport from "passport";
 import mongoose from "mongoose";
 import path from "path";
-import MongoStore from 'connect-mongo';
 import { connectDB } from "./database";
 import { initializePassport } from "./routes/auth";
 
@@ -38,22 +37,8 @@ export async function createServer() {
   // Serve uploaded images statically
   app.use("/uploads", express.static(path.join(process.cwd(), "public", "uploads")));
 
-  // Session configuration
-  app.use(session({
-    secret: process.env.SESSION_SECRET || 'metamarket-secret-key',
-    resave: false,
-    saveUninitialized: false,
-    store: MongoStore.create({
-      mongoUrl: process.env.MONGODB_URI || 'mongodb://localhost:27017/metamarket',
-      ttl: 14 * 24 * 60 * 60, // 14 days
-      autoRemove: 'native'
-    }),
-    cookie: {
-      secure: process.env.NODE_ENV === 'production', 
-      httpOnly: true,
-      maxAge: 14 * 24 * 60 * 60 * 1000 
-    }
-  }));
+  // Cooking parsing (replaces sessions for serverless stability)
+  app.use(cookieParser(process.env.SESSION_SECRET || 'metamarket-secret-key'));
 
   // Initialize Passport (but not passport.session())
   initializePassport();
@@ -94,7 +79,8 @@ export async function createServer() {
   app.post('/auth/logout', handleLogout);
   app.get('/api/user', handleGetUser);
   app.post('/api/user/bookmarks', async (req, res) => {
-    if (!req.session || !(req.session as any).userId) {
+    const userId = req.signedCookies?.userId;
+    if (!userId) {
       return res.status(401).json({ error: "Unauthorized" });
     }
     const { marketId } = req.body;
@@ -102,7 +88,7 @@ export async function createServer() {
       return res.status(400).json({ error: "Market ID required" });
     }
     try {
-      const user = await User.findById((req.session as any).userId);
+      const user = await User.findById(userId);
       if (!user) return res.status(404).json({ error: "User not found" });
       
       if (!user.bookmarks) {

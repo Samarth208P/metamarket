@@ -69,8 +69,16 @@ export const handleGoogleCallback: RequestHandler = (req, res, next) => {
     if (err || !user) {
       return res.redirect('/login?error=auth_failed');
     }
-    // Manually store userId in session instead of using passport.serializeUser
-    (req.session as any).userId = user.id || user._id;
+    
+    // Set a signed cookie with the userId (stateless auth)
+    res.cookie('userId', user.id || user._id, {
+      signed: true,
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: 14 * 24 * 60 * 60 * 1000, // 14 days
+      sameSite: 'lax'
+    });
+
     res.redirect('/');
   })(req, res, next);
 };
@@ -80,16 +88,13 @@ export const handleAuthSuccess: RequestHandler = (req, res) => {
 };
 
 export const handleLogout: RequestHandler = (req, res) => {
-  if (req.session) {
-    req.session.destroy(() => res.json({ success: true }));
-  } else {
-    res.json({ success: true });
-  }
+  res.clearCookie('userId');
+  res.json({ success: true });
 };
 
 export const handleGetUser: RequestHandler = async (req, res) => {
   try {
-    const userId = (req.session as any)?.userId;
+    const userId = (req as any).signedCookies?.userId;
     if (userId) {
       const user = await User.findById(userId);
       if (user) return res.json(user);
