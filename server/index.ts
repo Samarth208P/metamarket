@@ -22,6 +22,9 @@ export async function createServer() {
   await connectDB();
 
   const app = express();
+  
+  // Important for Vercel behind proxy
+  app.set("trust proxy", 1);
 
   // Middleware
   app.use(cors({
