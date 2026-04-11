@@ -5,8 +5,6 @@
     { "source": "/(.*)", "destination": "/" }
   ],
   "functions": {
-    "api/index.ts": {
-      "includeFiles": ["server/**/*", "shared/**/*"]
-    }
+    "api/index.ts": {}
   }
 }
