@@ -19,7 +19,7 @@ export function initializePassport() {
         clientSecret: GOOGLE_CLIENT_SECRET,
         callbackURL: process.env.GOOGLE_CALLBACK_URL || (process.env.NODE_ENV === 'production' 
           ? `https://${process.env.VERCEL_URL || 'metamarket-iitr.vercel.app'}/mapi/auth/google/callback`
-          : '/mapi/auth/google/callback'),
+          : 'http://localhost:8080/mapi/auth/google/callback'),
         proxy: true
       },
       async (_accessToken, _refreshToken, profile, done) => {
