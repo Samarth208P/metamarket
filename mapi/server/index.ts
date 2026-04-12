@@ -33,7 +33,9 @@ export async function createServer() {
   app.use(express.urlencoded({ extended: true }));
 
   // Serve uploaded images statically
-  app.use("/uploads", express.static(path.join(process.cwd(), "public", "uploads")));
+  // Serve uploaded images statically
+  const uploadsPath = path.resolve(process.cwd(), "public", "uploads");
+  app.use("/uploads", express.static(uploadsPath));
 
   // Cooking parsing (replaces sessions for serverless stability)
   app.use(cookieParser(process.env.SESSION_SECRET || 'metamarket-secret-key'));
