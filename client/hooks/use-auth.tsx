@@ -18,20 +18,23 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [bookmarks, setBookmarks] = useState<string[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    // Load bookmarks from localStorage
+  const [bookmarks, setBookmarks] = useState<string[]>(() => {
     try {
       const stored = localStorage.getItem('metamarket_bookmarks');
-      if (stored) {
-        setBookmarks(JSON.parse(stored));
-      }
+      return stored ? JSON.parse(stored) : [];
     } catch (e) {
-      console.error("Failed to load bookmarks", e);
+      console.error("Failed to parse initial bookmarks", e);
+      return [];
     }
-    
+  });
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Sync bookmarks to localStorage whenever they change
+  useEffect(() => {
+    localStorage.setItem('metamarket_bookmarks', JSON.stringify(bookmarks));
+  }, [bookmarks]);
+
+  useEffect(() => {
     // Check if user is already authenticated on page load
     checkAuthStatus();
   }, []);
@@ -93,14 +96,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const toggleBookmark = (marketId: string) => {
-    setBookmarks(prev => {
-      const newBookmarks = prev.includes(marketId)
+    setBookmarks(prev => 
+      prev.includes(marketId)
         ? prev.filter(id => id !== marketId)
-        : [...prev, marketId];
-      
-      localStorage.setItem('metamarket_bookmarks', JSON.stringify(newBookmarks));
-      return newBookmarks;
-    });
+        : [...prev, marketId]
+    );
   };
 
   const value = {

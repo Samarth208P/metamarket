@@ -40,7 +40,7 @@ export default function Index() {
 
   const [markets, setMarkets] = useState<Market[]>([]);
 
-  const { user, refreshUser } = useAuth();
+  const { user, refreshUser, bookmarks } = useAuth();
 
   useEffect(() => {
     if (data) {
@@ -53,7 +53,7 @@ export default function Index() {
     const matchesQuery = m.title.toLowerCase().includes(query.toLowerCase()) || 
                         m.category.toLowerCase().includes(query.toLowerCase());
     const matchesTag = !selectedTag || m.category.toLowerCase() === selectedTag.toLowerCase();
-    const matchesBookmarks = !showBookmarksOnly || (user?.bookmarks?.includes(m.id));
+    const matchesBookmarks = !showBookmarksOnly || (bookmarks.includes(m.id));
     return matchesQuery && matchesTag && matchesBookmarks;
   });
 
