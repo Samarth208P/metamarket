@@ -1,3 +1,4 @@
+import "dotenv/config";
 import path from "node:path";
 import { createServer } from "./index.js";
 import * as express from "express";
