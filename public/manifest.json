@@ -1,0 +1,23 @@
+{
+  "name": "MetaMarket",
+  "short_name": "MetaMarket",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "description": "The premier decentralized prediction market for global events.",
+  "icons": [
+    {
+      "src": "/Frame.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/Frame.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}
