@@ -353,7 +353,7 @@ export function BetModal({ isOpen, onClose, market, initialOutcome = 'yes', onTr
             onClick={(e) => { e.stopPropagation(); handleTrade(); }}
             className={cn("flex-[2] h-12 text-base font-black uppercase tracking-widest", isBuying ? "bg-yes text-white hover:bg-yes/90" : "bg-no text-white hover:bg-no/90")}
           >
-            Confirm {isBuying ? 'Buy' : 'Sell'}
+            Confirm {outcome === 'yes' ? teamALabel : teamBLabel} {isBuying ? 'Buy' : 'Sell'}
           </Button>
         </div>
       ) : (
@@ -366,7 +366,7 @@ export function BetModal({ isOpen, onClose, market, initialOutcome = 'yes', onTr
           }
           className={cn("w-full h-12 text-base font-bold transition-all active:scale-95", isBuying ? "bg-primary text-primary-foreground hover:bg-primary/90" : "bg-foreground text-background hover:bg-foreground/90")}
         >
-          {user ? (isBuying ? `Review ${teamALabel} Buy` : `Review ${teamBLabel} Sell`) : 'Log In To Trade'}
+          {user ? `Review ${outcome === 'yes' ? teamALabel : teamBLabel} ${isBuying ? 'Buy' : 'Sell'}` : 'Log In To Trade'}
         </Button>
       )}
     </div>
