@@ -1,0 +1,45 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: metamarket-app
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    environment:
+      # Override the Atlas URI from .env to use the local containerized MongoDB
+      - MONGODB_URI=mongodb://mongodb:27017/metamarket
+      - NODE_ENV=production
+      - PORT=8080
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - metamarket-network
+    restart: always
+
+  mongodb:
+    image: mongo:latest
+    container_name: metamarket-db
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - metamarket-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+    restart: always
+
+networks:
+  metamarket-network:
+    driver: bridge
+
+volumes:
+  mongodb_data:

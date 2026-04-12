@@ -18,7 +18,6 @@ import {
 import User from "./models/User.js";
 
 export async function createServer() {
-
   const app = express();
   
   // Important for Vercel behind proxy
@@ -32,15 +31,14 @@ export async function createServer() {
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
 
-  // Serve uploaded images statically
-  // Serve uploaded images statically
+  // Serve uploaded images statically (Legacy support)
   const uploadsPath = path.resolve(process.cwd(), "public", "uploads");
   app.use("/uploads", express.static(uploadsPath));
 
-  // Cooking parsing (replaces sessions for serverless stability)
+  // Cookie parsing (stateless auth)
   app.use(cookieParser(process.env.SESSION_SECRET || 'metamarket-secret-key'));
 
-  // Initialize Passport (but not passport.session())
+  // Initialize Passport
   initializePassport();
   app.use(passport.initialize());
 
@@ -60,18 +58,19 @@ export async function createServer() {
     next();
   });
 
-  // Example API routes
-  app.get("/mapi/ping", (_req, res) => {
+  // API Router
+  const apiRouter = express.Router();
+
+  // Basic API routes
+  apiRouter.get("/ping", (_req, res) => {
     const ping = process.env.PING_MESSAGE ?? "ping";
     res.json({ message: ping });
   });
 
-  app.get("/mapi/health", async (_req, res) => {
+  apiRouter.get("/health", async (_req, res) => {
     try {
-      // Check MongoDB connection
       const dbState = mongoose.connection.readyState;
-      const isConnected = dbState === 1; // 1 = connected
-
+      const isConnected = dbState === 1;
       res.json({
         status: 'ok',
         database: isConnected ? 'connected' : 'disconnected',
@@ -86,15 +85,15 @@ export async function createServer() {
     }
   });
 
-
-  app.use("/mapi", marketRoutes);
+  // Market routes
+  apiRouter.use("/", marketRoutes);
 
   // Auth routes
-  app.get('/mapi/auth/google', handleGoogleAuth);
-  app.get('/mapi/auth/google/callback', handleGoogleCallback, handleAuthSuccess);
-  app.post('/mapi/auth/logout', handleLogout);
-  app.get('/mapi/user', handleGetUser);
-  app.post('/mapi/user/bookmarks', async (req, res) => {
+  apiRouter.get('/auth/google', handleGoogleAuth);
+  apiRouter.get('/auth/google/callback', handleGoogleCallback, handleAuthSuccess);
+  apiRouter.post('/auth/logout', handleLogout);
+  apiRouter.get('/user', handleGetUser);
+  apiRouter.post('/user/bookmarks', async (req, res) => {
     const userId = req.signedCookies?.userId;
     if (!userId) {
       return res.status(401).json({ error: "Unauthorized" });
@@ -124,5 +123,9 @@ export async function createServer() {
     }
   });
 
+  // Mount API router
+  app.use("/mapi", apiRouter);
+
   return app;
 }
+

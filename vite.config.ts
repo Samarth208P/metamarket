@@ -8,13 +8,6 @@ export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
     port: 8080,
-    proxy: {
-      '/mapi': {
-        target: 'http://localhost:8080',
-        changeOrigin: true,
-        secure: false,
-      },
-    },
     fs: {
       allow: ["./client", "./shared", "index.html"],
       deny: [".env", ".env.*", "*.{crt,pem}", "**/.git/**", "mapi/server/**"],
@@ -42,8 +35,14 @@ function expressPlugin(): Plugin {
         const { connectDB } = await import("./mapi/server/database");
         await connectDB();
         const app = await createServer();
-        // Add Express app as middleware to Vite dev server
-        server.middlewares.use(app);
+        // Add Express app as middleware to Vite dev server, but only for API/Uploads
+        server.middlewares.use((req: any, res: any, next: any) => {
+          if (req.url?.startsWith('/mapi') || req.url?.startsWith('/uploads')) {
+            app(req, res, next);
+          } else {
+            next();
+          }
+        });
       } catch (error) {
         console.error('Failed to initialize server:', error);
       }
