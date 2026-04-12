@@ -3,9 +3,9 @@ import { isValidObjectId } from "mongoose";
 import path from "path";
 import fs from "fs";
 import multer from "multer";
-import User from "../models/User.ts";
-import Market, { calculateYesPrice, calculateNoPrice } from "../models/Market.ts";
-import Comment from "../models/Comment.ts";
+import User from "../models/User.js";
+import Market, { calculateYesPrice, calculateNoPrice } from "../models/Market.js";
+import Comment from "../models/Comment.js";
 import { v2 as cloudinary } from 'cloudinary';
 import { CloudinaryStorage } from 'multer-storage-cloudinary';
 

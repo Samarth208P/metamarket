@@ -5,18 +5,18 @@ import cookieParser from "cookie-parser";
 import passport from "passport";
 import mongoose from "mongoose";
 import path from "path";
-import { initializePassport } from "./routes/auth.ts";
-export { connectDB } from "./database.ts";
+import { initializePassport } from "./routes/auth.js";
+export { connectDB } from "./database.js";
 
-import marketRoutes from "./routes/markets.ts";
+import marketRoutes from "./routes/markets.js";
 import {
   handleGoogleAuth,
   handleGoogleCallback,
   handleAuthSuccess,
   handleLogout,
   handleGetUser
-} from "./routes/auth.ts";
-import User from "./models/User.ts";
+} from "./routes/auth.js";
+import User from "./models/User.js";
 
 export async function createServer() {
 

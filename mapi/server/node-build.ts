@@ -1,10 +1,10 @@
 import path from "node:path";
-import { createServer } from "./index.ts";
+import { createServer } from "./index.js";
 import * as express from "express";
 
 const port = process.env.PORT || 8080;
 
-import { connectDB } from "./database.ts";
+import { connectDB } from "./database.js";
 
 // Create server asynchronously
 async function start() {

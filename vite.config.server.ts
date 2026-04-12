@@ -5,10 +5,9 @@ import path from "node:path";
 export default defineConfig({
   build: {
     lib: {
-      entry: {
-        index: path.resolve(__dirname, "mapi/server/index.ts"),
-        standalone: path.resolve(__dirname, "mapi/server/standalone.ts")
-      },
+      entry: path.resolve(__dirname, "mapi/server/node-build.ts"),
+      name: "server",
+      fileName: "production",
       formats: ["es"],
     },
     outDir: "dist-server",
