@@ -19,17 +19,29 @@ const initialize = async () => {
   }
 };
 
-export default async (req: any, res: any) => {
+const handler = async (req: any, res: any) => {
   try {
     if (!handlerPromise) {
       handlerPromise = initialize();
     }
-    const handler = await handlerPromise;
-    return handler(req, res);
+    const serverlessHandler = await handlerPromise;
+    return serverlessHandler(req, res);
   } catch (error: any) {
-    res.status(500).json({ 
-      error: "Server initialization failed", 
-      message: error.message
-    });
+    if (res && typeof res.status === 'function') {
+      res.status(500).json({ 
+        error: "Server initialization failed", 
+        message: error.message
+      });
+    } else {
+      // Return format for AWS Lambda (Netlify)
+      return {
+        statusCode: 500,
+        body: JSON.stringify({ error: "Server initialization failed", message: error.message })
+      };
+    }
   }
 };
+
+export default handler;
+export { handler };
+
