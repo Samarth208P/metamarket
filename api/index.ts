@@ -9,11 +9,12 @@ export default async (req: any, res: any) => {
   
   if (!server) {
     try {
-      console.log("[Vercel] Initializing Express server...");
+      console.log(`[Vercel] [${new Date().toISOString()}] Initializing connection...`);
       await connectDB();
+      console.log(`[Vercel] [${new Date().toISOString()}] DB Connected. Creating Express app...`);
       const app = await createServer();
       server = serverless(app);
-      console.log("[Vercel] Express server initialized.");
+      console.log(`[Vercel] [${new Date().toISOString()}] Server ready.`);
     } catch (error) {
       console.error("[Vercel] Initialization error:", error);
       return res.status(500).json({ 
