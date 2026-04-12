@@ -17,7 +17,9 @@ export function initializePassport() {
     passport.use(new GoogleStrategy({
       clientID: GOOGLE_CLIENT_ID,
       clientSecret: GOOGLE_CLIENT_SECRET,
-      callbackURL: process.env.GOOGLE_CALLBACK_URL,
+      callbackURL: process.env.GOOGLE_CALLBACK_URL || (process.env.NODE_ENV === 'production' 
+        ? 'https://metamarket-iitr.vercel.app/mapi/auth/google/callback'
+        : 'http://localhost:8080/mapi/auth/google/callback'),
       proxy: true
     },
       async (_accessToken, _refreshToken, profile, done) => {
