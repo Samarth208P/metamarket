@@ -15,6 +15,8 @@ export interface IUser extends mongoose.Document {
     yesShares: number;
     noShares: number;
   }[];
+  lastRank?: number;
+  lastRankUpdate?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -38,6 +40,8 @@ const UserSchema = new mongoose.Schema<IUser>(
         _id: false,
       },
     ],
+    lastRank: { type: Number },
+    lastRankUpdate: { type: Date },
   },
   {
     timestamps: true,

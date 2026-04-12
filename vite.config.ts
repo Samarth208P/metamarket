@@ -1,7 +1,7 @@
 import { defineConfig, Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "node:path";
-import { createServer } from "./api/server";
+import { createServer } from "./mapi/server";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
@@ -9,12 +9,7 @@ export default defineConfig(({ mode }) => ({
     host: "::",
     port: 8080,
     proxy: {
-      '/auth': {
-        target: 'http://localhost:8080',
-        changeOrigin: true,
-        secure: false,
-      },
-      '/api': {
+      '/mapi': {
         target: 'http://localhost:8080',
         changeOrigin: true,
         secure: false,
@@ -22,7 +17,7 @@ export default defineConfig(({ mode }) => ({
     },
     fs: {
       allow: ["./client", "./shared", "index.html"],
-      deny: [".env", ".env.*", "*.{crt,pem}", "**/.git/**", "api/server/**"],
+      deny: [".env", ".env.*", "*.{crt,pem}", "**/.git/**", "mapi/server/**"],
     },
   },
   build: {
@@ -41,14 +36,17 @@ function expressPlugin(): Plugin {
   return {
     name: "express-plugin",
     apply: "serve", // Only apply during development (serve mode)
-    configureServer(server) {
-      // Initialize the Express app asynchronously
-      createServer().then((app) => {
+    async configureServer(server) {
+      // Connect to DB and initialize the Express app
+      try {
+        const { connectDB } = await import("./mapi/server/database");
+        await connectDB();
+        const app = await createServer();
         // Add Express app as middleware to Vite dev server
         server.middlewares.use(app);
-      }).catch((error) => {
+      } catch (error) {
         console.error('Failed to initialize server:', error);
-      });
+      }
     },
   };
 }

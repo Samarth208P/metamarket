@@ -31,7 +31,7 @@ export function CommentsSection({ marketId, isLive }: CommentsSectionProps) {
 
   const fetchComments = async () => {
     try {
-      const response = await fetch(`/api/markets/${marketId}/comments`);
+      const response = await fetch(`/mapi/markets/${marketId}/comments`);
       if (response.ok) {
         const data = await response.json();
         setComments(data);
@@ -51,7 +51,7 @@ export function CommentsSection({ marketId, isLive }: CommentsSectionProps) {
 
     setIsSubmitting(true);
     try {
-      const response = await fetch(`/api/markets/${marketId}/comments`, {
+      const response = await fetch(`/mapi/markets/${marketId}/comments`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content: newComment }),

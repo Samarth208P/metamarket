@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 async function fetchMarkets(): Promise<Market[]> {
-  const response = await fetch("/api/markets", {
+  const response = await fetch("/mapi/markets", {
     credentials: "include",
   });
 

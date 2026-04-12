@@ -57,7 +57,7 @@ export default function Portfolio() {
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1">
                         <Badge variant="outline" className={trade.outcome === 'yes' ? 'text-yes border-yes border-opacity-50' : 'text-no border-no border-opacity-50'}>
-                          {trade.outcome.toUpperCase()}
+                          {trade.outcomeLabel || trade.outcome.toUpperCase()}
                         </Badge>
                         <span className="font-medium">{trade.marketTitle}</span>
                       </div>

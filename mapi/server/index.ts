@@ -42,13 +42,29 @@ export async function createServer() {
   initializePassport();
   app.use(passport.initialize());
 
+  // Middleware to populate req.user from signed cookie (stateless auth)
+  app.use(async (req, _res, next) => {
+    const userId = (req as any).signedCookies?.userId;
+    if (userId && mongoose.isValidObjectId(userId)) {
+      try {
+        const user = await User.findById(userId);
+        if (user) {
+          (req as any).user = user;
+        }
+      } catch (err) {
+        console.error("Auth middleware error:", err);
+      }
+    }
+    next();
+  });
+
   // Example API routes
-  app.get("/api/ping", (_req, res) => {
+  app.get("/mapi/ping", (_req, res) => {
     const ping = process.env.PING_MESSAGE ?? "ping";
     res.json({ message: ping });
   });
 
-  app.get("/api/health", async (_req, res) => {
+  app.get("/mapi/health", async (_req, res) => {
     try {
       // Check MongoDB connection
       const dbState = mongoose.connection.readyState;
@@ -69,14 +85,14 @@ export async function createServer() {
   });
 
 
-  app.use("/api", marketRoutes);
+  app.use("/mapi", marketRoutes);
 
   // Auth routes
-  app.get('/api/auth/google', handleGoogleAuth);
-  app.get('/api/auth/google/callback', handleGoogleCallback, handleAuthSuccess);
-  app.post('/api/auth/logout', handleLogout);
-  app.get('/api/user', handleGetUser);
-  app.post('/api/user/bookmarks', async (req, res) => {
+  app.get('/mapi/auth/google', handleGoogleAuth);
+  app.get('/mapi/auth/google/callback', handleGoogleCallback, handleAuthSuccess);
+  app.post('/mapi/auth/logout', handleLogout);
+  app.get('/mapi/user', handleGetUser);
+  app.post('/mapi/user/bookmarks', async (req, res) => {
     const userId = req.signedCookies?.userId;
     if (!userId) {
       return res.status(401).json({ error: "Unauthorized" });

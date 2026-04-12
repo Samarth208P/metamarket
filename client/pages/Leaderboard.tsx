@@ -4,11 +4,10 @@ import { motion } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { LeaderboardUser } from "@shared/api";
 
 async function fetchLeaderboard(): Promise<LeaderboardUser[]> {
-  const response = await fetch("/api/leaderboard", {
+  const response = await fetch("/mapi/leaderboard", {
     credentials: "include",
   });
 
@@ -26,29 +25,35 @@ export default function Leaderboard() {
     refetchInterval: 15000,
   });
 
-  const getRankIcon = (rank: number) => {
+  const getRankIndicator = (trend: number) => {
+    if (trend > 0) return <span className="text-xs font-bold text-green-500 ml-1">▲ {trend}</span>;
+    if (trend < 0) return <span className="text-xs font-bold text-red-500 ml-1">▼ {Math.abs(trend)}</span>;
+    return null;
+  };
+
+  const getRankBorder = (rank: number) => {
     switch (rank) {
       case 1:
-        return <Trophy className="w-6 h-6 text-yellow-500" />;
+        return "border-yellow-400 border-2 shadow-[0_0_20px_rgba(250,204,21,0.2)] bg-yellow-400/5";
       case 2:
-        return <Medal className="w-6 h-6 text-gray-400" />;
+        return "border-slate-300 border-2 shadow-[0_0_15px_rgba(203,213,225,0.15)] bg-slate-300/5";
       case 3:
-        return <Award className="w-6 h-6 text-amber-600" />;
+        return "border-amber-600 border-2 shadow-[0_0_15px_rgba(217,119,6,0.15)] bg-amber-600/5";
       default:
-        return <span className="w-6 h-6 flex items-center justify-center text-lg font-bold text-muted-foreground">#{rank}</span>;
+        return "border-border hover:border-primary/30";
     }
   };
 
   return (
     <Layout>
-      <section className="container mx-auto px-4 py-16 md:py-24">
+      <section className="container mx-auto px-4 py-8 md:py-12">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           className="max-w-4xl mx-auto"
         >
           <div className="text-center mb-12">
-            <div className="flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 mx-auto mb-6">
+            <div className="flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 mx-auto mb-2">
               <Trophy className="w-8 h-8 text-primary" />
             </div>
 
@@ -75,26 +80,28 @@ export default function Leaderboard() {
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ duration: 0.3 }}
                 >
-                  <Card className={`transition-all hover:shadow-lg ${user.rank <= 3 ? 'border-primary/50 bg-primary/5' : ''}`}>
+                  <Card className={`transition-all hover:shadow-lg ${getRankBorder(user.rank)}`}>
                     <CardContent className="p-6">
                       <div className="flex items-center justify-between gap-4 flex-wrap">
                         <div className="flex items-center gap-4">
-                          <div className="flex items-center justify-center w-12 h-12">
-                            {getRankIcon(user.rank)}
+                          <div className="flex flex-col items-center justify-center w-12 h-12">
+                            <span className="text-2xl font-black text-foreground">#{user.rank}</span>
+                            {getRankIndicator(user.rankTrend)}
                           </div>
-                          <Avatar className="w-10 h-10">
-                            <AvatarFallback>{user.name.split(' ').map((n) => n[0]).join('')}</AvatarFallback>
-                          </Avatar>
                           <div>
-                            <h3 className="font-semibold text-foreground">{user.name}</h3>
-                            <p className="text-sm text-muted-foreground">{user.enrollmentNumber}</p>
+                            <h3 className="text-lg font-bold text-foreground">{user.name}</h3>
+                            <p className="text-sm font-medium text-muted-foreground">{user.enrollmentNumber}</p>
                           </div>
                         </div>
 
                         <div className="text-right">
-                          <div className="flex items-center gap-2 justify-end">
-                            <TrendingUp className="w-4 h-4 text-green-500" />
-                            <span className="text-2xl font-bold text-foreground">₹{user.balance.toLocaleString()}</span>
+                          <div className="flex flex-col items-end">
+                            <span className="text-2xl font-black text-foreground">₹{user.totalNetWorth.toLocaleString()}</span>
+                            <div className="flex gap-2 text-[10px] uppercase tracking-wider font-bold text-muted-foreground mt-1">
+                              <span>Cash: ₹{user.balance.toLocaleString()}</span>
+                              <span className="text-primary/40">•</span>
+                              <span>Holdings: ₹{user.holdingsValue.toLocaleString()}</span>
+                            </div>
                           </div>
                           {user.rank <= 3 && (
                             <Badge variant="secondary" className="bg-primary/10 text-primary mt-2 inline-flex">

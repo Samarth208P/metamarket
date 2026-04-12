@@ -43,7 +43,7 @@ const EMPTY_TEAM: TeamEntry = { name: '', imageUrl: '' };
 async function uploadImage(file: File): Promise<string> {
   const formData = new FormData();
   formData.append('image', file);
-  const res = await fetch('/api/upload', { method: 'POST', credentials: 'include', body: formData });
+  const res = await fetch('/mapi/upload', { method: 'POST', credentials: 'include', body: formData });
   if (!res.ok) throw new Error('Upload failed');
   const json = await res.json();
   return json.url as string;
@@ -63,6 +63,7 @@ export default function Admin() {
     // versus logo
     logoFile: null as File | null,
     logoPreview: '',
+    initialLiquidity: 1000,
   });
 
   // Multi-market teams
@@ -80,7 +81,7 @@ export default function Admin() {
   const queryResult = useQuery<MarketProps[]>({
     queryKey: ['adminMarkets'],
     queryFn: async () => {
-      const response = await fetch('/api/markets', { credentials: 'include' });
+      const response = await fetch('/mapi/markets', { credentials: 'include' });
       if (!response.ok) throw new Error('Unable to load markets');
       return response.json();
     },
@@ -92,7 +93,7 @@ export default function Admin() {
 
   const resolveMarketMutation = useMutation({
     mutationFn: async ({ marketId, outcome, teamIndex }: { marketId: string; outcome: 'yes' | 'no'; teamIndex?: number }) => {
-      const response = await fetch(`/api/markets/${marketId}/resolve`, {
+      const response = await fetch(`/mapi/markets/${marketId}/resolve`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -159,6 +160,7 @@ export default function Admin() {
         endDate: newMarket.endDate,
         marketType: newMarket.marketType,
         logoUrl, // Pass logo for all types
+        initialLiquidity: newMarket.initialLiquidity,
       };
 
       if (newMarket.marketType === 'versus') {
@@ -173,7 +175,7 @@ export default function Admin() {
         payload.teams = teamsPayload;
       }
 
-      const response = await fetch('/api/markets', {
+      const response = await fetch('/mapi/markets', {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -184,7 +186,7 @@ export default function Admin() {
 
       setMarkets((current) => [market, ...current]);
       queryClient.invalidateQueries({ queryKey: ['adminMarkets'] });
-      setNewMarket({ title: '', description: '', category: '', endDate: '', marketType: 'binary', optionA: '', optionB: '', shortA: '', shortB: '', logoFile: null, logoPreview: '' });
+      setNewMarket({ title: '', description: '', category: '', endDate: '', marketType: 'binary', optionA: '', optionB: '', shortA: '', shortB: '', logoFile: null, logoPreview: '', initialLiquidity: 1000 });
       setTeams([{ ...EMPTY_TEAM }, { ...EMPTY_TEAM }]);
       setMultiLogoFile(null);
       setMultiLogoPreview('');
@@ -376,6 +378,67 @@ export default function Admin() {
                 <Textarea id="description" placeholder="Provide context and details about the market..."
                   value={newMarket.description}
                   onChange={(e) => setNewMarket({ ...newMarket, description: e.target.value })} rows={3} />
+              </div>
+
+              {/* Initial Liquidity */}
+              <div className="space-y-4 p-4 bg-muted/20 rounded-xl border border-border/50">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label className="text-base font-bold">Initial Liquidity</Label>
+                    <p className="text-xs text-muted-foreground">Higher liquidity makes the price more stable</p>
+                  </div>
+                  <Badge variant="secondary" className="text-lg font-black px-3 py-1">
+                    ₹{newMarket.initialLiquidity.toLocaleString()}
+                  </Badge>
+                </div>
+                
+                <div className="flex items-center gap-6">
+                  <input 
+                    type="range" 
+                    min="100" 
+                    max="10000" 
+                    step="100" 
+                    value={newMarket.initialLiquidity}
+                    onChange={(e) => setNewMarket({ ...newMarket, initialLiquidity: parseInt(e.target.value) })}
+                    className="flex-1 h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
+                  />
+                  <Input 
+                    type="number" 
+                    className="w-24 font-bold" 
+                    value={newMarket.initialLiquidity}
+                    onChange={(e) => setNewMarket({ ...newMarket, initialLiquidity: parseInt(e.target.value) || 0 })}
+                  />
+                </div>
+
+                <div className="flex gap-2">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    type="button"
+                    className={newMarket.initialLiquidity === 500 ? "border-primary bg-primary/5" : ""}
+                    onClick={() => setNewMarket({ ...newMarket, initialLiquidity: 500 })}
+                  >
+                    Volatile (₹500)
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    type="button"
+                    className={newMarket.initialLiquidity === 2000 ? "border-primary bg-primary/5" : ""}
+                    onClick={() => setNewMarket({ ...newMarket, initialLiquidity: 2000 })}
+                  >
+                    Medium (₹2,000)
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    type="button"
+                    className={newMarket.initialLiquidity === 5000 ? "border-primary bg-primary/5" : ""}
+                    onClick={() => setNewMarket({ ...newMarket, initialLiquidity: 5000 })}
+                  >
+                    Stable (₹5,000)
+                  </Button>
+                </div>
               </div>
 
               {/* End Date */}

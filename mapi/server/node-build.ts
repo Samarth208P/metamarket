@@ -4,8 +4,12 @@ import * as express from "express";
 
 const port = process.env.PORT || 8080;
 
+import { connectDB } from "./database";
+
 // Create server asynchronously
-createServer().then((app) => {
+async function start() {
+  await connectDB();
+  const app = await createServer();
   // In production, serve the built SPA files
   const __dirname = import.meta.dirname;
   const distPath = path.join(__dirname, "../spa");
@@ -16,7 +20,7 @@ createServer().then((app) => {
   // Handle React Router - serve index.html for all non-API routes
   app.get(/^\/.*/, (req, res) => {
     // Don't serve index.html for API routes
-    if (req.path.startsWith("/api/") || req.path.startsWith("/health")) {
+    if (req.path.startsWith("/mapi/")) {
       return res.status(404).json({ error: "API endpoint not found" });
     }
 
@@ -26,9 +30,11 @@ createServer().then((app) => {
   app.listen(port, () => {
     console.log(`🚀 Metamarket server running on port ${port}`);
     console.log(`📱 Frontend: http://localhost:${port}`);
-    console.log(`🔧 API: http://localhost:${port}/api`);
+    console.log(`🔧 API: http://localhost:${port}/mapi`);
   });
-}).catch((error) => {
+}
+
+start().catch((error) => {
   console.error('Failed to start server:', error);
   process.exit(1);
 });

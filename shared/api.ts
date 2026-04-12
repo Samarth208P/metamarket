@@ -62,7 +62,10 @@ export interface LeaderboardUser {
   name: string;
   enrollmentNumber: string;
   balance: number;
+  holdingsValue: number;
+  totalNetWorth: number;
   rank: number;
+  rankTrend: number;
 }
 
 export interface TradeResponse {

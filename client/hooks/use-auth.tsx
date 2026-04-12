@@ -26,7 +26,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const checkAuthStatus = async () => {
     try {
-      const response = await fetch('/api/user', {
+      const response = await fetch('/mapi/user', {
         credentials: 'include',
       });
 
@@ -43,12 +43,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = () => {
     // Redirect to Google OAuth
-    window.location.href = '/api/auth/google';
+    window.location.href = '/mapi/auth/google';
   };
 
   const logout = async () => {
     try {
-      await fetch('/api/auth/logout', {
+      await fetch('/mapi/auth/logout', {
         method: 'POST',
         credentials: 'include',
       });
@@ -64,7 +64,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const refreshUser = async () => {
     try {
-      const response = await fetch('/api/user', { credentials: 'include' });
+      const response = await fetch('/mapi/user', { credentials: 'include' });
       if (response.ok) {
         const userData = await response.json();
         setUser(userData);
@@ -82,7 +82,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const toggleBookmark = async (marketId: string) => {
     try {
-      const response = await fetch('/api/user/bookmarks', {
+      const response = await fetch('/mapi/user/bookmarks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ marketId }),

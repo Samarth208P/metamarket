@@ -30,14 +30,13 @@
     "paths": {
       "@/*": ["./client/*"],
       "@shared/*": ["./shared/*"],
-      "@server/*": ["./api/server/*"]
+      "@server/*": ["./mapi/server/*"]
     }
   },
   "include": [
     "client/**/*",
-    "server/**/*",
     "shared/**/*",
-    "api/**/*",
+    "mapi/**/*",
     "vite.config.ts",
     "vite.config.server.ts"
   ],

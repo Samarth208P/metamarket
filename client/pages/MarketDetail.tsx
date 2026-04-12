@@ -16,7 +16,7 @@ import {
 import { CommentsSection } from "@/components/CommentsSection";
 
 async function fetchMarket(id: string): Promise<Market> {
-  const response = await fetch(`/api/markets/${id}`, {
+  const response = await fetch(`/mapi/markets/${id}`, {
     credentials: "include",
   });
 

@@ -38,8 +38,21 @@ export function BetModal({ isOpen, onClose, market, initialOutcome = 'yes', onTr
   const { toast } = useToast();
   const isMobile = useIsMobile();
   const confettiCanvasRef = useRef<HTMLCanvasElement>(null);
+  const [isConfirming, setIsConfirming] = useState(false);
   const [showConfettiOverlay, setShowConfettiOverlay] = useState(false);
 
+  const userHolding = useMemo(() => {
+    if (!user) return null;
+    return user.holdings?.find(h => 
+      h.marketId === market.id && 
+      (market.teamIndex === undefined || h.teamIndex === market.teamIndex)
+    );
+  }, [user, market.id, market.teamIndex]);
+
+  const teamALabel = market.shortA || market.optionA || 'Yes';
+  const teamBLabel = market.shortB || market.optionB || 'No';
+
+  // Calculate prices for chart
   const numAmount = parseFloat(amount) || 0;
   const currentPrice = outcome === 'yes' ? market.yesPrice : market.noPrice;
   const priceRatio = currentPrice / 100;
@@ -59,7 +72,7 @@ export function BetModal({ isOpen, onClose, market, initialOutcome = 'yes', onTr
       if (numAmount > (shares || 0) + 0.01) return toast({ title: "Insufficient Shares", description: `You only have ${(shares || 0).toFixed(2)} shares`, variant: "destructive" });
     }
 
-    const response = await fetch(`/api/markets/${market.id}/trade`, {
+    const response = await fetch(`/mapi/markets/${market.id}/trade`, {
       method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ outcome, type: isBuying ? 'buy' : 'sell', amount: numAmount, teamIndex: market.teamIndex }),
     });
@@ -74,19 +87,21 @@ export function BetModal({ isOpen, onClose, market, initialOutcome = 'yes', onTr
     await refreshUser(); 
     onTrade(market.id, payload.market);
 
-    // Dynamic, intense animation logic
+    // Dynamic, intense animation logic: Enhanced Fireworks style
     if (confettiCanvasRef.current) {
       setShowConfettiOverlay(true);
       const myConfetti = confetti.create(confettiCanvasRef.current, { resize: true });
       
-      const duration = 3 * 1000;
+      const duration = 4 * 1000;
       const animationEnd = Date.now() + duration;
       const defaults = { 
-        startVelocity: 45, 
+        startVelocity: 60, 
         spread: 360, 
-        ticks: 100, 
-        zIndex: -1, // Behind content
-        colors: isBuying ? ['#22c55e', '#ffffff', '#10b981'] : ['#ef4444', '#ffffff', '#f43f5e']
+        ticks: 150, 
+        zIndex: 50,
+        gravity: 0.8,
+        drift: 0,
+        colors: isBuying ? ['#22c55e', '#ffffff', '#10b981', '#fbbf24'] : ['#ef4444', '#ffffff', '#f43f5e', '#fbbf24']
       };
 
       const interval: any = setInterval(function() {
@@ -96,19 +111,23 @@ export function BetModal({ isOpen, onClose, market, initialOutcome = 'yes', onTr
           return clearInterval(interval);
         }
         
-        const particleCount = 100 * (timeLeft / duration);
-        myConfetti({ ...defaults, particleCount, origin: { x: Math.random() < 0.5 ? 0.2 : 0.8, y: 1 } });
-      }, 100);
+        const particleCount = 200 * (timeLeft / duration);
+        // Fireworks bursts from random positions
+        myConfetti({ ...defaults, particleCount: particleCount / 2, origin: { x: Math.random(), y: Math.random() - 0.2 } });
+        myConfetti({ ...defaults, particleCount: particleCount / 4, origin: { x: 0.5, y: 0.7 }, scalar: 1.2 });
+      }, 250);
     }
 
+    const shareLabel = outcome === 'yes' ? teamALabel : teamBLabel;
     toast({ 
-      title: "Success", 
+      title: "Trade Executed", 
       description: isBuying 
-        ? `Bought ₹${numAmount.toFixed(2)} worth of ${outcome.toUpperCase()} shares`
-        : `Sold ${numAmount.toFixed(2)} shares for ₹${Math.abs(cost).toFixed(2)}`,
+        ? `Successfully bought ₹${numAmount.toFixed(2)} worth of ${shareLabel} shares!`
+        : `Successfully sold ${numAmount.toFixed(2)} ${shareLabel} shares for ₹${Math.abs(cost).toFixed(2)}!`,
     });
     
     setAmount('');
+    setIsConfirming(false);
   };
 
   const handleMax = () => {
@@ -132,14 +151,6 @@ export function BetModal({ isOpen, onClose, market, initialOutcome = 'yes', onTr
   const titleText = market.teamName ? `${market.title} - ${market.teamName}` : market.title;
   const isResolved = market.status && market.status !== "active";
 
-  const userHolding = useMemo(() => {
-    if (!user) return null;
-    return user.holdings?.find(h => 
-      h.marketId === market.id && 
-      (market.teamIndex === undefined || h.teamIndex === market.teamIndex)
-    );
-  }, [user, market.id, market.teamIndex]);
-
   const earnings = useMemo(() => {
     if (!market.resolvedOutcome || !user) return 0;
     
@@ -159,8 +170,7 @@ export function BetModal({ isOpen, onClose, market, initialOutcome = 'yes', onTr
     return payoutTrade ? Math.abs(payoutTrade.amount) : 0;
   }, [user, userHolding, market.id, market.resolvedOutcome, market.teamIndex, market.teamName]);
 
-  const teamALabel = market.shortA || market.optionA || 'Yes';
-  const teamBLabel = market.shortB || market.optionB || 'No';
+
 
   const graphElement = (
     <div className="flex flex-col h-full">
@@ -329,17 +339,37 @@ export function BetModal({ isOpen, onClose, market, initialOutcome = 'yes', onTr
   );
 
   const submitButton = (
-    <Button
-      onClick={(e) => { e.stopPropagation(); handleTrade(); }}
-      disabled={
-        numAmount <= 0 || 
-        (isBuying && cost > (user?.balance || 0)) ||
-        (!isBuying && numAmount > ((outcome === 'yes' ? userHolding?.yesShares : userHolding?.noShares) || 0) + 0.01)
-      }
-      className={cn("w-full h-12 text-base font-bold", isBuying ? "bg-primary text-primary-foreground hover:bg-primary/90" : "bg-foreground text-background hover:bg-foreground/90")}
-    >
-      {user ? (isBuying ? 'Buy' : 'Sell') : 'Log In To Trade'}
-    </Button>
+    <div className="flex flex-col gap-2 w-full">
+      {isConfirming ? (
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setIsConfirming(false)}
+            className="flex-1 h-12 font-bold"
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={(e) => { e.stopPropagation(); handleTrade(); }}
+            className={cn("flex-[2] h-12 text-base font-black uppercase tracking-widest", isBuying ? "bg-yes text-white hover:bg-yes/90" : "bg-no text-white hover:bg-no/90")}
+          >
+            Confirm {isBuying ? 'Buy' : 'Sell'}
+          </Button>
+        </div>
+      ) : (
+        <Button
+          onClick={(e) => { e.stopPropagation(); setIsConfirming(true); }}
+          disabled={
+            numAmount <= 0 || 
+            (isBuying && cost > (user?.balance || 0)) ||
+            (!isBuying && numAmount > ((outcome === 'yes' ? userHolding?.yesShares : userHolding?.noShares) || 0) + 0.01)
+          }
+          className={cn("w-full h-12 text-base font-bold transition-all active:scale-95", isBuying ? "bg-primary text-primary-foreground hover:bg-primary/90" : "bg-foreground text-background hover:bg-foreground/90")}
+        >
+          {user ? (isBuying ? `Review ${teamALabel} Buy` : `Review ${teamBLabel} Sell`) : 'Log In To Trade'}
+        </Button>
+      )}
+    </div>
   );
 
   if (isMobile) {

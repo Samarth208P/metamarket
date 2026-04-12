@@ -114,16 +114,17 @@ router.get("/markets/:id", async (req, res) => {
 });
 
 router.post("/markets", ensureAuthenticated, ensureAdmin, async (req, res) => {
-  const { title, description, category, endDate, marketType, optionA, optionB, shortA, shortB, logoUrl, teams } = req.body;
+  const { title, description, category, endDate, marketType, optionA, optionB, shortA, shortB, logoUrl, teams, initialLiquidity } = req.body;
   if (!title || !description || !category) {
     return res.status(400).json({ error: "Title, description, and category are required" });
   }
 
+  const liquidity = Number(initialLiquidity) || 1000;
   const creatorId = (req.user as any)?.id || (req.user as any)?._id;
 
   // For multi markets, build teams array with independent pools
   const teamsData = marketType === "multi" && Array.isArray(teams)
-    ? teams.map((t: any) => ({ name: t.name, imageUrl: t.imageUrl, yesPool: 1000, noPool: 1000 }))
+    ? teams.map((t: any) => ({ name: t.name, imageUrl: t.imageUrl, yesPool: liquidity, noPool: liquidity }))
     : undefined;
 
   const market = await Market.create({
@@ -139,13 +140,13 @@ router.post("/markets", ensureAuthenticated, ensureAdmin, async (req, res) => {
     teams: teamsData,
     creatorId,
     endDate: endDate ? new Date(endDate) : undefined,
-    yesPool: 1000,
-    noPool: 1000,
+    yesPool: liquidity,
+    noPool: liquidity,
     priceHistory: [
       {
         yesPrice: 50,
         noPrice: 50,
-        note: "Market opened at 50% / 50%",
+        note: `Market opened with ₹${liquidity} initial liquidity`,
         timestamp: new Date(),
       },
     ],
@@ -287,12 +288,21 @@ router.post("/markets/:id/trade", ensureAuthenticated, async (req, res) => {
     timestamp: new Date(),
   });
 
+  let outcomeLabel = outcome.toUpperCase();
+  if (market.marketType === 'versus') {
+    outcomeLabel = outcome === 'yes' ? (market.shortA || market.optionA || 'YES') : (market.shortB || market.optionB || 'NO');
+  } else if (market.marketType === 'multi') {
+    outcomeLabel = market.teams![tIdx].name;
+    // In multi markets, 'yes' means bought that team
+  }
+
   if (!user.tradeHistory) user.tradeHistory = [];
   user.tradeHistory.push({
     marketId: market.id,
     marketTitle: market.title + teamLabel,
     tradeType: type,
     outcome,
+    outcomeLabel,
     amount: numericAmount, // investment if buy, shares if sell
     shares: sharesChanged,
     cost: cost,
@@ -399,12 +409,14 @@ router.post("/markets/:id/resolve", ensureAuthenticated, ensureAdmin, async (req
       }
       
       const marketLabel = isMulti && !isNaN(tIdx) && market.teams ? ` [${market.teams[tIdx].name}]` : "";
-      
+      const outcomeLabel = outcome === "yes" ? (market.shortA || market.optionA || "YES") : (market.shortB || market.optionB || "NO");
+
       user.tradeHistory.push({
         marketId: market.id,
         marketTitle: market.title + marketLabel,
         tradeType: "payout",
         outcome: outcome,
+        outcomeLabel: isMulti && !isNaN(tIdx) ? market.teams![tIdx].name : outcomeLabel,
         amount: totalPayout,
         cost: -totalPayout, // Payout is negative cost
         timestamp: new Date(),
@@ -422,14 +434,82 @@ router.post("/markets/:id/resolve", ensureAuthenticated, ensureAdmin, async (req
 });
 
 router.get("/leaderboard", async (req, res) => {
-  const users = await User.find().sort({ balance: -1, createdAt: 1 }).limit(20);
-  const leaderboard = users.map((user, index) => ({
-    id: user.id,
-    name: user.name,
-    enrollmentNumber: user.enrollmentNumber,
-    balance: user.balance,
-    rank: index + 1,
+  const markets = await Market.find();
+  const priceMap = new Map();
+  
+  markets.forEach(m => {
+    const marketId = m._id.toString();
+    if (m.marketType === "multi" && m.teams) {
+      m.teams.forEach((t, i) => {
+        priceMap.set(`${marketId}_team_${i}`, calculateYesPrice(t.yesPool, t.noPool));
+      });
+    } else {
+      priceMap.set(`${marketId}_yes`, calculateYesPrice(m.yesPool, m.noPool));
+      priceMap.set(`${marketId}_no`, calculateNoPrice(m.yesPool, m.noPool));
+    }
+  });
+
+  const allUsers = await User.find();
+  
+  const usersWithNetWorth = allUsers.map(user => {
+    let holdingsValue = 0;
+    
+    if (user.holdings && user.holdings.length > 0) {
+      user.holdings.forEach((h: any) => {
+        if (h.teamIndex !== undefined) {
+          const price = priceMap.get(`${h.marketId}_team_${h.teamIndex}`) || 0;
+          holdingsValue += (h.yesShares || 0) * (price / 100);
+        } else {
+          const yesPrice = priceMap.get(`${h.marketId}_yes`) || 0;
+          const noPrice = priceMap.get(`${h.marketId}_no`) || 0;
+          holdingsValue += (h.yesShares || 0) * (yesPrice / 100);
+          holdingsValue += (h.noShares || 0) * (noPrice / 100);
+        }
+      });
+    }
+    
+    return {
+      user,
+      holdingsValue,
+      totalNetWorth: user.balance + holdingsValue
+    };
+  });
+
+  // Sort by net worth descending
+  usersWithNetWorth.sort((a, b) => b.totalNetWorth - a.totalNetWorth);
+
+  const top20 = usersWithNetWorth.slice(0, 20);
+  const now = new Date();
+  const ONE_HOUR = 60 * 60 * 1000;
+
+  const leaderboard = await Promise.all(top20.map(async (entry, index) => {
+    const { user, holdingsValue, totalNetWorth } = entry;
+    const currentRank = index + 1;
+    let rankTrend = 0;
+
+    if (user.lastRank) {
+      rankTrend = user.lastRank - currentRank;
+    }
+
+    // Update lastRank if it's been more than an hour or hasn't been set
+    if (!user.lastRankUpdate || (now.getTime() - user.lastRankUpdate.getTime() > ONE_HOUR)) {
+      user.lastRank = currentRank;
+      user.lastRankUpdate = now;
+      await user.save();
+    }
+
+    return {
+      id: user.id,
+      name: user.name,
+      enrollmentNumber: user.enrollmentNumber,
+      balance: user.balance,
+      holdingsValue: Math.round(holdingsValue),
+      totalNetWorth: Math.round(totalNetWorth),
+      rank: currentRank,
+      rankTrend: rankTrend,
+    };
   }));
+
   return res.json(leaderboard);
 });
 
