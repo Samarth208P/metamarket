@@ -15,13 +15,11 @@ export function initializePassport() {
 
   try {
     passport.use(new GoogleStrategy({
-        clientID: GOOGLE_CLIENT_ID,
-        clientSecret: GOOGLE_CLIENT_SECRET,
-        callbackURL: process.env.GOOGLE_CALLBACK_URL || (process.env.NODE_ENV === 'production' 
-          ? `https://${process.env.VERCEL_URL || 'metamarket-iitr.vercel.app'}/mapi/auth/google/callback`
-          : 'http://localhost:8080/mapi/auth/google/callback'),
-        proxy: true
-      },
+      clientID: GOOGLE_CLIENT_ID,
+      clientSecret: GOOGLE_CLIENT_SECRET,
+      callbackURL: process.env.GOOGLE_CALLBACK_URL,
+      proxy: true
+    },
       async (_accessToken, _refreshToken, profile, done) => {
         try {
           const email = profile.emails?.[0]?.value;
@@ -69,7 +67,7 @@ export const handleGoogleCallback: RequestHandler = (req, res, next) => {
     if (err || !user) {
       return res.redirect('/login?error=auth_failed');
     }
-    
+
     // Set a signed cookie with the userId (stateless auth)
     res.cookie('userId', user.id || user._id, {
       signed: true,
