@@ -10,7 +10,7 @@ export default defineConfig({
       fileName: "node-build",
       formats: ["es"],
     },
-    outDir: "dist/spa/server",
+    outDir: "dist/server",
     target: "node22",
     ssr: true,
     rollupOptions: {
