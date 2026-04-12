@@ -1,6 +1,6 @@
 import path from "node:path";
 import express from "express";
-import { createServer, connectDB } from "./index";
+import { createServer, connectDB } from "./index.ts";
 
 const port = process.env.PORT || 8080;
 

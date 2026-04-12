@@ -1,5 +1,5 @@
-// @ts-ignore
-import { createServer, connectDB } from "../dist-server/index.mjs";
+import { createServer } from "../mapi/server/index.ts";
+import { connectDB } from "../mapi/server/database.ts";
 import serverless from "serverless-http";
 
 let server: any;
