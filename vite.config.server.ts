@@ -5,15 +5,20 @@ import path from "node:path";
 export default defineConfig({
   build: {
     lib: {
-      entry: path.resolve(__dirname, "mapi/server/node-build.ts"),
-      name: "server",
-      fileName: "production",
+      entry: {
+        index: path.resolve(__dirname, "mapi/server/index.ts"),
+        standalone: path.resolve(__dirname, "mapi/server/standalone.ts")
+      },
       formats: ["es"],
     },
     outDir: "dist-server",
     target: "node22",
     ssr: true,
     rollupOptions: {
+      output: {
+        format: "es",
+        entryFileNames: "[name].mjs",
+      },
       external: [
         // Node.js built-ins
         "fs",
@@ -32,13 +37,17 @@ export default defineConfig({
         // External dependencies that should not be bundled
         "express",
         "cors",
+        "mongoose",
+        "passport",
+        "passport-google-oauth20",
+        "cookie-parser",
+        "dotenv",
+        "serverless-http",
+        "multer",
+        "multer-storage-cloudinary",
+        "cloudinary"
       ],
-      output: {
-        format: "es",
-        entryFileNames: "[name].mjs",
-      },
     },
-    minify: false, // Keep readable for debugging
     sourcemap: true,
   },
   resolve: {

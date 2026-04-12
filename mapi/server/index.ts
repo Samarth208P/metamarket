@@ -6,6 +6,7 @@ import passport from "passport";
 import mongoose from "mongoose";
 import path from "path";
 import { initializePassport } from "./routes/auth";
+export { connectDB } from "./database";
 
 import marketRoutes from "./routes/markets";
 import {
