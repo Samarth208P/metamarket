@@ -26,6 +26,15 @@ const initialize = async () => {
 };
 
 export default async (req: any, res: any) => {
+  // DIAGNOSTIC BYPASS: If we hit /mapi/ping, respond immediately
+  if (req.url.includes('/ping')) {
+    return res.status(200).json({ 
+       status: "ok", 
+       message: "Vercel successfully reached the serverless function",
+       time: new Date().toISOString()
+    });
+  }
+
   try {
     if (!handlerPromise) {
       handlerPromise = initialize();
@@ -35,8 +44,7 @@ export default async (req: any, res: any) => {
   } catch (error: any) {
     res.status(500).json({ 
       error: "Server initialization failed", 
-      message: error.message,
-      check: "Is your MongoDB Atlas IP whitelist set to 0.0.0.0/0?"
+      message: error.message
     });
   }
 };
