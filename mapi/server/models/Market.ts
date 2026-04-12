@@ -5,6 +5,7 @@ export type MarketStatus = "active" | "resolved_yes" | "resolved_no";
 export interface PriceHistoryPoint {
   yesPrice: number;
   noPrice: number;
+  allPrices?: number[]; // Added to track all team prices in multi-markets
   note: string;
   timestamp: Date;
 }
@@ -36,6 +37,7 @@ const PriceHistorySchema = new mongoose.Schema<PriceHistoryPoint>(
   {
     yesPrice: { type: Number, required: true },
     noPrice: { type: Number, required: true },
+    allPrices: { type: [Number] },
     note: { type: String, required: true },
     timestamp: { type: Date, default: Date.now },
   },

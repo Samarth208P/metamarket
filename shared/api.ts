@@ -28,6 +28,7 @@ export interface User {
 export interface PriceHistoryPoint {
   yesPrice: number;
   noPrice: number;
+  allPrices?: number[];
   note: string;
   timestamp: string;
 }

@@ -123,13 +123,13 @@ export function MarketCard({
                     onClick={(e) => handleOpenTeamModal(e, idx, 'yes')}
                     className="px-2.5 py-1 bg-yes/10 hover:bg-yes/20 text-yes text-xs font-bold rounded-md transition-colors"
                   >
-                    {team.yesPrice.toFixed(0)}¢
+                    {team.yesPrice.toFixed(0)}p
                   </button>
                   <button
                     onClick={(e) => handleOpenTeamModal(e, idx, 'no')}
                     className="px-2.5 py-1 bg-no/10 hover:bg-no/20 text-no text-xs font-bold rounded-md transition-colors"
                   >
-                    {team.noPrice.toFixed(0)}¢
+                    {team.noPrice.toFixed(0)}p
                   </button>
                 </div>
               </div>

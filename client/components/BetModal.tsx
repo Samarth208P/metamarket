@@ -23,7 +23,7 @@ interface BetModalProps {
     optionA?: string; optionB?: string; shortA?: string; shortB?: string;
     teamIndex?: number; teamName?: string; pool: MarketPool;
     teams?: { name: string; imageUrl?: string; yesPool: number; noPool: number; yesPrice: number; noPrice: number }[];
-    priceHistory?: { yesPrice: number; noPrice: number; timestamp: string }[];
+    priceHistory?: { yesPrice: number; noPrice: number; allPrices?: number[]; timestamp: string }[];
     status?: string;
     volume?: number;
     resolvedOutcome?: string;
@@ -191,6 +191,22 @@ export function BetModal({ isOpen, onClose, market, initialOutcome = 'yes', onTr
 
   const isMarketClosed = isResolved || isTimeClosed;
 
+  // ── Graph Logic ──────────────────────────────────────────────────
+  const lineColors = ['hsl(var(--yes-color))', '#ef4444', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16', '#f97316', '#64748b'];
+
+  const chartData = useMemo(() => {
+    if (!market.priceHistory) return [];
+    return market.priceHistory.map(p => {
+      const data: any = { ...p };
+      if (p.allPrices && market.teams) {
+        p.allPrices.forEach((price, idx) => {
+          data[`team_${idx}`] = price;
+        });
+      }
+      return data;
+    });
+  }, [market.priceHistory, market.teams]);
+
   const countdownDisplay = countdown && !isMarketClosed ? (
     <div className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-muted/50 border border-border/50">
       <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mr-2">Closes in</span>
@@ -211,12 +227,14 @@ export function BetModal({ isOpen, onClose, market, initialOutcome = 'yes', onTr
       <div className="h-[200px] md:h-[300px] bg-muted/10 rounded-xl p-4 border border-border/50 relative overflow-hidden">
         {market.priceHistory && market.priceHistory.length > 0 ? (
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={market.priceHistory}>
+            <AreaChart data={chartData}>
               <defs>
-                <linearGradient id="colorYes" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="hsl(var(--yes-color))" stopOpacity={0.3}/>
-                  <stop offset="95%" stopColor="hsl(var(--yes-color))" stopOpacity={0}/>
-                </linearGradient>
+                {lineColors.map((color, idx) => (
+                  <linearGradient key={idx} id={`colorTeam${idx}`} x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor={color} stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor={color} stopOpacity={0}/>
+                  </linearGradient>
+                ))}
               </defs>
               <CartesianGrid strokeDasharray="4 4" vertical={false} stroke="currentColor" className="text-muted-foreground/10" />
               <XAxis 
@@ -236,17 +254,34 @@ export function BetModal({ isOpen, onClose, market, initialOutcome = 'yes', onTr
               <Tooltip 
                 content={({ active, payload }) => {
                   if (active && payload && payload.length) {
-                    const val = payload[0].value as number;
                     return (
-                      <div className="bg-card/95 backdrop-blur-sm border border-border p-3 rounded-xl shadow-xl text-xs min-w-[120px]">
-                        <div className="flex justify-between items-center mb-2">
-                          <span className="font-bold text-muted-foreground uppercase">{teamALabel}</span>
-                          <span className="font-black text-yes text-sm">{val.toFixed(1)}p</span>
-                        </div>
-                        <div className="flex justify-between items-center mb-2">
-                          <span className="font-bold text-muted-foreground uppercase">{teamBLabel}</span>
-                          <span className="font-black text-no text-sm">{(100 - val).toFixed(1)}p</span>
-                        </div>
+                      <div className="bg-card/95 backdrop-blur-sm border border-border p-3 rounded-xl shadow-xl text-xs min-w-[150px] space-y-2">
+                        {market.marketType === 'multi' && market.teams ? (
+                          market.teams.map((t, idx) => {
+                            const val = payload.find(p => p.dataKey === `team_${idx}`)?.value as number;
+                            if (val === undefined) return null;
+                            return (
+                              <div key={idx} className="flex justify-between items-center gap-4">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: lineColors[idx % lineColors.length] }} />
+                                  <span className="font-bold text-muted-foreground uppercase">{t.name}</span>
+                                </div>
+                                <span className="font-black text-sm" style={{ color: lineColors[idx % lineColors.length] }}>{val.toFixed(1)}p</span>
+                              </div>
+                            );
+                          })
+                        ) : (
+                          <>
+                            <div className="flex justify-between items-center">
+                              <span className="font-bold text-muted-foreground uppercase">{teamALabel}</span>
+                              <span className="font-black text-yes text-sm">{(payload[0].value as number).toFixed(1)}p</span>
+                            </div>
+                            <div className="flex justify-between items-center text-muted-foreground/50 italic text-[10px]">
+                              <span>{teamBLabel}</span>
+                              <span>{(100 - (payload[0].value as number)).toFixed(1)}p</span>
+                            </div>
+                          </>
+                        )}
                         <div className="pt-2 border-t border-border/50 text-[10px] font-medium text-muted-foreground">
                           {new Date(payload[0].payload.timestamp).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}
                         </div>
@@ -256,15 +291,30 @@ export function BetModal({ isOpen, onClose, market, initialOutcome = 'yes', onTr
                   return null;
                 }}
               />
-              <Area 
-                type="stepAfter" 
-                dataKey="yesPrice" 
-                stroke="hsl(var(--yes-color))" 
-                fillOpacity={1} 
-                fill="url(#colorYes)" 
-                strokeWidth={3}
-                animationDuration={500}
-              />
+              {market.marketType === 'multi' && market.teams ? (
+                market.teams.map((t, idx) => (
+                  <Area 
+                    key={idx}
+                    type="monotone" 
+                    dataKey={`team_${idx}`} 
+                    stroke={lineColors[idx % lineColors.length]} 
+                    fillOpacity={1} 
+                    fill={`url(#colorTeam${idx % lineColors.length})`} 
+                    strokeWidth={idx === internalTeamIdx ? 4 : 2}
+                    animationDuration={500}
+                  />
+                ))
+              ) : (
+                <Area 
+                  type="stepAfter" 
+                  dataKey="yesPrice" 
+                  stroke="hsl(var(--yes-color))" 
+                  fillOpacity={1} 
+                  fill="url(#colorTeam0)" 
+                  strokeWidth={3}
+                  animationDuration={500}
+                />
+              )}
               <ReferenceLine y={50} stroke="currentColor" className="text-muted-foreground/10" strokeDasharray="3 3" />
             </AreaChart>
         </ResponsiveContainer>
@@ -273,6 +323,28 @@ export function BetModal({ isOpen, onClose, market, initialOutcome = 'yes', onTr
           No price data available yet
         </div>
       )}
+      </div>
+      {/* Legend */}
+      <div className="flex items-center justify-center flex-wrap gap-x-6 gap-y-2 pt-2 px-2">
+        {market.marketType === 'multi' && market.teams ? (
+          market.teams.map((t, idx) => (
+            <div key={idx} className={cn("flex items-center gap-1.5 opacity-60 transition-opacity", internalTeamIdx === idx && "opacity-100")}>
+              <span className="w-3 h-1 rounded-full" style={{ backgroundColor: lineColors[idx % lineColors.length] }} />
+              <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{t.name}</span>
+            </div>
+          ))
+        ) : (
+          <>
+            <div className="flex items-center gap-1.5">
+              <span className="w-3 h-1 rounded-full bg-yes" />
+              <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{teamALabel}</span>
+            </div>
+            <div className="flex items-center gap-1.5 opacity-30 italic">
+              <span className="w-3 h-1 rounded-full bg-no" />
+              <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{teamBLabel} (Inverse)</span>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -303,13 +375,13 @@ export function BetModal({ isOpen, onClose, market, initialOutcome = 'yes', onTr
                 onClick={() => { setInternalTeamIdx(idx); setOutcome('yes'); }}
                 className="px-3 py-1.5 bg-yes/10 hover:bg-yes hover:text-white text-yes text-xs font-bold rounded-lg transition-all"
               >
-                Yes {team.yesPrice.toFixed(0)}¢
+                Yes {team.yesPrice.toFixed(0)}p
               </button>
               <button
                 onClick={() => { setInternalTeamIdx(idx); setOutcome('no'); }}
                 className="px-3 py-1.5 bg-no/10 hover:bg-no hover:text-white text-no text-xs font-bold rounded-lg transition-all"
               >
-                No {team.noPrice.toFixed(0)}¢
+                No {team.noPrice.toFixed(0)}p
               </button>
             </div>
           </div>
@@ -445,7 +517,10 @@ export function BetModal({ isOpen, onClose, market, initialOutcome = 'yes', onTr
             {isSubmitting ? (
               <Loader2 className="w-5 h-5 animate-spin mx-auto" />
             ) : (
-              <span className="relative z-10">Confirm {outcome === 'yes' ? teamALabel : teamBLabel} {isBuying ? 'Buy' : 'Sell'}</span>
+              <span className="relative z-10">
+                Confirm {market.marketType === 'multi' && activeTeamName ? `[${activeTeamName}] ` : ''} 
+                {outcome === 'yes' ? teamALabel : teamBLabel} {isBuying ? 'Buy' : 'Sell'}
+              </span>
             )}
           </Button>
         </div>
@@ -459,7 +534,7 @@ export function BetModal({ isOpen, onClose, market, initialOutcome = 'yes', onTr
           }
           className={cn("w-full h-12 text-base font-bold transition-all active:scale-95", isBuying ? "bg-primary text-primary-foreground hover:bg-primary/90" : "bg-foreground text-background hover:bg-foreground/90")}
         >
-          {user ? `Review ${outcome === 'yes' ? teamALabel : teamBLabel} ${isBuying ? 'Buy' : 'Sell'}` : 'Log In To Trade'}
+          {user ? `Review ${market.marketType === 'multi' && activeTeamName ? `[${activeTeamName}] ` : ''}${outcome === 'yes' ? teamALabel : teamBLabel} ${isBuying ? 'Buy' : 'Sell'}` : 'Log In To Trade'}
         </Button>
       )}
     </div>

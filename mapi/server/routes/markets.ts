@@ -60,6 +60,7 @@ function serializeMarket(doc) {
     priceHistory: doc.priceHistory.map((point) => ({
       yesPrice: point.yesPrice,
       noPrice: point.noPrice,
+      allPrices: point.allPrices,
       note: point.note,
       timestamp: point.timestamp instanceof Date ? point.timestamp.toISOString() : new Date(point.timestamp).toISOString(),
     })),
@@ -308,9 +309,15 @@ router.post("/markets/:id/trade", ensureAuthenticated, async (req, res) => {
   const nextNoPrice = calculateNoPrice(poolRef.yesPool, poolRef.noPool);
   const teamLabel = isMulti ? ` [${market.teams![tIdx].name}]` : "";
   
+  let allPrices: number[] | undefined = undefined;
+  if (isMulti && market.teams) {
+    allPrices = market.teams.map(t => calculateYesPrice(t.yesPool, t.noPool));
+  }
+
   market.priceHistory.push({
     yesPrice: nextYesPrice,
     noPrice: nextNoPrice,
+    allPrices,
     note: `${type === "buy" ? "Bought" : "Sold"} ${outcome.toUpperCase()}${teamLabel} (${sharesChanged > 0 ? sharesChanged.toFixed(2) : Math.abs(sharesChanged).toFixed(2)} shares)`,
     timestamp: new Date(),
   });
