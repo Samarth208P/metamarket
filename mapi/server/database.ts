@@ -11,15 +11,14 @@ export async function connectDB() {
   }
 
   try {
-    console.log(`Connecting to MongoDB... (URI length: ${process.env.MONGODB_URI.length})`);
-    await mongoose.connect(process.env.MONGODB_URI, {
-      serverSelectionTimeoutMS: 5000,
-      bufferCommands: false,
-      connectTimeoutMS: 10000,
-    } as any);
-    console.log('Connected to MongoDB');
+    const uri = process.env.MONGODB_URI;
+    if (!uri) throw new Error("Missing MONGODB_URI");
+    
+    console.log(`[DB] Attempting connection...`);
+    await mongoose.connect(uri);
+    console.log('[DB] Connection successful');
   } catch (error) {
-    console.error('MongoDB connection error:', error);
+    console.error('[DB] Connection failed:', error);
     throw error;
   }
 }
