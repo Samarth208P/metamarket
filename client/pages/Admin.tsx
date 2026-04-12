@@ -71,6 +71,8 @@ export default function Admin() {
   // Multi-market global logo
   const [multiLogoFile, setMultiLogoFile] = useState<File | null>(null);
   const [multiLogoPreview, setMultiLogoPreview] = useState('');
+  const [editingMarket, setEditingMarket] = useState<MarketProps | null>(null);
+  const [editDate, setEditDate] = useState('');
 
   const [isCreating, setIsCreating] = useState(false);
   const [markets, setMarkets] = useState<MarketProps[]>([]);
@@ -204,6 +206,25 @@ export default function Admin() {
       toast({ title: 'Market Resolved', description: `Market resolved as ${outcome.toUpperCase()}` });
     } catch {
       toast({ title: 'Error', description: 'Failed to resolve market', variant: 'destructive' });
+    }
+  };
+
+  const handleUpdateMarket = async (marketId: string) => {
+    if (!editDate) return;
+    try {
+      const response = await fetch(`/mapi/markets/${marketId}`, {
+        method: 'PUT',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ endDate: editDate }),
+      });
+      if (!response.ok) throw new Error('Update failed');
+      const updated = await response.json();
+      setMarkets((prev) => prev.map(m => m.id === updated.id ? updated : m));
+      setEditingMarket(null);
+      toast({ title: 'Success', description: 'Market updated' });
+    } catch {
+      toast({ title: 'Error', description: 'Update failed', variant: 'destructive' });
     }
   };
 
@@ -443,8 +464,8 @@ export default function Admin() {
 
               {/* End Date */}
               <div className="space-y-2">
-                <Label htmlFor="endDate">End Date</Label>
-                <Input id="endDate" type="date" value={newMarket.endDate}
+                <Label htmlFor="endDate">End Date & Time</Label>
+                <Input id="endDate" type="datetime-local" value={newMarket.endDate}
                   onChange={(e) => setNewMarket({ ...newMarket, endDate: e.target.value })} />
               </div>
 
@@ -473,8 +494,29 @@ export default function Admin() {
                       <p className="text-sm text-muted-foreground mb-2">{market.description}</p>
                       <div className="flex items-center gap-4 text-xs text-muted-foreground">
                         <span>Volume: ₹{market.volume.toLocaleString()}</span>
-                        {market.endDate && <span>Ends: {new Date(market.endDate).toLocaleDateString()}</span>}
+                        {market.endDate && (
+                          <div className="flex items-center gap-2">
+                             <span>Ends: {new Date(market.endDate).toLocaleString()}</span>
+                             {market.status === 'active' && (
+                               <Button variant="ghost" size="sm" className="h-5 px-1 underline" onClick={() => {
+                                 setEditingMarket(market);
+                                 setEditDate(new Date(market.endDate!).toISOString().slice(0, 16));
+                               }}>Edit</Button>
+                             )}
+                          </div>
+                        )}
                       </div>
+                      
+                      {editingMarket?.id === market.id && (
+                        <div className="mt-4 flex gap-2 items-end p-3 bg-muted/50 rounded-lg border border-border">
+                          <div className="space-y-1 flex-1">
+                            <Label className="text-[10px] uppercase">Update End Time</Label>
+                            <Input type="datetime-local" value={editDate} onChange={(e) => setEditDate(e.target.value)} className="h-8" />
+                          </div>
+                          <Button size="sm" onClick={() => handleUpdateMarket(market.id)}>Save</Button>
+                          <Button size="sm" variant="ghost" onClick={() => setEditingMarket(null)}>Cancel</Button>
+                        </div>
+                      )}
                     </div>
                     {market.status === 'active' && (
                       <div className="flex flex-col gap-2">

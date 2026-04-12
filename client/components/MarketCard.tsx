@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { BetModal } from "./BetModal";
 import { MarketPool } from "@/lib/amm";
-import { Bookmark, ChevronRight } from "lucide-react";
+import { Bookmark } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import { PriceHistoryPoint } from "@shared/api";
@@ -27,6 +27,7 @@ interface MarketCardProps {
   onTrade?: (marketId: string, tradeResult: any) => void;
   status?: string;
   resolvedOutcome?: "yes" | "no";
+  endDate?: string;
 }
 
 export function MarketCard({
@@ -49,6 +50,7 @@ export function MarketCard({
   priceHistory,
   status,
   resolvedOutcome,
+  endDate,
 }: MarketCardProps) {
   const [showBetModal, setShowBetModal] = useState(false);
   const [selectedTeamIdx, setSelectedTeamIdx] = useState<number | null>(null);
@@ -58,12 +60,12 @@ export function MarketCard({
 
   const isBookmarked = bookmarks?.includes(id);
   const selectedTeam = selectedTeamIdx !== null && teams ? teams[selectedTeamIdx] : null;
+  
+  const isClosed = (endDate && new Date(endDate) < new Date()) || status !== "active";
 
   const handleCardClick = (e: React.MouseEvent) => {
     e.preventDefault();
-    if (marketType !== "multi") {
-      setShowBetModal(true);
-    }
+    setShowBetModal(true);
   };
 
   const handleBookmarkToggle = async (e: React.MouseEvent) => {
@@ -112,16 +114,24 @@ export function MarketCard({
 
       <div className="mt-auto space-y-3">
         {marketType === "multi" && teams && teams.length > 0 ? (
-          <div className="space-y-1.5 max-h-[140px] overflow-y-auto pr-1 custom-scrollbar">
+          <div className="space-y-1.5 max-h-[160px] overflow-y-auto">
             {teams.map((team, idx) => (
               <div key={idx} className="flex items-center justify-between p-2 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors">
                 <span className="text-sm font-medium text-foreground truncate mr-2">{team.name}</span>
-                <button
-                  onClick={(e) => handleOpenTeamModal(e, idx, 'yes')}
-                  className="shrink-0 px-3 py-1 bg-yes/10 hover:bg-yes/20 text-yes text-sm font-bold rounded-md transition-colors"
-                >
-                  {team.yesPrice.toFixed(0)}%
-                </button>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    onClick={(e) => handleOpenTeamModal(e, idx, 'yes')}
+                    className="px-2.5 py-1 bg-yes/10 hover:bg-yes/20 text-yes text-xs font-bold rounded-md transition-colors"
+                  >
+                    {team.yesPrice.toFixed(0)}¢
+                  </button>
+                  <button
+                    onClick={(e) => handleOpenTeamModal(e, idx, 'no')}
+                    className="px-2.5 py-1 bg-no/10 hover:bg-no/20 text-no text-xs font-bold rounded-md transition-colors"
+                  >
+                    {team.noPrice.toFixed(0)}¢
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -150,31 +160,38 @@ export function MarketCard({
 
         <div className="flex items-center justify-between pt-3 border-t border-border text-xs font-medium text-muted-foreground">
           <span>₹{volume.toLocaleString()} Vol.</span>
+          {endDate && (
+            <span className={cn(isClosed && "text-no font-bold")}>
+              {isClosed ? "Closed" : `Ends ${new Date(endDate).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`}
+            </span>
+          )}
         </div>
         </div>
       </div>
 
-      {(pool || (selectedTeamIdx !== null && selectedTeam)) && (
-        <BetModal
-          isOpen={showBetModal}
-          onClose={() => { setShowBetModal(false); setSelectedTeamIdx(null); }}
-          initialOutcome={selectedOutcome}
-          market={{
-            id, title, description,
-            yesPrice: selectedTeam ? selectedTeam.yesPrice : yesPrice,
-            noPrice: selectedTeam ? selectedTeam.noPrice : noPrice,
-            marketType, optionA, optionB, shortA, shortB,
-            teamIndex: selectedTeamIdx ?? undefined,
-            teamName: selectedTeam?.name,
-            pool: selectedTeam ? { yesPool: selectedTeam.yesPool, noPool: selectedTeam.noPool, totalLiquidity: selectedTeam.yesPool + selectedTeam.noPool } : (pool as MarketPool),
-            priceHistory: priceHistory,
-            status: status,
-            volume: volume,
-            resolvedOutcome: resolvedOutcome,
-          }}
-          onTrade={onTrade || (() => { })}
-        />
-      )}
+      <BetModal
+        isOpen={showBetModal}
+        onClose={() => { setShowBetModal(false); setSelectedTeamIdx(null); }}
+        initialOutcome={selectedOutcome}
+        market={{
+          id, title, description,
+          yesPrice: selectedTeam ? selectedTeam.yesPrice : yesPrice,
+          noPrice: selectedTeam ? selectedTeam.noPrice : noPrice,
+          marketType, optionA, optionB, shortA, shortB,
+          teamIndex: selectedTeamIdx ?? undefined,
+          teamName: selectedTeam?.name,
+          teams: teams,
+          pool: selectedTeam
+            ? { yesPool: selectedTeam.yesPool, noPool: selectedTeam.noPool, totalLiquidity: selectedTeam.yesPool + selectedTeam.noPool }
+            : (pool || { yesPool: 1000, noPool: 1000, totalLiquidity: 2000 }) as MarketPool,
+          priceHistory: priceHistory,
+          status: status,
+          volume: volume,
+          resolvedOutcome: resolvedOutcome,
+          endDate: endDate,
+        }}
+        onTrade={onTrade || (() => { })}
+      />
     </>
   );
 }

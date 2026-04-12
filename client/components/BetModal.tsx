@@ -9,7 +9,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 import { Area, AreaChart, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine } from 'recharts';
-import { X } from 'lucide-react';
+import { X, Loader2 } from 'lucide-react';
 import { CommentsSection } from './CommentsSection';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -22,10 +22,12 @@ interface BetModalProps {
     marketType?: "binary" | "versus" | "multi";
     optionA?: string; optionB?: string; shortA?: string; shortB?: string;
     teamIndex?: number; teamName?: string; pool: MarketPool;
+    teams?: { name: string; imageUrl?: string; yesPool: number; noPool: number; yesPrice: number; noPrice: number }[];
     priceHistory?: { yesPrice: number; noPrice: number; timestamp: string }[];
     status?: string;
     volume?: number;
     resolvedOutcome?: string;
+    endDate?: string;
   };
   initialOutcome?: 'yes' | 'no';
   onTrade: (marketId: string, tradeResult: any) => void;
@@ -40,6 +42,26 @@ export function BetModal({ isOpen, onClose, market, initialOutcome = 'yes', onTr
   const isMobile = useIsMobile();
 
   const [isConfirming, setIsConfirming] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Multi-market team selection (when opened without a specific team)
+  const [internalTeamIdx, setInternalTeamIdx] = useState<number | null>(market.teamIndex ?? null);
+  const isMultiNoPick = market.marketType === 'multi' && market.teams && market.teams.length > 0 && internalTeamIdx === null;
+
+  // Derive the active pool/prices from either the pre-selected team or the internally picked one
+  const activeTeam = useMemo(() => {
+    if (internalTeamIdx !== null && market.teams && market.teams[internalTeamIdx]) {
+      return market.teams[internalTeamIdx];
+    }
+    return null;
+  }, [internalTeamIdx, market.teams]);
+
+  const activePool: MarketPool = activeTeam
+    ? { yesPool: activeTeam.yesPool, noPool: activeTeam.noPool, totalLiquidity: activeTeam.yesPool + activeTeam.noPool }
+    : market.pool;
+  const activeYesPrice = activeTeam ? activeTeam.yesPrice : market.yesPrice;
+  const activeNoPrice = activeTeam ? activeTeam.noPrice : market.noPrice;
+  const activeTeamName = activeTeam?.name || market.teamName;
 
 
   const userHolding = useMemo(() => {
@@ -60,46 +82,43 @@ export function BetModal({ isOpen, onClose, market, initialOutcome = 'yes', onTr
   const probableWinnings = isBuying && priceRatio > 0 ? numAmount / priceRatio : 0;
 
   const cost = useMemo(() => isBuying
-    ? calculateBuyCost(market.pool, outcome, numAmount)
-    : -calculateSellPayout(market.pool, outcome, numAmount)
-    , [isBuying, market.pool, outcome, numAmount]);
+    ? calculateBuyCost(activePool, outcome, numAmount)
+    : -calculateSellPayout(activePool, outcome, numAmount)
+    , [isBuying, activePool, outcome, numAmount]);
 
   const handleTrade = async () => {
-    if (!user) return;
-    if (numAmount <= 0) return toast({ title: "Invalid Amount", variant: "destructive" });
-    if (isBuying && cost > user.balance) return toast({ title: "Insufficient Balance", variant: "destructive" });
-    if (!isBuying) {
-      const shares = outcome === 'yes' ? userHolding?.yesShares : userHolding?.noShares;
-      if (numAmount > (shares || 0) + 0.01) return toast({ title: "Insufficient Shares", description: `You only have ${(shares || 0).toFixed(2)} shares`, variant: "destructive" });
+    setIsSubmitting(true);
+    try {
+      const response = await fetch(`/mapi/markets/${market.id}/trade`, {
+        method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ outcome, type: isBuying ? 'buy' : 'sell', amount: numAmount, teamIndex: internalTeamIdx ?? market.teamIndex }),
+      });
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        return toast({ title: 'Trade Failed', description: payload?.error || 'Unable to place trade', variant: 'destructive' });
+      }
+
+      const payload = await response.json();
+      updateUser(payload.user);
+      await refreshUser(); 
+      onTrade(market.id, payload.market);
+
+      const shareLabel = outcome === 'yes' ? teamALabel : teamBLabel;
+      toast({ 
+        title: "Trade Executed", 
+        description: isBuying 
+          ? `Successfully bought ₹${numAmount.toFixed(2)} worth of ${shareLabel} shares!`
+          : `Successfully sold ${numAmount.toFixed(2)} ${shareLabel} shares for ₹${Math.abs(cost).toFixed(2)}!`,
+      });
+      
+      setAmount('');
+      setIsConfirming(false);
+    } catch (err) {
+      toast({ title: "Network Error", description: "Failed to connect to server", variant: "destructive" });
+    } finally {
+      setIsSubmitting(false);
     }
-
-    const response = await fetch(`/mapi/markets/${market.id}/trade`, {
-      method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ outcome, type: isBuying ? 'buy' : 'sell', amount: numAmount, teamIndex: market.teamIndex }),
-    });
-
-    if (!response.ok) {
-      const payload = await response.json().catch(() => null);
-      return toast({ title: 'Trade Failed', description: payload?.error || 'Unable to place trade', variant: 'destructive' });
-    }
-
-    const payload = await response.json();
-    updateUser(payload.user);
-    await refreshUser(); 
-    onTrade(market.id, payload.market);
-
-
-
-    const shareLabel = outcome === 'yes' ? teamALabel : teamBLabel;
-    toast({ 
-      title: "Trade Executed", 
-      description: isBuying 
-        ? `Successfully bought ₹${numAmount.toFixed(2)} worth of ${shareLabel} shares!`
-        : `Successfully sold ${numAmount.toFixed(2)} ${shareLabel} shares for ₹${Math.abs(cost).toFixed(2)}!`,
-    });
-    
-    setAmount('');
-    setIsConfirming(false);
   };
 
   const handleMax = () => {
@@ -120,27 +139,70 @@ export function BetModal({ isOpen, onClose, market, initialOutcome = 'yes', onTr
     }
   };
 
-  const titleText = market.teamName ? `${market.title} - ${market.teamName}` : market.title;
+  const titleText = activeTeamName ? `${market.title} - ${activeTeamName}` : market.title;
+
   const isResolved = market.status && market.status !== "active";
 
   const earnings = useMemo(() => {
     if (!market.resolvedOutcome || !user) return 0;
-    
-    // Check if user still has holding (unlikely if already paid out)
     if (userHolding) {
       const winningShares = market.resolvedOutcome === 'yes' ? userHolding.yesShares : userHolding.noShares;
       return winningShares;
     }
-
-    // Check trade history for payout
     const payoutTrade = user.tradeHistory?.find(t => 
       t.marketId === market.id && 
       t.tradeType === 'payout' &&
-      (market.teamIndex === undefined || t.marketTitle?.includes(`[${market.teamName}]`))
+      (internalTeamIdx === undefined || t.marketTitle?.includes(`[${activeTeamName}]`))
     );
-    
     return payoutTrade ? Math.abs(payoutTrade.amount) : 0;
-  }, [user, userHolding, market.id, market.resolvedOutcome, market.teamIndex, market.teamName]);
+  }, [user, userHolding, market.id, market.resolvedOutcome, internalTeamIdx, activeTeamName]);
+
+  // ── Countdown Timer ──────────────────────────────────────────────
+  const [countdown, setCountdown] = useState<{ h: number; m: number; s: number } | null>(null);
+  const [isTimeClosed, setIsTimeClosed] = useState(() => {
+    return market.endDate ? new Date(market.endDate) < new Date() : false;
+  });
+
+  useEffect(() => {
+    if (!market.endDate) return;
+    const endTime = new Date(market.endDate).getTime();
+
+    const tick = () => {
+      const now = Date.now();
+      const diff = endTime - now;
+      if (diff <= 0) {
+        setCountdown(null);
+        setIsTimeClosed(true);
+        return;
+      }
+      const totalSecs = Math.floor(diff / 1000);
+      setCountdown({
+        h: Math.floor(totalSecs / 3600),
+        m: Math.floor((totalSecs % 3600) / 60),
+        s: totalSecs % 60,
+      });
+      setIsTimeClosed(false);
+    };
+
+    tick();
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
+  }, [market.endDate]);
+
+  const isMarketClosed = isResolved || isTimeClosed;
+
+  const countdownDisplay = countdown && !isMarketClosed ? (
+    <div className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-muted/50 border border-border/50">
+      <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mr-2">Closes in</span>
+      <div className="flex items-center gap-1 font-mono">
+        <span className="bg-foreground/10 text-foreground text-sm font-black px-1.5 py-0.5 rounded">{String(countdown.h).padStart(2, '0')}</span>
+        <span className="text-muted-foreground font-bold">:</span>
+        <span className="bg-foreground/10 text-foreground text-sm font-black px-1.5 py-0.5 rounded">{String(countdown.m).padStart(2, '0')}</span>
+        <span className="text-muted-foreground font-bold">:</span>
+        <span className="bg-foreground/10 text-foreground text-sm font-black px-1.5 py-0.5 rounded">{String(countdown.s).padStart(2, '0')}</span>
+      </div>
+    </div>
+  ) : null;
 
 
 
@@ -215,16 +277,68 @@ export function BetModal({ isOpen, onClose, market, initialOutcome = 'yes', onTr
     </div>
   );
 
+  // Multi-market team selector view
+  const multiTeamSelector = market.teams ? (
+    <div className="flex flex-col gap-4">
+      {countdownDisplay}
+      <h4 className="text-[10px] font-black uppercase text-muted-foreground tracking-[0.2em]">Select a team to trade</h4>
+      <div className="space-y-2">
+        {market.teams.map((team, idx) => (
+          <div
+            key={idx}
+            className="flex items-center justify-between p-3 rounded-xl bg-muted/30 border border-border/50 hover:border-primary/30 transition-all"
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              {team.imageUrl ? (
+                <img src={team.imageUrl} alt={team.name} className="w-8 h-8 rounded-full object-cover border border-border shrink-0" />
+              ) : (
+                <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center border border-border text-xs font-bold text-muted-foreground shrink-0">
+                  {team.name.charAt(0)}
+                </div>
+              )}
+              <span className="text-sm font-semibold text-foreground truncate">{team.name}</span>
+            </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                onClick={() => { setInternalTeamIdx(idx); setOutcome('yes'); }}
+                className="px-3 py-1.5 bg-yes/10 hover:bg-yes hover:text-white text-yes text-xs font-bold rounded-lg transition-all"
+              >
+                Yes {team.yesPrice.toFixed(0)}¢
+              </button>
+              <button
+                onClick={() => { setInternalTeamIdx(idx); setOutcome('no'); }}
+                className="px-3 py-1.5 bg-no/10 hover:bg-no hover:text-white text-no text-xs font-bold rounded-lg transition-all"
+              >
+                No {team.noPrice.toFixed(0)}¢
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  ) : null;
+
   const tradeControls = (
     <div className="flex flex-col gap-5">
+      {/* Countdown */}
+      {countdownDisplay}
+
       {/* Buy / Sell Toggle */}
-      <div className="flex p-1 bg-muted rounded-lg">
+      <div className={cn("flex p-1 bg-muted rounded-lg", isSubmitting && "opacity-50 pointer-events-none")}>
         <button onClick={() => setIsBuying(true)} className={cn("flex-1 py-1.5 text-sm font-semibold rounded-md transition-colors", isBuying ? "bg-background shadow-sm text-foreground" : "text-muted-foreground")}>Buy</button>
         <button onClick={() => setIsBuying(false)} className={cn("flex-1 py-1.5 text-sm font-semibold rounded-md transition-colors", !isBuying ? "bg-background shadow-sm text-foreground" : "text-muted-foreground")}>Sell</button>
       </div>
 
       {/* Outcome Toggle */}
-      <div className="flex gap-2">
+      <div className={cn("flex gap-2", isSubmitting && "opacity-50 pointer-events-none")}>
+        {market.marketType === 'multi' && (
+          <button
+            onClick={() => { setInternalTeamIdx(null); setIsConfirming(false); }}
+            className="px-2 py-4 rounded-xl border-2 border-transparent bg-muted/50 hover:bg-muted transition-all text-xs font-bold text-muted-foreground"
+          >
+            ←
+          </button>
+        )}
         <button
           onClick={() => setOutcome('yes')}
           className={cn(
@@ -235,7 +349,7 @@ export function BetModal({ isOpen, onClose, market, initialOutcome = 'yes', onTr
           <span className={cn("text-sm font-black mb-1 uppercase tracking-wider", outcome === 'yes' ? "text-yes" : "text-muted-foreground")}>
             {market.marketType === 'versus' ? market.shortA : 'Yes'}
           </span>
-          <span className="text-2xl font-black">{market.yesPrice.toFixed(0)}p</span>
+          <span className="text-2xl font-black">{activeYesPrice.toFixed(0)}p</span>
         </button>
         <button
           onClick={() => setOutcome('no')}
@@ -247,7 +361,7 @@ export function BetModal({ isOpen, onClose, market, initialOutcome = 'yes', onTr
           <span className={cn("text-sm font-black mb-1 uppercase tracking-wider", outcome === 'no' ? "text-no" : "text-muted-foreground")}>
             {market.marketType === 'versus' ? market.shortB : 'No'}
           </span>
-          <span className="text-2xl font-black">{market.noPrice.toFixed(0)}p</span>
+          <span className="text-2xl font-black">{activeNoPrice.toFixed(0)}p</span>
         </button>
       </div>
 
@@ -270,6 +384,7 @@ export function BetModal({ isOpen, onClose, market, initialOutcome = 'yes', onTr
             type="number"
             placeholder="0"
             value={amount}
+            disabled={isSubmitting}
             onChange={(e) => setAmount(e.target.value)}
             className={cn("pr-16 h-12 text-lg font-bold bg-muted/30 border-border", isBuying ? "pl-7" : "pl-3")}
           />
@@ -317,58 +432,35 @@ export function BetModal({ isOpen, onClose, market, initialOutcome = 'yes', onTr
           <Button
             variant="outline"
             onClick={() => setIsConfirming(false)}
+            disabled={isSubmitting}
             className="flex-1 h-12 font-bold"
           >
             Cancel
           </Button>
           <Button
             onClick={(e) => { e.stopPropagation(); handleTrade(); }}
-            className={cn("flex-[2] h-12 text-base font-black uppercase tracking-widest relative overflow-hidden group/confirm", isBuying ? "bg-yes text-white hover:bg-yes/90" : "bg-no text-white hover:bg-no/90")}
+            disabled={isSubmitting}
+            className={cn("flex-[2] h-12 text-base font-black uppercase tracking-widest relative overflow-hidden", isBuying ? "bg-yes text-white hover:bg-yes/90" : "bg-no text-white hover:bg-no/90")}
           >
-            <motion.div 
-              className="absolute inset-0 bg-white/20 -translate-x-full group-hover/confirm:translate-x-full transition-transform duration-1000 skew-x-12"
-              animate={{ x: ["-100%", "100%"] }}
-              transition={{ repeat: Infinity, duration: 2, ease: "linear" }}
-            />
-            <span className="relative z-10">Confirm {outcome === 'yes' ? teamALabel : teamBLabel} {isBuying ? 'Buy' : 'Sell'}</span>
-            
-            {/* SVG Trace Effect */}
-            <svg className="absolute inset-0 w-full h-full pointer-events-none" preserveAspectRatio="none">
-              <motion.rect
-                x="0" y="0" width="100%" height="100%"
-                fill="none"
-                stroke="white"
-                strokeWidth="2"
-                strokeDasharray="20 40"
-                initial={{ strokeDashoffset: 0 }}
-                animate={{ strokeDashoffset: -60 }}
-                transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
-              />
-            </svg>
+            {isSubmitting ? (
+              <Loader2 className="w-5 h-5 animate-spin mx-auto" />
+            ) : (
+              <span className="relative z-10">Confirm {outcome === 'yes' ? teamALabel : teamBLabel} {isBuying ? 'Buy' : 'Sell'}</span>
+            )}
           </Button>
         </div>
       ) : (
-        <motion.div
-          animate={numAmount > 0 ? { scale: [1, 1.02, 1] } : {}}
-          transition={{ repeat: Infinity, duration: 2, ease: "easeInOut" }}
-          className="w-full"
+        <Button
+          onClick={(e) => { e.stopPropagation(); setIsConfirming(true); }}
+          disabled={
+            numAmount <= 0 || 
+            (isBuying && cost > (user?.balance || 0)) ||
+            (!isBuying && numAmount > ((outcome === 'yes' ? userHolding?.yesShares : userHolding?.noShares) || 0) + 0.01)
+          }
+          className={cn("w-full h-12 text-base font-bold transition-all active:scale-95", isBuying ? "bg-primary text-primary-foreground hover:bg-primary/90" : "bg-foreground text-background hover:bg-foreground/90")}
         >
-          <Button
-            onClick={(e) => { e.stopPropagation(); setIsConfirming(true); }}
-            disabled={
-              numAmount <= 0 || 
-              (isBuying && cost > (user?.balance || 0)) ||
-              (!isBuying && numAmount > ((outcome === 'yes' ? userHolding?.yesShares : userHolding?.noShares) || 0) + 0.01)
-            }
-            className={cn("w-full h-12 text-base font-bold transition-all active:scale-95 relative overflow-hidden group/review", isBuying ? "bg-primary text-primary-foreground hover:bg-primary/90" : "bg-foreground text-background hover:bg-foreground/90")}
-          >
-            <motion.div 
-              className="absolute inset-0 bg-white/10 -translate-y-full group-hover/review:translate-y-0 transition-transform duration-500"
-              initial={false}
-            />
-            <span className="relative z-10">{user ? `Review ${outcome === 'yes' ? teamALabel : teamBLabel} ${isBuying ? 'Buy' : 'Sell'}` : 'Log In To Trade'}</span>
-          </Button>
-        </motion.div>
+          {user ? `Review ${outcome === 'yes' ? teamALabel : teamBLabel} ${isBuying ? 'Buy' : 'Sell'}` : 'Log In To Trade'}
+        </Button>
       )}
     </div>
   );
@@ -402,17 +494,28 @@ export function BetModal({ isOpen, onClose, market, initialOutcome = 'yes', onTr
                 </div>
               </div>
             </div>
-            {isResolved ? (
+            {isMarketClosed ? (
               <div className="space-y-6 pt-4">
                 <div className="p-6 rounded-2xl bg-muted/30 border border-border flex flex-col items-center text-center">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-4">Market Result</span>
-                  <div className={cn(
-                    "text-4xl font-black uppercase tracking-tighter mb-2",
-                    market.resolvedOutcome === 'yes' ? "text-yes" : "text-no"
-                  )}>
-                    {market.resolvedOutcome === 'yes' ? (market.shortA || 'Yes') : (market.shortB || 'No')}
-                  </div>
-                  <span className="text-sm font-bold text-foreground">Won the market</span>
+                  <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-4">
+                    {isResolved ? "Market Result" : "Market Closed"}
+                  </span>
+                  {isResolved ? (
+                    <>
+                      <div className={cn(
+                        "text-4xl font-black uppercase tracking-tighter mb-2",
+                        market.resolvedOutcome === 'yes' ? "text-yes" : "text-no"
+                      )}>
+                        {market.resolvedOutcome === 'yes' ? (market.shortA || 'Yes') : (market.shortB || 'No')}
+                      </div>
+                      <span className="text-sm font-bold text-foreground">Won the market</span>
+                    </>
+                  ) : (
+                    <>
+                      <div className="text-2xl font-black uppercase text-muted-foreground mb-1">Trading Ended</div>
+                      <span className="text-sm font-medium text-muted-foreground/60">Waiting for admin resolution</span>
+                    </>
+                  )}
                 </div>
                 <div className="flex justify-between items-center py-2 border-b border-border/50">
                   <span className="text-xs font-bold text-muted-foreground uppercase">Volume</span>
@@ -437,6 +540,8 @@ export function BetModal({ isOpen, onClose, market, initialOutcome = 'yes', onTr
                   </div>
                 )}
               </div>
+            ) : isMultiNoPick ? (
+              multiTeamSelector
             ) : (
               tradeControls
             )}
@@ -445,13 +550,13 @@ export function BetModal({ isOpen, onClose, market, initialOutcome = 'yes', onTr
             </div>
           </div>
           <div className="p-4 pt-2 border-t border-border mt-auto">
-            {isResolved ? (
+            {isMarketClosed ? (
               <DrawerClose asChild>
                 <Button variant="outline" className="w-full h-12 font-bold" onClick={(e) => { e.stopPropagation(); onClose(); }}>
-                  Close Market
+                  Close Modal
                 </Button>
               </DrawerClose>
-            ) : (
+            ) : isMultiNoPick ? null : (
               submitButton
             )}
           </div>
@@ -498,17 +603,28 @@ export function BetModal({ isOpen, onClose, market, initialOutcome = 'yes', onTr
           {/* Right Side: Trade Interface / Resolved Output */}
           <div className={cn("w-[380px] flex flex-col p-8", isResolved ? "bg-muted/5 border-l border-border" : "bg-muted/10")}>
             <div className="flex-1">
-              {isResolved ? (
+              {isMarketClosed ? (
                 <div className="space-y-8">
                   <div className="p-6 rounded-2xl bg-muted/30 border border-border flex flex-col items-center text-center">
-                    <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-4">Market Result</span>
-                    <div className={cn(
-                      "text-4xl font-black uppercase tracking-tighter mb-2",
-                      market.resolvedOutcome === 'yes' ? "text-yes" : "text-no"
-                    )}>
-                      {market.resolvedOutcome === 'yes' ? (market.shortA || 'Yes') : (market.shortB || 'No')}
-                    </div>
-                    <span className="text-sm font-bold text-foreground">Won the market</span>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-4">
+                      {isResolved ? "Market Result" : "Market Closed"}
+                    </span>
+                    {isResolved ? (
+                      <>
+                        <div className={cn(
+                          "text-4xl font-black uppercase tracking-tighter mb-2",
+                          market.resolvedOutcome === 'yes' ? "text-yes" : "text-no"
+                        )}>
+                          {market.resolvedOutcome === 'yes' ? (market.shortA || 'Yes') : (market.shortB || 'No')}
+                        </div>
+                        <span className="text-sm font-bold text-foreground">Won the market</span>
+                      </>
+                    ) : (
+                      <>
+                        <div className="text-2xl font-black uppercase text-muted-foreground mb-1">Trading Ended</div>
+                        <span className="text-sm font-medium text-muted-foreground/60">Waiting for resolution</span>
+                      </>
+                    )}
                   </div>
 
                   <div className="space-y-4">
@@ -542,20 +658,22 @@ export function BetModal({ isOpen, onClose, market, initialOutcome = 'yes', onTr
                     </p>
                   </div>
                 </div>
+              ) : isMultiNoPick ? (
+                multiTeamSelector
               ) : (
                 tradeControls
               )}
             </div>
-            {!isResolved && (
+            {!isMarketClosed && !isMultiNoPick && (
               <div className="mt-8">
                 {submitButton}
               </div>
             )}
-            {isResolved && (
+            {isMarketClosed && (
               <div className="mt-auto">
                 <DialogClose asChild>
                   <Button variant="outline" className="w-full h-12 font-bold" onClick={(e) => { e.stopPropagation(); onClose(); }}>
-                    Close Market
+                    Close Modal
                   </Button>
                 </DialogClose>
               </div>

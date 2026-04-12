@@ -155,6 +155,29 @@ router.post("/markets", ensureAuthenticated, ensureAdmin, async (req, res) => {
   return res.status(201).json(serializeMarket(market));
 });
 
+router.put("/markets/:id", ensureAuthenticated, ensureAdmin, async (req, res) => {
+  const marketId = req.params.id;
+  if (!isValidObjectId(marketId)) {
+    return res.status(400).json({ error: "Invalid market ID" });
+  }
+
+  const { title, description, category, endDate, logoUrl } = req.body;
+  
+  const market = await Market.findById(marketId);
+  if (!market) {
+    return res.status(404).json({ error: "Market not found" });
+  }
+
+  if (title) market.title = title;
+  if (description) market.description = description;
+  if (category) market.category = category;
+  if (endDate) market.endDate = new Date(endDate);
+  if (logoUrl) market.logoUrl = logoUrl;
+
+  await market.save();
+  return res.json(serializeMarket(market));
+});
+
 router.post("/markets/:id/trade", ensureAuthenticated, async (req, res) => {
   const marketId = req.params.id;
   const { outcome, type, amount, teamIndex } = req.body;
@@ -179,6 +202,10 @@ router.post("/markets/:id/trade", ensureAuthenticated, async (req, res) => {
 
   if (market.status !== "active") {
     return res.status(400).json({ error: "Cannot trade a resolved market" });
+  }
+
+  if (market.endDate && new Date(market.endDate) < new Date()) {
+    return res.status(400).json({ error: "Market has closed for trading" });
   }
 
   // For multi-markets, validate teamIndex

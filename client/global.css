@@ -132,10 +132,11 @@
     white-space: pre;
   }
 
-  .no-scrollbar::-webkit-scrollbar {
+  /* Hide all scrollbars globally */
+  *::-webkit-scrollbar {
     display: none;
   }
-  .no-scrollbar {
+  * {
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
