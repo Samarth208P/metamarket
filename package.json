@@ -10,11 +10,11 @@
     "typecheck": "tsc"
   },
   "dependencies": {
-    "@types/canvas-confetti": "^1.9.0",
+
     "@types/multer": "^2.1.0",
     "@types/passport": "^1.0.17",
     "@types/passport-google-oauth20": "^2.0.17",
-    "canvas-confetti": "^1.9.4",
+
     "cloudinary": "^2.9.0",
     "cookie-parser": "^1.4.7",
     "dotenv": "^17.2.1",

@@ -93,35 +93,7 @@ export async function createServer() {
   apiRouter.get('/auth/google/callback', handleGoogleCallback, handleAuthSuccess);
   apiRouter.post('/auth/logout', handleLogout);
   apiRouter.get('/user', handleGetUser);
-  apiRouter.post('/user/bookmarks', async (req, res) => {
-    const userId = req.signedCookies?.userId;
-    if (!userId) {
-      return res.status(401).json({ error: "Unauthorized" });
-    }
-    const { marketId } = req.body;
-    if (!marketId) {
-      return res.status(400).json({ error: "Market ID required" });
-    }
-    try {
-      const user = await User.findById(userId);
-      if (!user) return res.status(404).json({ error: "User not found" });
-      
-      if (!user.bookmarks) {
-        user.bookmarks = [];
-      }
-      
-      const index = user.bookmarks.indexOf(marketId);
-      if (index > -1) {
-        user.bookmarks.splice(index, 1);
-      } else {
-        user.bookmarks.push(marketId);
-      }
-      await user.save();
-      res.json(user);
-    } catch (error) {
-      res.status(500).json({ error: "Internal server error" });
-    }
-  });
+
 
   // Mount API router
   app.use("/mapi", apiRouter);

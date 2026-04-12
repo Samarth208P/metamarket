@@ -53,10 +53,10 @@ export function MarketCard({
   const [showBetModal, setShowBetModal] = useState(false);
   const [selectedTeamIdx, setSelectedTeamIdx] = useState<number | null>(null);
   const [selectedOutcome, setSelectedOutcome] = useState<'yes' | 'no'>('yes');
-  const { user, toggleBookmark } = useAuth();
+  const { user, bookmarks, toggleBookmark } = useAuth();
   const { toast } = useToast();
 
-  const isBookmarked = user?.bookmarks?.includes(id);
+  const isBookmarked = bookmarks?.includes(id);
   const selectedTeam = selectedTeamIdx !== null && teams ? teams[selectedTeamIdx] : null;
 
   const handleCardClick = (e: React.MouseEvent) => {

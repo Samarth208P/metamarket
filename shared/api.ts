@@ -16,7 +16,7 @@ export interface User {
   isAdmin: boolean;
   balance: number;
   tradeHistory?: any[];
-  bookmarks?: string[];
+
   holdings?: {
     marketId: string;
     teamIndex?: number;

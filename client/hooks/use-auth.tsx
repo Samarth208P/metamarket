@@ -8,7 +8,8 @@ interface AuthContextType {
   updateBalance: (newBalance: number) => void;
   updateUser: (userData: User) => void;
   refreshUser: () => Promise<void>;
-  toggleBookmark: (marketId: string) => Promise<void>;
+  toggleBookmark: (marketId: string) => void;
+  bookmarks: string[];
   isAuthenticated: boolean;
   isLoading: boolean;
 }
@@ -17,9 +18,20 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [bookmarks, setBookmarks] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    // Load bookmarks from localStorage
+    try {
+      const stored = localStorage.getItem('metamarket_bookmarks');
+      if (stored) {
+        setBookmarks(JSON.parse(stored));
+      }
+    } catch (e) {
+      console.error("Failed to load bookmarks", e);
+    }
+    
     // Check if user is already authenticated on page load
     checkAuthStatus();
   }, []);
@@ -80,22 +92,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const toggleBookmark = async (marketId: string) => {
-    try {
-      const response = await fetch('/mapi/user/bookmarks', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ marketId }),
-        credentials: 'include',
-      });
-      if (response.ok) {
-        const updatedUser = await response.json();
-        setUser(updatedUser);
-      }
-    } catch (error) {
-      console.error('Bookmark toggle failed:', error);
-      throw error;
-    }
+  const toggleBookmark = (marketId: string) => {
+    setBookmarks(prev => {
+      const newBookmarks = prev.includes(marketId)
+        ? prev.filter(id => id !== marketId)
+        : [...prev, marketId];
+      
+      localStorage.setItem('metamarket_bookmarks', JSON.stringify(newBookmarks));
+      return newBookmarks;
+    });
   };
 
   const value = {
@@ -106,6 +111,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     updateUser,
     refreshUser,
     toggleBookmark,
+    bookmarks,
     isAuthenticated: !!user,
     isLoading,
   };

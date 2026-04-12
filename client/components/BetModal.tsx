@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogClose } from '@/components/ui/dialog';
@@ -11,7 +11,8 @@ import { cn } from '@/lib/utils';
 import { Area, AreaChart, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine } from 'recharts';
 import { X } from 'lucide-react';
 import { CommentsSection } from './CommentsSection';
-import confetti from 'canvas-confetti';
+import { motion, AnimatePresence } from 'framer-motion';
+
 
 interface BetModalProps {
   isOpen: boolean;
@@ -37,9 +38,9 @@ export function BetModal({ isOpen, onClose, market, initialOutcome = 'yes', onTr
   const { user, updateUser, refreshUser } = useAuth();
   const { toast } = useToast();
   const isMobile = useIsMobile();
-  const confettiCanvasRef = useRef<HTMLCanvasElement>(null);
+
   const [isConfirming, setIsConfirming] = useState(false);
-  const [showConfettiOverlay, setShowConfettiOverlay] = useState(false);
+
 
   const userHolding = useMemo(() => {
     if (!user) return null;
@@ -87,36 +88,7 @@ export function BetModal({ isOpen, onClose, market, initialOutcome = 'yes', onTr
     await refreshUser(); 
     onTrade(market.id, payload.market);
 
-    // Dynamic, intense animation logic: Enhanced Fireworks style
-    if (confettiCanvasRef.current) {
-      setShowConfettiOverlay(true);
-      const myConfetti = confetti.create(confettiCanvasRef.current, { resize: true });
-      
-      const duration = 4 * 1000;
-      const animationEnd = Date.now() + duration;
-      const defaults = { 
-        startVelocity: 60, 
-        spread: 360, 
-        ticks: 150, 
-        zIndex: 50,
-        gravity: 0.8,
-        drift: 0,
-        colors: isBuying ? ['#22c55e', '#ffffff', '#10b981', '#fbbf24'] : ['#ef4444', '#ffffff', '#f43f5e', '#fbbf24']
-      };
 
-      const interval: any = setInterval(function() {
-        const timeLeft = animationEnd - Date.now();
-        if (timeLeft <= 0) {
-          setShowConfettiOverlay(false);
-          return clearInterval(interval);
-        }
-        
-        const particleCount = 200 * (timeLeft / duration);
-        // Fireworks bursts from random positions
-        myConfetti({ ...defaults, particleCount: particleCount / 2, origin: { x: Math.random(), y: Math.random() - 0.2 } });
-        myConfetti({ ...defaults, particleCount: particleCount / 4, origin: { x: 0.5, y: 0.7 }, scalar: 1.2 });
-      }, 250);
-    }
 
     const shareLabel = outcome === 'yes' ? teamALabel : teamBLabel;
     toast({ 
@@ -351,23 +323,52 @@ export function BetModal({ isOpen, onClose, market, initialOutcome = 'yes', onTr
           </Button>
           <Button
             onClick={(e) => { e.stopPropagation(); handleTrade(); }}
-            className={cn("flex-[2] h-12 text-base font-black uppercase tracking-widest", isBuying ? "bg-yes text-white hover:bg-yes/90" : "bg-no text-white hover:bg-no/90")}
+            className={cn("flex-[2] h-12 text-base font-black uppercase tracking-widest relative overflow-hidden group/confirm", isBuying ? "bg-yes text-white hover:bg-yes/90" : "bg-no text-white hover:bg-no/90")}
           >
-            Confirm {outcome === 'yes' ? teamALabel : teamBLabel} {isBuying ? 'Buy' : 'Sell'}
+            <motion.div 
+              className="absolute inset-0 bg-white/20 -translate-x-full group-hover/confirm:translate-x-full transition-transform duration-1000 skew-x-12"
+              animate={{ x: ["-100%", "100%"] }}
+              transition={{ repeat: Infinity, duration: 2, ease: "linear" }}
+            />
+            <span className="relative z-10">Confirm {outcome === 'yes' ? teamALabel : teamBLabel} {isBuying ? 'Buy' : 'Sell'}</span>
+            
+            {/* SVG Trace Effect */}
+            <svg className="absolute inset-0 w-full h-full pointer-events-none" preserveAspectRatio="none">
+              <motion.rect
+                x="0" y="0" width="100%" height="100%"
+                fill="none"
+                stroke="white"
+                strokeWidth="2"
+                strokeDasharray="20 40"
+                initial={{ strokeDashoffset: 0 }}
+                animate={{ strokeDashoffset: -60 }}
+                transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
+              />
+            </svg>
           </Button>
         </div>
       ) : (
-        <Button
-          onClick={(e) => { e.stopPropagation(); setIsConfirming(true); }}
-          disabled={
-            numAmount <= 0 || 
-            (isBuying && cost > (user?.balance || 0)) ||
-            (!isBuying && numAmount > ((outcome === 'yes' ? userHolding?.yesShares : userHolding?.noShares) || 0) + 0.01)
-          }
-          className={cn("w-full h-12 text-base font-bold transition-all active:scale-95", isBuying ? "bg-primary text-primary-foreground hover:bg-primary/90" : "bg-foreground text-background hover:bg-foreground/90")}
+        <motion.div
+          animate={numAmount > 0 ? { scale: [1, 1.02, 1] } : {}}
+          transition={{ repeat: Infinity, duration: 2, ease: "easeInOut" }}
+          className="w-full"
         >
-          {user ? `Review ${outcome === 'yes' ? teamALabel : teamBLabel} ${isBuying ? 'Buy' : 'Sell'}` : 'Log In To Trade'}
-        </Button>
+          <Button
+            onClick={(e) => { e.stopPropagation(); setIsConfirming(true); }}
+            disabled={
+              numAmount <= 0 || 
+              (isBuying && cost > (user?.balance || 0)) ||
+              (!isBuying && numAmount > ((outcome === 'yes' ? userHolding?.yesShares : userHolding?.noShares) || 0) + 0.01)
+            }
+            className={cn("w-full h-12 text-base font-bold transition-all active:scale-95 relative overflow-hidden group/review", isBuying ? "bg-primary text-primary-foreground hover:bg-primary/90" : "bg-foreground text-background hover:bg-foreground/90")}
+          >
+            <motion.div 
+              className="absolute inset-0 bg-white/10 -translate-y-full group-hover/review:translate-y-0 transition-transform duration-500"
+              initial={false}
+            />
+            <span className="relative z-10">{user ? `Review ${outcome === 'yes' ? teamALabel : teamBLabel} ${isBuying ? 'Buy' : 'Sell'}` : 'Log In To Trade'}</span>
+          </Button>
+        </motion.div>
       )}
     </div>
   );
@@ -375,7 +376,10 @@ export function BetModal({ isOpen, onClose, market, initialOutcome = 'yes', onTr
   if (isMobile) {
     return (
       <Drawer open={isOpen} onOpenChange={onClose}>
-        <DrawerContent className="max-h-[90vh]">
+        <DrawerContent className={cn(
+          "max-h-[90vh] transition-all duration-500",
+          isConfirming ? "ring-4 ring-green-500/50 shadow-[0_0_30px_rgba(34,197,94,0.3)] shadow-green-500/20" : ""
+        )}>
           <DrawerHeader className="text-left border-b border-border pb-4 relative">
             <DrawerTitle className="text-lg leading-tight font-bold pr-8">{titleText}</DrawerTitle>
             <DrawerClose asChild>
@@ -458,18 +462,11 @@ export function BetModal({ isOpen, onClose, market, initialOutcome = 'yes', onTr
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-[900px] p-0 gap-0 overflow-hidden bg-card border-border rounded-xl">
-        {/* Confetti Background Layer */}
-        <canvas 
-          ref={confettiCanvasRef} 
-          className={cn(
-            "fixed inset-0 pointer-events-none z-[-1] transition-opacity duration-500",
-            showConfettiOverlay ? "opacity-100" : "opacity-0"
-          )}
-        />
-        {showConfettiOverlay && (
-          <div className="fixed inset-0 bg-background/20 backdrop-blur-md pointer-events-none z-[-1] animate-in fade-in duration-500" />
-        )}
+      <DialogContent className={cn(
+        "sm:max-w-[900px] p-0 gap-0 overflow-hidden bg-card border-border rounded-xl transition-all duration-500",
+        isConfirming ? "ring-4 ring-green-500/50 shadow-[0_0_40px_rgba(34,197,94,0.4)] border-green-500/40" : ""
+      )}>
+
         
         <div className="flex flex-row h-full max-h-[85vh] relative z-0">
           {/* Left Side: Title, Graph, Description */}

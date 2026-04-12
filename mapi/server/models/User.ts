@@ -8,7 +8,7 @@ export interface IUser extends mongoose.Document {
   isAdmin: boolean;
   balance: number;
   tradeHistory: any[];
-  bookmarks: string[];
+
   holdings: {
     marketId: string;
     teamIndex?: number;
@@ -30,7 +30,7 @@ const UserSchema = new mongoose.Schema<IUser>(
     isAdmin: { type: Boolean, default: false },
     balance: { type: Number, default: 1000 },
     tradeHistory: { type: [Object], default: [] },
-    bookmarks: { type: [String], default: [] },
+
     holdings: [
       {
         marketId: { type: String, required: true },
