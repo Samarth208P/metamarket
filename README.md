@@ -1,6 +1,6 @@
-# 📈 MytaMarket
+# 📈 MetaMarket
 
-**MytaMarket** is a dynamic, high-fidelity prediction market platform designed for IIT Roorkee. It allows users to trade on the outcomes of future events using a virtual currency system, featuring real-time price discovery and shared liquidity pools.
+**MetaMarket** is a dynamic, high-fidelity prediction market platform designed for IIT Roorkee. It allows users to trade on the outcomes of future events using a virtual currency system, featuring real-time price discovery and shared liquidity pools.
 
 ## 🚀 Key Features
 
@@ -67,4 +67,4 @@ Ensure you set all required environment variables in the Netlify Dashboard under
 
 ## 📄 License
 
-Private - (C) 2026 MytaMarket Team.
+Private - (C) 2026 MetaMarket Team.

@@ -59,7 +59,7 @@ export default function Leaderboard() {
 
             <h1 className="text-3xl md:text-4xl font-bold text-foreground mb-4">IITR Leaderboard</h1>
             <p className="text-lg text-muted-foreground mb-8">
-              Top performers in MytaMarket prediction trading
+              Top performers in MetaMarket prediction trading
             </p>
           </div>
 

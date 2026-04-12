@@ -53,7 +53,7 @@ export function Layout({ children }: LayoutProps) {
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           {/* Logo - Text only, clean */}
           <Link to="/" className="flex items-center gap-2 font-bold text-xl tracking-tight text-foreground shrink-0">
-            MytaMarket
+            MetaMarket
           </Link>
 
           {/* Search Bar - Now next to logo */}

@@ -21,7 +21,7 @@ cloudinary.config({
 const storage = new CloudinaryStorage({
   cloudinary: cloudinary,
   params: {
-    folder: 'mytamarket',
+    folder: 'metamarket',
     allowed_formats: ['jpg', 'png', 'jpeg', 'webp'],
   } as any,
 });
