@@ -2,26 +2,41 @@ import { createServer } from "../mapi/server/index.js";
 import { connectDB } from "../mapi/server/database.js";
 import serverless from "serverless-http";
 
-let server: any;
+let handlerPromise: Promise<any> | null = null;
+
+const initialize = async () => {
+  console.log(`[Vercel] [${new Date().toISOString()}] Starting initialization...`);
+  
+  // Timeout for MongoDB connection to avoid hanging in serverless
+  const timeout = new Promise((_, reject) => 
+    setTimeout(() => reject(new Error('MongoDB connection timed out (Atlas IP whitelist?)')), 8000)
+  );
+
+  try {
+    await Promise.race([connectDB(), timeout]);
+    console.log(`[Vercel] [${new Date().toISOString()}] DB Connected. Creating Express app...`);
+    const app = await createServer();
+    console.log(`[Vercel] [${new Date().toISOString()}] Server ready.`);
+    return serverless(app);
+  } catch (error) {
+    console.error("[Vercel] Initialization failed:", error);
+    handlerPromise = null; // Allow retry on next request
+    throw error;
+  }
+};
 
 export default async (req: any, res: any) => {
-  console.log(`[Vercel] Handling request: ${req.method} ${req.url}`);
-  
-  if (!server) {
-    try {
-      console.log(`[Vercel] [${new Date().toISOString()}] Initializing connection...`);
-      await connectDB();
-      console.log(`[Vercel] [${new Date().toISOString()}] DB Connected. Creating Express app...`);
-      const app = await createServer();
-      server = serverless(app);
-      console.log(`[Vercel] [${new Date().toISOString()}] Server ready.`);
-    } catch (error) {
-      console.error("[Vercel] Initialization error:", error);
-      return res.status(500).json({ 
-        error: "Failed to initialize server",
-        details: error instanceof Error ? error.message : String(error)
-      });
+  try {
+    if (!handlerPromise) {
+      handlerPromise = initialize();
     }
+    const handler = await handlerPromise;
+    return handler(req, res);
+  } catch (error: any) {
+    res.status(500).json({ 
+      error: "Server initialization failed", 
+      message: error.message,
+      check: "Is your MongoDB Atlas IP whitelist set to 0.0.0.0/0?"
+    });
   }
-  return server(req, res);
 };
