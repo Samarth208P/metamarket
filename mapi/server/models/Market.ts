@@ -97,5 +97,5 @@ export function calculateNoPrice(yesPool: number, noPool: number): number {
   return Math.min(100, Math.max(0, (yesPool / total) * 100));
 }
 
-const Market = mongoose.models.Market || mongoose.model<IMarket>("Market", MarketSchema);
+const Market = (mongoose.models.Market as mongoose.Model<IMarket>) || mongoose.model<IMarket>("Market", MarketSchema);
 export default Market;
