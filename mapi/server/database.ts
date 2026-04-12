@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/metamarket';
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/mytamarket';
 
 export async function connectDB() {
   if (mongoose.connection.readyState >= 1) {

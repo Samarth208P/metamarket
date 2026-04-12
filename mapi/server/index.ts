@@ -36,7 +36,7 @@ export async function createServer() {
   app.use("/uploads", express.static(uploadsPath));
 
   // Cookie parsing (stateless auth)
-  app.use(cookieParser(process.env.SESSION_SECRET || 'metamarket-secret-key'));
+  app.use(cookieParser(process.env.SESSION_SECRET || 'mytamarket-secret-key'));
 
   // Initialize Passport
   initializePassport();
