@@ -63,7 +63,7 @@ export default function Portfolio() {
                       </div>
                       <div className="flex items-center text-xs text-muted-foreground gap-1">
                         <Clock className="w-3 h-3" />
-                        {new Date(trade.timestamp).toLocaleString()}
+                        {new Date(trade.timestamp).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Kolkata' })}
                       </div>
                     </div>
 

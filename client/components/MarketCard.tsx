@@ -23,6 +23,7 @@ export function MarketCard({
   onTrade,
   status,
   endDate,
+  priceHistory = [],
 }: MarketCardProps) {
   const [showBetModal, setShowBetModal] = useState(false);
   const [selectedOptionId, setSelectedOptionId] = useState<string | undefined>(undefined);
@@ -131,7 +132,7 @@ export function MarketCard({
           <span>₹{volume.toLocaleString()} Vol.</span>
           {endDate && (
             <span className={cn(isClosed && "text-no font-bold")}>
-              {isClosed ? "Closed" : `Ends ${new Date(endDate).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`}
+              {isClosed ? "Closed" : `Ends ${new Date(endDate).toLocaleString('en-IN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' })}`}
             </span>
           )}
         </div>
@@ -157,7 +158,7 @@ export function MarketCard({
           noPrice: options[1]?.price || 0,
           createdAt: "",
           updatedAt: "",
-          priceHistory: [],
+          priceHistory,
           ammType: "lmsr",
         } as Market}
         onTrade={onTrade || (() => { })}

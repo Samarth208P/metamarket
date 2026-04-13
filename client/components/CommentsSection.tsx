@@ -101,7 +101,7 @@ export function CommentsSection({ marketId, isLive }: CommentsSectionProps) {
               <div className="flex items-center justify-between mb-1">
                 <span className="text-xs font-black text-foreground">{comment.userName}</span>
                 <span className="text-[10px] text-muted-foreground font-medium">
-                  {new Date(comment.createdAt).toLocaleDateString()}
+                  {new Date(comment.createdAt).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Asia/Kolkata' })}
                 </span>
               </div>
               <div className="bg-muted/20 rounded-lg p-3 text-sm text-foreground leading-relaxed">

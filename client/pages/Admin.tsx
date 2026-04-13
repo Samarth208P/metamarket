@@ -618,7 +618,7 @@ export default function Admin() {
                         <span>Volume: ₹{market.volume.toLocaleString()}</span>
                         {market.endDate && (
                           <div className="flex items-center gap-2">
-                             <span>Ends: {new Date(market.endDate).toLocaleString()}</span>
+                             <span>Ends: {new Date(market.endDate).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</span>
                              {market.status === 'active' && (
                                <Button variant="ghost" size="sm" className="h-5 px-1 underline" onClick={() => {
                                  setEditingMarket(market);

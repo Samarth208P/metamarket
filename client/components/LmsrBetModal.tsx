@@ -237,7 +237,7 @@ export function LmsrBetModal({ isOpen, onClose, market, initialOptionId, onTrade
       }
       return data;
     });
-  }, [market.priceHistory, market.options, market.createdAt]);
+  }, [market.priceHistory, market.options, market.createdAt, market.id]);
 
   const graphElement = isGraphLoading ? (
     <div className="h-[200px] md:h-[260px] flex flex-col items-center justify-center gap-4 bg-muted/5 rounded-xl border border-border/50">
@@ -245,10 +245,10 @@ export function LmsrBetModal({ isOpen, onClose, market, initialOptionId, onTrade
       <p className="text-[10px] font-black uppercase text-muted-foreground tracking-[0.2em]">Fetching Real-time Odds...</p>
     </div>
   ) : (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col">
       <div className="h-[200px] md:h-[260px] bg-muted/10 rounded-xl p-4 border border-border/50 relative overflow-hidden">
         {chartData && chartData.length > 0 ? (
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height="100%" key={chartData.length}>
             <AreaChart data={chartData}>
               <defs>
                 {lineColors.map((color, idx) => (
@@ -289,7 +289,7 @@ export function LmsrBetModal({ isOpen, onClose, market, initialOptionId, onTrade
                           );
                         })}
                         <div className="pt-2 border-t border-border/50 text-[10px] font-medium text-muted-foreground">
-                          {new Date(payload[0].payload.timestamp).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}
+                          {new Date(payload[0].payload.timestamp).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Kolkata' })}
                         </div>
                       </div>
                     );
@@ -519,13 +519,13 @@ export function LmsrBetModal({ isOpen, onClose, market, initialOptionId, onTrade
           {/* Left panel */}
           <div className="flex-[1.5] flex flex-col p-8 border-r border-border overflow-y-auto no-scrollbar">
             <DialogTitle className="text-2xl font-black mb-6 leading-tight">{modalTitle}</DialogTitle>
-            <div className="space-y-8">
+            <div className="space-y-6">
                {graphElement}
-               <div>
+               <div className="pt-2">
                  <h4 className="text-[10px] font-black uppercase text-muted-foreground mb-2 tracking-widest">Description</h4>
                  <p className="text-sm text-muted-foreground leading-relaxed">{market.description}</p>
                </div>
-               <div className="pt-8 border-t border-border/50"><CommentsSection marketId={market.id} isLive={!isResolved} /></div>
+               <div className="pt-6 border-t border-border/50"><CommentsSection marketId={market.id} isLive={!isResolved} /></div>
             </div>
           </div>
           {/* Right panel */}
