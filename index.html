@@ -52,7 +52,7 @@
     }
   </script>
 
-  <script>
+  <!-- <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
         navigator.serviceWorker.register('/sw.js')
@@ -60,13 +60,13 @@
           .catch(err => console.log('Registration failed:', err));
       });
     }
-  </script>
+  </script> -->
 </head>
 
 <body>
   <div id="root"></div>
 
-  <script type="module" src="/client/App.tsx?v=1"></script>
+  <script type="module" src="client/App.tsx"></script>
 </body>
 
 </html>
