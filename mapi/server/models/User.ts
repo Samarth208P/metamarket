@@ -33,7 +33,11 @@ const UserSchema = new mongoose.Schema<IUser>(
     name: { type: String, required: true },
     enrollmentNumber: { type: String, required: true },
     isAdmin: { type: Boolean, default: false },
-    balance: { type: Number, default: 1000 },
+    balance: { 
+      type: Number, 
+      default: 1000,
+      set: (v: number) => Math.round(v * 100) / 100
+    },
     tradeHistory: { type: [Object], default: [] },
     positions: [
       {

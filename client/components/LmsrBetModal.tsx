@@ -68,8 +68,16 @@ export function LmsrBetModal({ isOpen, onClose, market, initialOptionId, onTrade
     return undefined;
   }, [market.id, selectedOptionId, user?.positions, user?.holdings, market.marketType]);
 
-  const numericAmount = Number(amount) || 0;
   const isResolved = market.status !== "active";
+
+  const userPnl = useMemo(() => {
+    if (!user || !user.tradeHistory || !isResolved) return null;
+    const marketTrades = user.tradeHistory.filter(t => t.marketId === market.id);
+    if (marketTrades.length === 0) return null;
+    return marketTrades.reduce((acc, t) => acc + (t.cashDelta || 0), 0);
+  }, [user, market.id, isResolved]);
+
+  const numericAmount = Number(amount) || 0;
   const isTimeClosed = market.endDate ? new Date(market.endDate) < new Date() : false;
   const isMarketClosed = isResolved || isTimeClosed;
 
@@ -558,7 +566,13 @@ export function LmsrBetModal({ isOpen, onClose, market, initialOptionId, onTrade
             {isMarketClosed ? (
                <div className="p-8 text-center bg-muted/20 rounded-2xl border border-border">
                   <div className="text-[10px] font-black uppercase text-muted-foreground mb-4">Market Resolved</div>
-                  <div className="text-3xl font-black text-primary">{market.resolvedOptionId ? market.options.find(o => o.id === market.resolvedOptionId)?.name : 'RESOLVED'}</div>
+                  <div className="text-3xl font-black text-primary mb-2">{market.resolvedOptionId ? market.options.find(o => o.id === market.resolvedOptionId)?.name : 'RESOLVED'}</div>
+                  {userPnl !== null && userPnl !== 0 && (
+                    <div className={cn("mt-4 pt-4 border-t border-border flex flex-col items-center", userPnl > 0 ? "text-green-500" : "text-destructive")}>
+                      <span className="text-[10px] font-black uppercase tracking-widest opacity-80 mb-1">{userPnl > 0 ? 'Total Earnings' : 'Total Loss'}</span>
+                      <span className="text-2xl font-black">₹{Math.abs(userPnl).toFixed(2)}</span>
+                    </div>
+                  )}
                </div>
             ) : isGuestUser ? guestPanel : isMultiNoPick ? multiTeamSelector : tradeControls}
             <div className="pt-6 border-t border-border/50"><CommentsSection marketId={market.id} isLive={!isResolved} /></div>
@@ -595,12 +609,18 @@ export function LmsrBetModal({ isOpen, onClose, market, initialOptionId, onTrade
           <div className="w-[380px] flex flex-col p-8 bg-muted/10">
             <div className="flex-1 overflow-y-auto no-scrollbar">
                {isMarketClosed ? (
-                 <div className="space-y-8 py-8 flex flex-col items-center text-center">
+                 <div className="space-y-6 py-8 flex flex-col items-center text-center">
                     <Trophy className="w-12 h-12 text-yellow-500" />
                     <div>
                       <div className="text-[10px] font-black uppercase text-muted-foreground mb-2 tracking-widest">Winning Outcome</div>
                       <div className="text-3xl font-black text-foreground">{market.resolvedOptionId ? market.options.find(o => o.id === market.resolvedOptionId)?.name : 'Resolved'}</div>
                     </div>
+                    {userPnl !== null && userPnl !== 0 && (
+                      <div className={cn("w-full p-4 rounded-xl border flex justify-between items-center", userPnl > 0 ? "bg-green-500/10 border-green-500/20 text-green-500" : "bg-destructive/10 border-destructive/20 text-destructive")}>
+                        <span className="text-xs font-black uppercase tracking-widest">{userPnl > 0 ? 'Total Earnings' : 'Total Loss'}</span>
+                        <span className="text-xl font-black">₹{Math.abs(userPnl).toFixed(2)}</span>
+                      </div>
+                    )}
                     <div className="w-full space-y-3">
                        <div className="flex justify-between text-xs font-bold uppercase py-2 border-b border-border/50"><span>Volume</span><span>₹{market.volume.toLocaleString()}</span></div>
                        <div className="flex justify-between text-xs font-bold uppercase py-2 border-b border-border/50 text-yes"><span>Payout</span><span>₹1.00 / Share</span></div>
