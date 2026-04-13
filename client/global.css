@@ -67,6 +67,34 @@
     --neutral-color: 217 91% 60%;
   }
 
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --background: 220 40% 6%;
+      --foreground: 0 0% 98%;
+      --card: 220 30% 12%;
+      --card-foreground: 0 0% 98%;
+      --popover: 220 30% 12%;
+      --popover-foreground: 0 0% 98%;
+      --primary: 217 91% 60%;
+      --primary-foreground: 220 40% 6%;
+      --secondary: 217 32% 17%;
+      --secondary-foreground: 0 0% 98%;
+      --muted: 217 32% 17%;
+      --muted-foreground: 0 0% 65%;
+      --accent: 217 91% 60%;
+      --accent-foreground: 220 40% 6%;
+      --destructive: 0 84.2% 60.2%;
+      --destructive-foreground: 0 0% 98%;
+      --border: 217 32% 17%;
+      --input: 217 32% 17%;
+      --ring: 217 91% 60%;
+      --yes-color: 142 71% 45%;
+      --no-color: 348 83% 47%;
+      --neutral-color: 215 75% 60%;
+    }
+  }
+
   .dark {
     color-scheme: dark;
     --background: 220 40% 6%;

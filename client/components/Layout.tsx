@@ -160,13 +160,15 @@ export function Layout({ children }: LayoutProps) {
           {/* Mobile Actions */}
           <div className="md:hidden flex items-center gap-2">
             {showInstallBtn && (
-              <button 
+              <Button 
+                variant="outline"
+                size="sm"
                 onClick={handleInstallClick} 
-                className="p-2 text-primary hover:text-primary/80 transition-colors"
-                title="Install App"
+                className="h-8 px-3 text-xs font-bold border-primary text-primary hover:bg-primary/10 transition-all rounded-full flex items-center gap-1.5"
               >
-                <Download className="w-5 h-5" />
-              </button>
+                <Download className="w-3.5 h-3.5" />
+                <span>App</span>
+              </Button>
             )}
             <button className="p-2 -mr-2" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
               {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
@@ -195,6 +197,15 @@ export function Layout({ children }: LayoutProps) {
                   {link.label}
                 </Link>
               ))}
+              {showInstallBtn && (
+                <button
+                  onClick={() => { handleInstallClick(); setMobileMenuOpen(false); }}
+                  className="text-sm font-bold text-primary py-2 flex items-center gap-2"
+                >
+                  <Download className="w-4 h-4" />
+                  Install MetaMarket App
+                </button>
+              )}
             </div>
 
             {user ? (

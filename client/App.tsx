@@ -17,9 +17,16 @@ import Leaderboard from "./pages/Leaderboard";
 import MarketDetail from "./pages/MarketDetail";
 import Admin from "./pages/Admin";
 
+import { useEffect } from "react";
+
 const queryClient = new QueryClient();
 
 function App() {
+  useEffect(() => {
+    // Force dark mode as default for the premium look
+    document.documentElement.classList.add('dark');
+  }, []);
+
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
