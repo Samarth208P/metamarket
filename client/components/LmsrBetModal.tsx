@@ -52,10 +52,21 @@ export function LmsrBetModal({ isOpen, onClose, market, initialOptionId, onTrade
     [market.options, selectedOptionId, market.marketType]
   );
 
-  const userHolding = useMemo(
-    () => user?.positions?.find((entry) => entry.marketId === market.id && entry.optionId === selectedOptionId),
-    [market.id, selectedOptionId, user?.positions]
-  );
+  const userHolding = useMemo(() => {
+    const pos = user?.positions?.find((entry) => entry.marketId === market.id && entry.optionId === selectedOptionId);
+    if (pos) return pos;
+
+    if (user?.holdings) {
+      const oldHolding = user.holdings.find(
+        (h) => h.marketId === market.id && (market.marketType === 'multi' ? `option-${h.teamIndex}` === selectedOptionId : true)
+      );
+      if (oldHolding) {
+        const shares = selectedOptionId === 'yes' ? oldHolding.yesShares : selectedOptionId === 'no' ? oldHolding.noShares : 0;
+        if (shares > 0) return { marketId: market.id, optionId: selectedOptionId!, shares };
+      }
+    }
+    return undefined;
+  }, [market.id, selectedOptionId, user?.positions, user?.holdings, market.marketType]);
 
   const numericAmount = Number(amount) || 0;
   const isResolved = market.status !== "active";

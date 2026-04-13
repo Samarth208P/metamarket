@@ -209,11 +209,26 @@ function serializeMarket(doc: any) {
   };
 }
 
-function ensureUserPositions(user: any, market?: any) {
+function ensureUserPositions(user: any, marketContext?: any | Map<string, any>) {
   if (!user.positions) user.positions = [];
   if (!user.holdings || !user.holdings.length) return;
 
+  const getMarket = (id: string) => {
+    if (marketContext instanceof Map) return marketContext.get(id) || marketContext.get(id.toString());
+    if (marketContext && (marketContext.id === id || marketContext._id?.toString() === id)) return marketContext;
+    return undefined;
+  };
+
+  const remainingHoldings = [];
+
   for (const holding of user.holdings) {
+    const market = getMarket(holding.marketId);
+    
+    if (holding.teamIndex !== undefined && !market) {
+      remainingHoldings.push(holding);
+      continue;
+    }
+
     if (holding.yesShares > 0) {
       const optionId = holding.teamIndex !== undefined && market?.marketType === "multi" ? makeOptionId(holding.teamIndex) : "yes";
       const optionName = market?.options?.find((option: any) => option.id === optionId)?.name || optionId;
@@ -228,7 +243,7 @@ function ensureUserPositions(user: any, market?: any) {
     }
   }
 
-  user.holdings = [];
+  user.holdings = remainingHoldings;
   user.markModified("positions");
   user.markModified("holdings");
 }
@@ -236,8 +251,8 @@ function ensureUserPositions(user: any, market?: any) {
 function getOrCreatePosition(user: any, marketId: string, optionId: string, optionName: string) {
   let position = user.positions.find((entry: any) => entry.marketId === marketId && entry.optionId === optionId);
   if (!position) {
-    position = { marketId, optionId, optionName, shares: 0 };
-    user.positions.push(position);
+    user.positions.push({ marketId, optionId, optionName, shares: 0 });
+    position = user.positions[user.positions.length - 1];
   }
   return position;
 }
@@ -542,7 +557,9 @@ router.post("/markets/:id/resolve", ensureAuthenticated, ensureAdmin, async (req
   });
   await market.save();
 
-  const users = await User.find({ "positions.marketId": market.id });
+  const users = await User.find({
+    $or: [{ "positions.marketId": market.id }, { "holdings.marketId": market.id }],
+  });
   await Promise.all(users.map(async (user) => {
     ensureUserPositions(user, market);
     const winningPosition = (user.positions || []).find((position: any) => position.marketId === market.id && position.optionId === resolvedOptionId);
@@ -561,14 +578,16 @@ router.post("/markets/:id/resolve", ensureAuthenticated, ensureAdmin, async (req
 router.get("/leaderboard", async (_req, res) => {
   const markets = await Market.find();
   const priceMap = new Map<string, number>();
+  const marketMap = new Map();
   markets.forEach((market) => {
+    marketMap.set(market.id || market._id?.toString(), market);
     const serialized = serializeMarket(market);
     serialized.options.forEach((option) => priceMap.set(`${serialized.id}_${option.id}`, option.price / 100));
   });
 
   const allUsers = await User.find();
   const usersWithNetWorth = allUsers.map((user) => {
-    ensureUserPositions(user);
+    ensureUserPositions(user, marketMap);
     let holdingsValue = 0;
     (user.positions || []).forEach((position: any) => {
       holdingsValue += position.shares * (priceMap.get(`${position.marketId}_${position.optionId}`) || 0);
