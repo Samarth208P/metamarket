@@ -46,7 +46,7 @@ export default function Login() {
               className="flex items-center justify-center w-20 h-20 mx-auto"
             >
               <div className="bg-primary/10 p-4 rounded-2xl border border-primary/20 shadow-sm flex items-center justify-center">
-                <img src="/Frame.svg" alt="MetaMarket Logo" className="w-12 h-12 object-contain" />
+                <img src="/logo.svg" alt="MetaMarket Logo" className="w-12 h-12 object-contain" />
               </div>
             </motion.div>
             <div>

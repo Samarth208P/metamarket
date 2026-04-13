@@ -127,8 +127,9 @@ export default function Index() {
         )}
 
         {isLoading ? (
-          <div className="text-center py-16">
-            <p className="text-sm font-semibold text-muted-foreground">Loading markets...</p>
+          <div className="flex flex-col items-center justify-center py-32 gap-4">
+            <img src="/animated-logo.svg" alt="Loading" className="w-16 h-16" />
+            <p className="text-sm font-bold text-muted-foreground uppercase tracking-widest">Finding Markets</p>
           </div>
         ) : isError ? (
           <div className="text-center py-16">

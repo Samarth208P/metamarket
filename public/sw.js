@@ -2,7 +2,8 @@ const CACHE_NAME = 'metamarket-cache-v2';
 const ASSETS = [
   '/',
   '/index.html',
-  '/Frame.svg',
+  '/logo.svg',
+  '/icon.svg',
   '/manifest.json'
 ];
 

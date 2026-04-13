@@ -64,8 +64,9 @@ export default function Leaderboard() {
           </div>
 
           {isLoading ? (
-            <div className="text-center py-16">
-              <p className="text-muted-foreground">Loading leaderboard...</p>
+            <div className="flex flex-col items-center justify-center py-24 gap-4">
+              <img src="/animated-logo.svg" alt="Loading" className="w-16 h-16" />
+              <p className="text-sm font-bold text-muted-foreground uppercase tracking-widest">Loading Rankings</p>
             </div>
           ) : isError ? (
             <div className="text-center py-16">

@@ -53,7 +53,10 @@ export default function MarketDetail() {
         </Link>
 
         {isLoading ? (
-          <div className="text-center py-16 text-muted-foreground">Loading market...</div>
+          <div className="flex flex-col items-center justify-center py-32 gap-4">
+            <img src="/animated-logo.svg" alt="Loading" className="w-16 h-16" />
+            <p className="text-sm font-bold text-muted-foreground uppercase tracking-widest italic">Analyzing Market...</p>
+          </div>
         ) : isError || !market ? (
           <div className="text-center py-16 text-muted-foreground">Unable to load market details.</div>
         ) : (

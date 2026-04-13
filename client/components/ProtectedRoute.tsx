@@ -11,11 +11,9 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="flex items-center gap-2">
-          <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-          <span className="text-muted-foreground">Loading...</span>
-        </div>
+      <div className="min-h-screen flex flex-col items-center justify-center gap-4">
+        <img src="/animated-logo.svg" alt="Loading" className="w-24 h-24" />
+        <span className="text-sm font-bold tracking-widest text-primary/70 animate-pulse uppercase">MetaMarket</span>
       </div>
     );
   }

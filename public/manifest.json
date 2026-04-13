@@ -8,13 +8,13 @@
   "description": "The premier decentralized prediction market for global events.",
   "icons": [
     {
-      "src": "/Frame.svg",
+      "src": "/icon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any"
     },
     {
-      "src": "/Frame.svg",
+      "src": "/icon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "maskable"

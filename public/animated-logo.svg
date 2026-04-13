@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1164 1163" shape-rendering="geometricPrecision">
+  <style>
+    .logo-path {
+      /* Initial state: Transparent fill, visible white outline */
+      fill: rgba(255, 255, 255, 0);
+      stroke: white;
+      stroke-width: 2;
+      
+      /* The "Drawing" animation configuration */
+      stroke-dasharray: 3500;
+      stroke-dashoffset: 3500;
+      
+      /* Updated to infinite and alternate for "to and fro" motion */
+      animation: continuousDraw 4s ease-in-out infinite alternate;
+    }
+
+    /* Defines the complete cycle: Draw, Fill, then pause (handled by alternate) */
+    @keyframes continuousDraw {
+      0% { 
+        stroke-dashoffset: 3500; 
+        fill: rgba(255, 255, 255, 0); 
+      }
+      
+      /* Step 1: Finish drawing the outline */
+      75% { 
+        stroke-dashoffset: 0; 
+        fill: rgba(255, 255, 255, 0); 
+      }
+      
+      /* Step 2: Fill the shape and pause in the closed state */
+      90%, 100% { 
+        stroke-dashoffset: 0; 
+        fill: rgba(255, 255, 255, 1); 
+      }
+    }
+  </style>
+
+  <path class="logo-path" d="M 190.6 490.5
+           L 190.6 868.8
+           L 240.2 868.8
+           L 382.2 726.8
+           L 331.8 726.8
+           L 331.8 546.4
+           L 357.0 524.5
+           L 536.9 709.9
+           L 699.1 550.3
+           L 765.7 726.8
+           L 693.7 726.8
+           L 831.7 868.8
+           L 970.6 868.8
+           L 751.5 295.0
+           L 536.9 508.4
+           L 357.0 329.8
+           Z" />
+</svg>
