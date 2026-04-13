@@ -102,17 +102,27 @@ export function MarketCard({
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-2">
-            {primaryOptions.map((option) => (
-            <button
-              key={option.id}
-              onClick={(e) => { e.stopPropagation(); setSelectedOptionId(option.id); setShowBetModal(true); }}
-              className="flex items-center justify-between p-2.5 rounded-lg bg-yes/20 hover:bg-yes text-yes hover:text-white border border-yes/40 transition-all group/btn"
-            >
-              <span className="text-sm font-black uppercase tracking-wider">
-                {option.shortName || option.name}
-              </span>
-              <span className="text-sm font-black text-yes group-hover/btn:text-white">{option.price.toFixed(0)}p</span>
-            </button>
+            {primaryOptions.map((option, idx) => (
+              <button
+                key={option.id}
+                onClick={(e) => { e.stopPropagation(); setSelectedOptionId(option.id); setShowBetModal(true); }}
+                className={cn(
+                  "flex items-center justify-between p-2.5 rounded-lg transition-all group/btn",
+                  idx === 0 
+                    ? "bg-yes/20 hover:bg-yes text-yes hover:text-white border border-yes/40" 
+                    : "bg-no/20 hover:bg-no text-no hover:text-white border border-no/40"
+                )}
+              >
+                <span className="text-sm font-black uppercase tracking-wider">
+                  {option.shortName || option.name}
+                </span>
+                <span className={cn(
+                  "text-sm font-black group-hover/btn:text-white",
+                  idx === 0 ? "text-yes" : "text-no"
+                )}>
+                  {option.price.toFixed(0)}p
+                </span>
+              </button>
             ))}
           </div>
         )}
