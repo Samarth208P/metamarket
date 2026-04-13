@@ -11,9 +11,8 @@ export function AdminProtectedRoute({ children }: AdminProtectedRouteProps) {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-6">
+      <div className="min-h-screen flex flex-col items-center justify-center">
         <img src="/animated-logo.svg" alt="Loading" className="w-48 h-48" />
-        <span className="text-lg font-black tracking-[0.2em] text-primary/80 animate-pulse uppercase">MetaMarket Admin</span>
       </div>
     );
   }

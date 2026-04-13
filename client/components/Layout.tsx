@@ -86,9 +86,9 @@ export function Layout({ children }: LayoutProps) {
       <header className="sticky top-0 z-50 border-b border-border bg-background">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           {/* Logo - Text only, clean */}
-          <Link to="/" className="flex items-center gap-0.5 font-bold text-xl tracking-tight text-foreground shrink-0">
+          <Link to="/" className="flex items-center gap-0 font-bold text-xl tracking-tight text-foreground shrink-0">
             <img src="/logo.svg" alt="logo" className="w-8 h-8" />
-            <span className="tracking-tight">etaMarket</span>
+            <span className="tracking-tight -ml-1.5">etaMarket</span>
           </Link>
 
           {/* Search Bar - Now next to logo */}
