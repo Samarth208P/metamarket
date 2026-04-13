@@ -72,6 +72,7 @@ export function LmsrBetModal({ isOpen, onClose, market, initialOptionId, onTrade
     async function loadQuote() {
       if (!isOpen || !user || !selectedOption || numericAmount <= 0 || isMarketClosed) {
         setQuote(null);
+        setIsQuoteLoading(false);
         return;
       }
 
@@ -203,8 +204,31 @@ export function LmsrBetModal({ isOpen, onClose, market, initialOptionId, onTrade
   const lineColors = ['hsl(var(--yes-color))', '#ef4444', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16', '#f97316', '#64748b'];
 
   const chartData = useMemo(() => {
-    if (!market.priceHistory) return [];
-    return market.priceHistory.map(p => {
+    let history = [...(market.priceHistory || [])];
+    
+    // If we have no history, or only one point, add a 50/50 starting point based on market creation
+    if (history.length <= 1) {
+      const startTimestamp = market.createdAt || new Date(Date.now() - 86400000).toISOString();
+      const startPoint: any = { 
+        timestamp: startTimestamp,
+        isStart: true 
+      };
+      market.options.forEach(opt => {
+        startPoint[`opt_${opt.id}`] = 50;
+      });
+      
+      // If we have one point, use it as the second point; otherwise just the start point
+      if (history.length === 0) {
+        history = [startPoint];
+      } else {
+        // If the first real point is the same as start, don't duplicate
+        if (new Date(history[0].timestamp).getTime() - new Date(startTimestamp).getTime() > 1000) {
+          history.unshift(startPoint);
+        }
+      }
+    }
+
+    return history.map(p => {
       const data: any = { ...p };
       if (p.prices) {
         p.prices.forEach((pricePoint) => {
@@ -213,7 +237,7 @@ export function LmsrBetModal({ isOpen, onClose, market, initialOptionId, onTrade
       }
       return data;
     });
-  }, [market.priceHistory]);
+  }, [market.priceHistory, market.options, market.createdAt]);
 
   const graphElement = isGraphLoading ? (
     <div className="h-[200px] md:h-[260px] flex flex-col items-center justify-center gap-4 bg-muted/5 rounded-xl border border-border/50">
@@ -223,7 +247,7 @@ export function LmsrBetModal({ isOpen, onClose, market, initialOptionId, onTrade
   ) : (
     <div className="flex flex-col h-full">
       <div className="h-[200px] md:h-[260px] bg-muted/10 rounded-xl p-4 border border-border/50 relative overflow-hidden">
-        {market.priceHistory && market.priceHistory.length > 0 ? (
+        {chartData && chartData.length > 0 ? (
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={chartData}>
               <defs>
