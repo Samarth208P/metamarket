@@ -28,11 +28,8 @@ export function Layout({ children }: LayoutProps) {
 
   useEffect(() => {
     const handleBeforeInstallPrompt = (e: Event) => {
-      // Prevent the mini-infobar from appearing on mobile
       e.preventDefault();
-      // Stash the event so it can be triggered later.
       setDeferredPrompt(e);
-      // Update UI notify the user they can install the PWA
       setShowInstallBtn(true);
     };
 
@@ -127,6 +124,18 @@ export function Layout({ children }: LayoutProps) {
                     <span className="text-sm font-bold text-yes">₹{user.balance.toLocaleString()}</span>
                   </Link>
                 </div>
+
+                {showInstallBtn && (
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={handleInstallClick} 
+                    className="flex items-center gap-1.5 text-muted-foreground hover:text-primary transition-colors pr-2"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span className="text-[10px] uppercase font-bold">Install</span>
+                  </Button>
+                )}
 
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
