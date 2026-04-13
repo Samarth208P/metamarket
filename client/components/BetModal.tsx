@@ -42,7 +42,17 @@ export function BetModal({ isOpen, onClose, market, initialOutcome = 'yes', onTr
   const isMobile = useIsMobile();
 
   const [isConfirming, setIsConfirming] = useState(false);
+  const [isGraphLoading, setIsGraphLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      setIsGraphLoading(true);
+      const timer = setTimeout(() => setIsGraphLoading(false), 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [isOpen]);
+
 
   // Multi-market team selection (when opened without a specific team)
   const [internalTeamIdx, setInternalTeamIdx] = useState<number | null>(market.teamIndex ?? null);
@@ -222,7 +232,12 @@ export function BetModal({ isOpen, onClose, market, initialOutcome = 'yes', onTr
 
 
 
-  const graphElement = (
+  const graphElement = isGraphLoading ? (
+    <div className="h-[200px] md:h-[300px] flex flex-col items-center justify-center gap-4 bg-muted/5 rounded-xl border border-border/50">
+      <img src="/animated-logo.svg" alt="Loading" className="w-24 h-24" />
+      <p className="text-[10px] font-black uppercase text-muted-foreground tracking-[0.2em] animate-pulse">Fetching Real-time Odds...</p>
+    </div>
+  ) : (
     <div className="flex flex-col h-full">
       <div className="h-[200px] md:h-[300px] bg-muted/10 rounded-xl p-4 border border-border/50 relative overflow-hidden">
         {market.priceHistory && market.priceHistory.length > 0 ? (

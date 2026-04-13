@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { Layout } from "@/components/Layout";
 import { Trophy, Medal, Award, TrendingUp } from "lucide-react";
 import { motion } from "framer-motion";
@@ -19,11 +20,20 @@ async function fetchLeaderboard(): Promise<LeaderboardUser[]> {
 }
 
 export default function Leaderboard() {
-  const { data: users = [], isLoading, isError } = useQuery<LeaderboardUser[]>({
+  const [isBranding, setIsBranding] = useState(true);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setIsBranding(false), 5000);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const { data: users = [], isLoading: isQueryLoading, isError } = useQuery<LeaderboardUser[]>({
     queryKey: ["leaderboard"],
     queryFn: fetchLeaderboard,
     refetchInterval: 15000,
   });
+
+  const isLoading = isQueryLoading || isBranding;
 
   const getRankIndicator = (trend: number) => {
     if (trend > 0) return <span className="text-xs font-bold text-green-500 ml-1">▲ {trend}</span>;
