@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Plus, CheckCircle, XCircle, Clock, Trash2, ImagePlus, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
 
 interface MarketProps {
   id: string;
@@ -431,12 +432,12 @@ export default function Admin() {
                   />
                 </div>
 
-                <div className="flex gap-2">
+                <div className="flex flex-col sm:flex-row gap-2">
                   <Button 
                     variant="outline" 
                     size="sm" 
                     type="button"
-                    className={newMarket.initialLiquidity === 500 ? "border-primary bg-primary/5" : ""}
+                    className={cn("flex-1", newMarket.initialLiquidity === 500 ? "border-primary bg-primary/5" : "")}
                     onClick={() => setNewMarket({ ...newMarket, initialLiquidity: 500 })}
                   >
                     Volatile (₹500)
@@ -445,7 +446,7 @@ export default function Admin() {
                     variant="outline" 
                     size="sm" 
                     type="button"
-                    className={newMarket.initialLiquidity === 2000 ? "border-primary bg-primary/5" : ""}
+                    className={cn("flex-1", newMarket.initialLiquidity === 2000 ? "border-primary bg-primary/5" : "")}
                     onClick={() => setNewMarket({ ...newMarket, initialLiquidity: 2000 })}
                   >
                     Medium (₹2,000)
@@ -454,7 +455,7 @@ export default function Admin() {
                     variant="outline" 
                     size="sm" 
                     type="button"
-                    className={newMarket.initialLiquidity === 5000 ? "border-primary bg-primary/5" : ""}
+                    className={cn("flex-1", newMarket.initialLiquidity === 5000 ? "border-primary bg-primary/5" : "")}
                     onClick={() => setNewMarket({ ...newMarket, initialLiquidity: 5000 })}
                   >
                     Stable (₹5,000)
@@ -485,7 +486,7 @@ export default function Admin() {
               <div className="space-y-4">
                 {markets.map((market) => (
                   <motion.div key={market.id} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}
-                    className="flex items-center justify-between p-4 border border-border rounded-lg">
+                    className="flex flex-col md:flex-row md:items-center justify-between p-4 gap-4 border border-border rounded-lg">
                     <div className="flex-1">
                       <div className="flex items-center gap-3 mb-2">
                         <h3 className="font-semibold text-foreground">{market.title}</h3>
@@ -538,12 +539,12 @@ export default function Admin() {
                              </div>
                           </div>
                         ) : (
-                          <div className="flex gap-2">
-                            <Button size="sm" variant="outline" className="text-yes border-yes hover:bg-yes/10"
+                          <div className="flex flex-col sm:flex-row gap-2">
+                            <Button size="sm" variant="outline" className="text-yes border-yes hover:bg-yes/10 whitespace-nowrap"
                               onClick={() => handleResolveMarket(market.id, 'yes')}>
                               Resolve {market.marketType === 'versus' ? (market.shortA || market.optionA || 'A') : 'YES'}
                             </Button>
-                            <Button size="sm" variant="outline" className="text-no border-no hover:bg-no/10"
+                            <Button size="sm" variant="outline" className="text-no border-no hover:bg-no/10 whitespace-nowrap"
                               onClick={() => handleResolveMarket(market.id, 'no')}>
                               Resolve {market.marketType === 'versus' ? (market.shortB || market.optionB || 'B') : 'NO'}
                             </Button>
