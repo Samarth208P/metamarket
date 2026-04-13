@@ -8,7 +8,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 
 export default function Login() {
-  const { login, isLoading } = useAuth();
+  const { login, isLoading, guestLogin } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { toast } = useToast();
@@ -104,6 +104,23 @@ export default function Login() {
                   Continue with Google
                 </div>
               )}
+            </Button>
+
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t border-border/50"></span>
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-card px-2 text-muted-foreground font-medium">Or</span>
+              </div>
+            </div>
+
+            <Button
+              variant="outline"
+              onClick={guestLogin}
+              className="w-full text-foreground border-border/60 hover:bg-muted font-bold h-11"
+            >
+              Continue as Guest
             </Button>
 
             <div className="text-center space-y-2">

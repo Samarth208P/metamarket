@@ -12,6 +12,7 @@ interface AuthContextType {
   bookmarks: string[];
   isAuthenticated: boolean;
   isLoading: boolean;
+  guestLogin: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -117,6 +118,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     bookmarks,
     isAuthenticated: !!user,
     isLoading,
+    guestLogin: () => {
+      setUser({
+        id: "guest_" + Math.random().toString(36).substr(2, 9),
+        googleId: "guest",
+        name: "Guest User",
+        email: "guest@metamarket.live",
+        isAdmin: false,
+        balance: 1000,
+        holdings: [],
+        tradeHistory: [],
+      } as any);
+    }
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -116,6 +116,18 @@ export function Layout({ children }: LayoutProps) {
           </nav>
           
           <div className="hidden md:flex items-center gap-6 ml-auto pl-6 border-l border-border/50">
+            {showInstallBtn && (
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={handleInstallClick} 
+                className="h-8 flex items-center gap-1.5 border-primary/40 text-primary hover:bg-primary/5 transition-all px-3 rounded-full"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span className="text-[10px] uppercase font-black">Install App</span>
+              </Button>
+            )}
+
             {user ? (
               <>
                 <div className="flex items-center gap-4 mr-2">
@@ -124,18 +136,6 @@ export function Layout({ children }: LayoutProps) {
                     <span className="text-sm font-bold text-yes">₹{user.balance.toLocaleString()}</span>
                   </Link>
                 </div>
-
-                {showInstallBtn && (
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    onClick={handleInstallClick} 
-                    className="flex items-center gap-1.5 text-muted-foreground hover:text-primary transition-colors pr-2"
-                  >
-                    <Download className="w-4 h-4" />
-                    <span className="text-[10px] uppercase font-bold">Install</span>
-                  </Button>
-                )}
 
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
