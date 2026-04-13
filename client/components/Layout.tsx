@@ -20,7 +20,7 @@ interface LayoutProps {
 export function Layout({ children }: LayoutProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const { user, logout } = useAuth();
+  const { user, logout, isGuestUser } = useAuth();
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [showInstallBtn, setShowInstallBtn] = useState(false);
   const navigate = useNavigate();
@@ -130,12 +130,14 @@ export function Layout({ children }: LayoutProps) {
 
             {user ? (
               <>
-                <div className="flex items-center gap-4 mr-2">
-                  <Link to="/portfolio" className="flex flex-col items-center group transition-opacity hover:opacity-80">
-                    <span className="text-[10px] uppercase font-bold text-muted-foreground leading-none">Portfolio</span>
-                    <span className="text-sm font-bold text-yes">₹{user.balance.toLocaleString()}</span>
-                  </Link>
-                </div>
+                {!isGuestUser && (
+                  <div className="flex items-center gap-4 mr-2">
+                    <Link to="/portfolio" className="flex flex-col items-center group transition-opacity hover:opacity-80">
+                      <span className="text-[10px] uppercase font-bold text-muted-foreground leading-none">Portfolio</span>
+                      <span className="text-sm font-bold text-yes">₹{user.balance.toLocaleString()}</span>
+                    </Link>
+                  </div>
+                )}
 
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -145,14 +147,14 @@ export function Layout({ children }: LayoutProps) {
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-48">
                     <div className="px-2 py-1.5 text-xs text-muted-foreground truncate">
-                      {user.email}
+                      {isGuestUser ? "Guest Mode" : user.email}
                     </div>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem>
+                    {!isGuestUser && <DropdownMenuItem>
                       <Settings className="w-4 h-4 mr-2" /> Settings
-                    </DropdownMenuItem>
+                    </DropdownMenuItem>}
                     <DropdownMenuItem onClick={() => logout()} className="text-destructive">
-                      <LogOut className="w-4 h-4 mr-2" /> Sign Out
+                      <LogOut className="w-4 h-4 mr-2" /> {isGuestUser ? "Exit Guest Mode" : "Sign Out"}
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -188,7 +190,7 @@ export function Layout({ children }: LayoutProps) {
         {/* Mobile Navigation */}
         {mobileMenuOpen && (
           <nav className="md:hidden border-t border-border bg-background px-4 py-4 flex flex-col gap-4">
-            {user && (
+            {user && !isGuestUser && (
               <Link to="/portfolio" onClick={() => setMobileMenuOpen(false)} className="flex items-center justify-between p-3 bg-muted/30 rounded-md">
                 <span className="text-sm font-semibold">Portfolio Balance</span>
                 <span className="font-bold text-foreground">₹{user.balance.toLocaleString()}</span>

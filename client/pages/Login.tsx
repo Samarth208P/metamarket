@@ -8,10 +8,16 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 
 export default function Login() {
-  const { login, isLoading, guestLogin } = useAuth();
+  const { login, isLoading, guestLogin, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { toast } = useToast();
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate('/', { replace: true });
+    }
+  }, [isAuthenticated, navigate]);
 
   useEffect(() => {
     // Check for auth error in URL params
@@ -117,7 +123,10 @@ export default function Login() {
 
             <Button
               variant="outline"
-              onClick={guestLogin}
+              onClick={() => {
+                guestLogin();
+                navigate('/', { replace: true });
+              }}
               className="w-full text-foreground border-border/60 hover:bg-muted font-bold h-11"
             >
               Continue as Guest

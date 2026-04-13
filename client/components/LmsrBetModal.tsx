@@ -8,10 +8,11 @@ import { useToast } from '@/hooks/use-toast';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 import { Area, AreaChart, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine } from 'recharts';
-import { X, Loader2, Trophy } from 'lucide-react';
+import { X, Loader2, Trophy, Lock } from 'lucide-react';
 import { CommentsSection } from './CommentsSection';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { Market, MarketOption, QuoteResponse } from '@shared/api';
+import { Link } from 'react-router-dom';
 
 interface LmsrBetModalProps {
   isOpen: boolean;
@@ -22,7 +23,7 @@ interface LmsrBetModalProps {
 }
 
 export function LmsrBetModal({ isOpen, onClose, market, initialOptionId, onTrade }: LmsrBetModalProps) {
-  const { user, updateUser, refreshUser } = useAuth();
+  const { user, updateUser, refreshUser, isGuestUser } = useAuth();
   const { toast } = useToast();
   const isMobile = useIsMobile();
 
@@ -70,7 +71,7 @@ export function LmsrBetModal({ isOpen, onClose, market, initialOptionId, onTrade
     let cancelled = false;
 
     async function loadQuote() {
-      if (!isOpen || !user || !selectedOption || numericAmount <= 0 || isMarketClosed) {
+      if (!isOpen || !user || isGuestUser || !selectedOption || numericAmount <= 0 || isMarketClosed) {
         setQuote(null);
         setIsQuoteLoading(false);
         return;
@@ -107,9 +108,13 @@ export function LmsrBetModal({ isOpen, onClose, market, initialOptionId, onTrade
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [isOpen, user, selectedOption, numericAmount, market.id, isMarketClosed, tradeType]);
+  }, [isOpen, user, isGuestUser, selectedOption, numericAmount, market.id, isMarketClosed, tradeType]);
 
   const handleTrade = async () => {
+    if (isGuestUser) {
+      toast({ title: 'Guest mode is view only', description: 'Log in with your IITR account to place trades.', variant: 'destructive' });
+      return;
+    }
     if (!selectedOption || !quote) return;
 
     setIsSubmitting(true);
@@ -478,6 +483,53 @@ export function LmsrBetModal({ isOpen, onClose, market, initialOptionId, onTrade
     </div>
   );
 
+  const guestPanel = (
+    <div className="space-y-5">
+      {countdownDisplay}
+      {market.options.length > 0 && (
+        <div className="space-y-3">
+          <h4 className="text-[10px] font-black uppercase text-muted-foreground tracking-[0.2em]">Current prices</h4>
+          <div className={cn("grid gap-2", market.options.length > 2 ? "grid-cols-2" : "flex gap-2")}>
+            {market.options.map((opt, idx) => (
+              <button
+                key={opt.id}
+                onClick={() => setSelectedOptionId(opt.id)}
+                className={cn(
+                  "flex-1 flex flex-col items-center py-4 rounded-xl border transition-all",
+                  selectedOptionId === opt.id
+                    ? (idx === 0 ? "border-yes bg-yes/15" : "border-no bg-no/15")
+                    : "border-border bg-muted/40 hover:bg-muted/70"
+                )}
+              >
+                <span className="text-[10px] font-black mb-1 uppercase tracking-wider text-muted-foreground">
+                  {opt.shortName || opt.name}
+                </span>
+                <span className="text-xl font-black">{opt.price.toFixed(1)}p</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="rounded-2xl border border-border bg-muted/20 p-5">
+        <div className="flex items-start gap-3">
+          <div className="rounded-full bg-background p-2 border border-border">
+            <Lock className="w-4 h-4 text-muted-foreground" />
+          </div>
+          <div className="space-y-2">
+            <h4 className="text-sm font-bold text-foreground">Guest mode is view only</h4>
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              You can browse this market, watch the graph, and read comments, but trading is disabled for guests.
+            </p>
+            <Button asChild className="h-10 font-bold">
+              <Link to="/login">Log In To Trade</Link>
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
   const modalTitle = `${market.title}${activeTeamName ? ` - ${activeTeamName}` : ''}`;
 
   if (isMobile) {
@@ -497,12 +549,12 @@ export function LmsrBetModal({ isOpen, onClose, market, initialOptionId, onTrade
                   <div className="text-[10px] font-black uppercase text-muted-foreground mb-4">Market Resolved</div>
                   <div className="text-3xl font-black text-primary">{market.resolvedOptionId ? market.options.find(o => o.id === market.resolvedOptionId)?.name : 'RESOLVED'}</div>
                </div>
-            ) : isMultiNoPick ? multiTeamSelector : tradeControls}
+            ) : isGuestUser ? guestPanel : isMultiNoPick ? multiTeamSelector : tradeControls}
             <div className="pt-6 border-t border-border/50"><CommentsSection marketId={market.id} isLive={!isResolved} /></div>
           </div>
           <div className="p-4 border-t border-border mt-auto">
-            {!isMarketClosed && !isMultiNoPick && submitButton}
-            {isMarketClosed && <Button variant="outline" className="w-full h-12 font-bold" onClick={onClose}>Close</Button>}
+            {!isMarketClosed && !isMultiNoPick && !isGuestUser && submitButton}
+            {(isMarketClosed || isGuestUser || isMultiNoPick) && <Button variant="outline" className="w-full h-12 font-bold" onClick={onClose}>Close</Button>}
           </div>
         </DrawerContent>
       </Drawer>
@@ -543,10 +595,10 @@ export function LmsrBetModal({ isOpen, onClose, market, initialOptionId, onTrade
                        <div className="flex justify-between text-xs font-bold uppercase py-2 border-b border-border/50 text-yes"><span>Payout</span><span>₹1.00 / Share</span></div>
                     </div>
                  </div>
-               ) : isMultiNoPick ? multiTeamSelector : tradeControls}
+               ) : isGuestUser ? guestPanel : isMultiNoPick ? multiTeamSelector : tradeControls}
             </div>
             <div className="mt-8">
-              {!isMarketClosed && !isMultiNoPick ? submitButton : <Button variant="outline" className="w-full h-12 font-bold" onClick={onClose}>Close</Button>}
+              {!isMarketClosed && !isMultiNoPick && !isGuestUser ? submitButton : <Button variant="outline" className="w-full h-12 font-bold" onClick={onClose}>Close</Button>}
             </div>
           </div>
         </div>

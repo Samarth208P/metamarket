@@ -47,7 +47,7 @@ function App() {
               <Route
                 path="/portfolio"
                 element={
-                  <ProtectedRoute>
+                  <ProtectedRoute allowGuest={false}>
                     <Portfolio />
                   </ProtectedRoute>
                 }

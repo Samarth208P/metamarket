@@ -33,6 +33,7 @@ export interface User {
   name: string;
   enrollmentNumber?: string;
   isAdmin: boolean;
+  isGuest?: boolean;
   balance: number;
   tradeHistory?: TradeHistoryEntry[];
   positions?: Position[];

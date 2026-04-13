@@ -11,6 +11,7 @@ interface AuthContextType {
   toggleBookmark: (marketId: string) => void;
   bookmarks: string[];
   isAuthenticated: boolean;
+  isGuestUser: boolean;
   isLoading: boolean;
   guestLogin: () => void;
 }
@@ -66,6 +67,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = async () => {
+    if (user?.isGuest) {
+      setUser(null);
+      return;
+    }
+
     try {
       await fetch('/mapi/auth/logout', {
         method: 'POST',
@@ -82,6 +88,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const refreshUser = async () => {
+    if (user?.isGuest) {
+      return;
+    }
+
     try {
       const response = await fetch('/mapi/user', { credentials: 'include' });
       if (response.ok) {
@@ -117,6 +127,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     toggleBookmark,
     bookmarks,
     isAuthenticated: !!user,
+    isGuestUser: !!user?.isGuest,
     isLoading,
     guestLogin: () => {
       setUser({
@@ -125,9 +136,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         name: "Guest User",
         email: "guest@metamarket.live",
         isAdmin: false,
-        balance: 1000,
-        holdings: [],
+        isGuest: true,
+        balance: 0,
         tradeHistory: [],
+        positions: [],
       } as any);
     }
   };

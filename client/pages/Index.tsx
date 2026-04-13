@@ -40,7 +40,7 @@ export default function Index() {
 
   const [markets, setMarkets] = useState<Market[]>([]);
 
-  const { user, refreshUser, bookmarks } = useAuth();
+  const { user, refreshUser, bookmarks, isGuestUser } = useAuth();
 
   useEffect(() => {
     if (data) {
@@ -82,7 +82,7 @@ export default function Index() {
             )}
           </button>
           
-          {user && (
+          {user && !isGuestUser && (
             <button
               onClick={() => { setShowBookmarksOnly(true); setSelectedTag(null); }}
               className={cn(
