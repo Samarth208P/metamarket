@@ -216,13 +216,13 @@ export function LmsrBetModal({ isOpen, onClose, market, initialOptionId, onTrade
   }, [market.priceHistory]);
 
   const graphElement = isGraphLoading ? (
-    <div className="h-[200px] md:h-[300px] flex flex-col items-center justify-center gap-4 bg-muted/5 rounded-xl border border-border/50">
-      <Loader2 className="w-8 h-8 animate-spin text-primary" />
+    <div className="h-[200px] md:h-[260px] flex flex-col items-center justify-center gap-4 bg-muted/5 rounded-xl border border-border/50">
+      <img src="/animated-logo.svg" alt="loading" className="w-12 h-12" />
       <p className="text-[10px] font-black uppercase text-muted-foreground tracking-[0.2em]">Fetching Real-time Odds...</p>
     </div>
   ) : (
     <div className="flex flex-col h-full">
-      <div className="h-[200px] md:h-[300px] bg-muted/10 rounded-xl p-4 border border-border/50 relative overflow-hidden">
+      <div className="h-[200px] md:h-[260px] bg-muted/10 rounded-xl p-4 border border-border/50 relative overflow-hidden">
         {market.priceHistory && market.priceHistory.length > 0 ? (
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={chartData}>
@@ -371,35 +371,48 @@ export function LmsrBetModal({ isOpen, onClose, market, initialOptionId, onTrade
         ))}
       </div>
 
-      <div className="space-y-2">
-        <div className="flex justify-between items-center text-xs">
-          <span className="text-muted-foreground font-medium">{tradeType === 'buy' ? 'Amount in ₹' : 'Shares to Sell'}</span>
-          <span className="font-semibold text-primary">
-            {tradeType === 'buy' 
-              ? `Balance: ₹${user?.balance.toLocaleString()}` 
-              : `Owned: ${userHolding?.shares?.toFixed(2) || '0'} Shares`
-            }
-          </span>
-        </div>
-        <div className="relative">
-          <Input
-            type="number"
-            placeholder="0"
-            value={amount}
-            disabled={isSubmitting}
-            onChange={(e) => setAmount(e.target.value)}
-            className="h-12 text-lg font-bold bg-muted/30 border-border pr-16"
-          />
-          <div className="absolute right-3 top-1/2 -translate-y-1/2">
-            <button onClick={handleMax} className="px-2 py-1 text-[10px] font-black uppercase bg-primary/10 hover:bg-primary/20 text-primary rounded">MAX</button>
-          </div>
+    <div className="space-y-3">
+      <div className="flex justify-between items-center text-xs">
+        <span className="text-muted-foreground font-medium uppercase tracking-wider">{tradeType === 'buy' ? 'Amount in ₹' : 'Shares to Sell'}</span>
+        <span className="font-bold text-primary bg-primary/5 px-2 py-1 rounded-md">
+          {tradeType === 'buy' 
+            ? `Balance: ₹${user?.balance.toLocaleString()}` 
+            : `Owned: ${userHolding?.shares?.toFixed(2) || '0'} Shares`
+          }
+        </span>
+      </div>
+      <div className="relative group">
+        <Input
+          type="number"
+          placeholder="0"
+          value={amount}
+          disabled={isSubmitting}
+          onChange={(e) => setAmount(e.target.value)}
+          className="h-12 text-lg font-bold bg-muted/20 border-border focus:border-primary/50 focus:ring-1 focus:ring-primary/50 transition-all pr-16 rounded-xl"
+        />
+        <div className="absolute right-3 top-1/2 -translate-y-1/2">
+          <button onClick={handleMax} className="px-2 py-1 text-[10px] font-black uppercase bg-primary text-primary-foreground hover:bg-primary/90 rounded transition-colors shadow-sm">MAX</button>
         </div>
       </div>
+      <div className="grid grid-cols-4 gap-2">
+        {[10, 50, 100, 500].map((val) => (
+          <Button
+            key={val}
+            variant="outline"
+            size="sm"
+            className="h-8 text-[10px] font-bold border-border bg-muted/10 hover:bg-primary/10 hover:text-primary hover:border-primary/30 rounded-lg transition-all"
+            onClick={() => setAmount((prev) => String((Number(prev) || 0) + val))}
+          >
+            +₹{val}
+          </Button>
+        ))}
+      </div>
+    </div>
 
       <div className="rounded-xl border border-border bg-muted/20 p-4 text-xs">
         {isQuoteLoading ? (
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" />
+          <div className="flex items-center gap-3 text-muted-foreground font-medium">
+            <img src="/animated-logo.svg" alt="loading" className="h-6 w-6" />
             Generating dynamic quote...
           </div>
         ) : quote ? (
@@ -475,10 +488,10 @@ export function LmsrBetModal({ isOpen, onClose, market, initialOptionId, onTrade
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className={cn(
-        "sm:max-w-[950px] p-0 gap-0 overflow-hidden bg-card border-border rounded-xl transition-all duration-500",
+        "sm:max-w-[950px] p-0 gap-0 overflow-hidden bg-card border-border rounded-2xl transition-all duration-500",
         isConfirming ? "ring-4 ring-green-500/50 shadow-2xl" : ""
       )}>
-        <div className="flex flex-row h-[650px]">
+        <div className="flex flex-row min-h-[500px] max-h-[85vh]">
           {/* Left panel */}
           <div className="flex-[1.5] flex flex-col p-8 border-r border-border overflow-y-auto no-scrollbar">
             <DialogTitle className="text-2xl font-black mb-6 leading-tight">{modalTitle}</DialogTitle>
