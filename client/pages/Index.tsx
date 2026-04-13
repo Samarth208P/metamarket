@@ -152,7 +152,6 @@ export default function Index() {
                     <MarketCard
                       key={market.id}
                       {...market}
-                      pool={{ yesPool: market.yesPool, noPool: market.noPool, totalLiquidity: market.yesPool + market.noPool }}
                       onTrade={handleTrade}
                     />
                   ))}
@@ -175,7 +174,6 @@ export default function Index() {
                     <MarketCard
                       key={market.id}
                       {...market}
-                      pool={{ yesPool: market.yesPool, noPool: market.noPool, totalLiquidity: market.yesPool + market.noPool }}
                       onTrade={handleTrade}
                     />
                   ))}

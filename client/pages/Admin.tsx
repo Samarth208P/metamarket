@@ -19,16 +19,29 @@ interface MarketProps {
   description: string;
   category: string;
   endDate?: string;
-  status: 'active' | 'resolved_yes' | 'resolved_no';
+  status: 'active' | 'resolved_yes' | 'resolved_no' | 'resolved_option';
   yesPrice: number;
   noPrice: number;
   volume: number;
   marketType: 'binary' | 'versus' | 'multi';
   teams?: { name: string; imageUrl?: string }[];
+  options?: { id: string; name: string; price: number }[];
   optionA?: string;
   optionB?: string;
   shortA?: string;
   shortB?: string;
+  initialB?: number;
+  minB?: number;
+  isDynamic?: boolean;
+  resolvedOptionId?: string;
+}
+
+interface SolvencyOverview {
+  realReserves: number;
+  totalPotentialPayouts: number;
+  solvencyRatio: number;
+  threshold: number;
+  isBelowThreshold: boolean;
 }
 
 interface TeamEntry {
@@ -65,6 +78,8 @@ export default function Admin() {
     logoFile: null as File | null,
     logoPreview: '',
     initialLiquidity: 1000,
+    minB: 250,
+    isDynamic: false,
   });
 
   // Multi-market teams
@@ -77,6 +92,7 @@ export default function Admin() {
 
   const [isCreating, setIsCreating] = useState(false);
   const [markets, setMarkets] = useState<MarketProps[]>([]);
+  const [solvencySettings, setSolvencySettings] = useState({ realReserves: 0, threshold: 1 });
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const multiLogoRef = useRef<HTMLInputElement>(null);
@@ -94,13 +110,31 @@ export default function Admin() {
     if (queryResult.data) setMarkets(queryResult.data);
   }, [queryResult.data]);
 
+  const solvencyQuery = useQuery<SolvencyOverview>({
+    queryKey: ['adminSolvency'],
+    queryFn: async () => {
+      const response = await fetch('/mapi/admin/solvency', { credentials: 'include' });
+      if (!response.ok) throw new Error('Unable to load solvency metrics');
+      return response.json();
+    },
+  });
+
+  useEffect(() => {
+    if (solvencyQuery.data) {
+      setSolvencySettings({
+        realReserves: solvencyQuery.data.realReserves,
+        threshold: solvencyQuery.data.threshold,
+      });
+    }
+  }, [solvencyQuery.data]);
+
   const resolveMarketMutation = useMutation({
-    mutationFn: async ({ marketId, outcome, teamIndex }: { marketId: string; outcome: 'yes' | 'no'; teamIndex?: number }) => {
+    mutationFn: async ({ marketId, optionId }: { marketId: string; optionId: string }) => {
       const response = await fetch(`/mapi/markets/${marketId}/resolve`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ outcome, teamIndex }),
+        body: JSON.stringify({ optionId }),
       });
       if (!response.ok) throw new Error('Unable to resolve market');
       return response.json();
@@ -108,6 +142,26 @@ export default function Admin() {
     onSuccess: (updatedMarket: MarketProps) => {
       setMarkets((current) => current.map((m) => (m.id === updatedMarket.id ? updatedMarket : m)));
       queryClient.invalidateQueries({ queryKey: ['adminMarkets'] });
+    },
+  });
+
+  const solvencyMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch('/mapi/admin/solvency', {
+        method: 'PUT',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(solvencySettings),
+      });
+      if (!response.ok) throw new Error('Unable to update solvency settings');
+      return response.json();
+    },
+    onSuccess: (updatedOverview: SolvencyOverview) => {
+      queryClient.setQueryData(['adminSolvency'], updatedOverview);
+      toast({ title: 'Solvency Updated', description: 'Reserve settings saved successfully.' });
+    },
+    onError: () => {
+      toast({ title: 'Error', description: 'Failed to update solvency settings', variant: 'destructive' });
     },
   });
 
@@ -163,7 +217,9 @@ export default function Admin() {
         endDate: newMarket.endDate,
         marketType: newMarket.marketType,
         logoUrl, // Pass logo for all types
-        initialLiquidity: newMarket.initialLiquidity,
+        initialB: newMarket.initialLiquidity,
+        minB: newMarket.minB,
+        isDynamic: newMarket.isDynamic,
       };
 
       if (newMarket.marketType === 'versus') {
@@ -189,7 +245,7 @@ export default function Admin() {
 
       setMarkets((current) => [market, ...current]);
       queryClient.invalidateQueries({ queryKey: ['adminMarkets'] });
-      setNewMarket({ title: '', description: '', category: '', endDate: '', marketType: 'binary', optionA: '', optionB: '', shortA: '', shortB: '', logoFile: null, logoPreview: '', initialLiquidity: 1000 });
+      setNewMarket({ title: '', description: '', category: '', endDate: '', marketType: 'binary', optionA: '', optionB: '', shortA: '', shortB: '', logoFile: null, logoPreview: '', initialLiquidity: 1000, minB: 250, isDynamic: false });
       setTeams([{ ...EMPTY_TEAM }, { ...EMPTY_TEAM }]);
       setMultiLogoFile(null);
       setMultiLogoPreview('');
@@ -201,10 +257,10 @@ export default function Admin() {
     }
   };
 
-  const handleResolveMarket = async (marketId: string, outcome: 'yes' | 'no', teamIndex?: number) => {
+  const handleResolveMarket = async (marketId: string, optionId: string) => {
     try {
-      await resolveMarketMutation.mutateAsync({ marketId, outcome, teamIndex });
-      toast({ title: 'Market Resolved', description: `Market resolved as ${outcome.toUpperCase()}` });
+      await resolveMarketMutation.mutateAsync({ marketId, optionId });
+      toast({ title: 'Market Resolved', description: `Winning option set successfully.` });
     } catch {
       toast({ title: 'Error', description: 'Failed to resolve market', variant: 'destructive' });
     }
@@ -217,7 +273,12 @@ export default function Admin() {
         method: 'PUT',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ endDate: editDate }),
+        body: JSON.stringify({
+          endDate: editDate,
+          initialB: editingMarket?.initialB,
+          minB: editingMarket?.minB,
+          isDynamic: editingMarket?.isDynamic,
+        }),
       });
       if (!response.ok) throw new Error('Update failed');
       const updated = await response.json();
@@ -234,6 +295,7 @@ export default function Admin() {
       case 'active': return <Badge variant="secondary" className="bg-green-500/10 text-green-500"><Clock className="w-3 h-3 mr-1" />Active</Badge>;
       case 'resolved_yes': return <Badge variant="secondary" className="bg-yes/10 text-yes"><CheckCircle className="w-3 h-3 mr-1" />Resolved YES</Badge>;
       case 'resolved_no': return <Badge variant="secondary" className="bg-no/10 text-no"><XCircle className="w-3 h-3 mr-1" />Resolved NO</Badge>;
+      case 'resolved_option': return <Badge variant="secondary" className="bg-primary/10 text-primary"><CheckCircle className="w-3 h-3 mr-1" />Resolved Winner</Badge>;
     }
   };
 
@@ -245,6 +307,51 @@ export default function Admin() {
             <h1 className="text-3xl font-bold text-foreground mb-2">Admin Dashboard</h1>
             <p className="text-muted-foreground">Create and manage prediction markets</p>
           </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Solvency Guard</CardTitle>
+              <CardDescription>Track real reserves against open payout liabilities.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="rounded-xl border border-border p-4">
+                  <p className="text-xs uppercase text-muted-foreground">Real Reserves</p>
+                  <p className="mt-2 text-2xl font-black">₹{Math.round(solvencyQuery.data?.realReserves || 0).toLocaleString()}</p>
+                </div>
+                <div className="rounded-xl border border-border p-4">
+                  <p className="text-xs uppercase text-muted-foreground">Potential Payouts</p>
+                  <p className="mt-2 text-2xl font-black">₹{Math.round(solvencyQuery.data?.totalPotentialPayouts || 0).toLocaleString()}</p>
+                </div>
+                <div className="rounded-xl border border-border p-4">
+                  <p className="text-xs uppercase text-muted-foreground">Solvency Ratio</p>
+                  <p className={cn("mt-2 text-2xl font-black", solvencyQuery.data?.isBelowThreshold ? "text-destructive" : "text-green-600")}>
+                    {Number.isFinite(solvencyQuery.data?.solvencyRatio || 0) ? (solvencyQuery.data?.solvencyRatio || 0).toFixed(2) : 'INF'}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-border p-4">
+                  <p className="text-xs uppercase text-muted-foreground">Guard Status</p>
+                  <p className={cn("mt-2 text-lg font-black", solvencyQuery.data?.isBelowThreshold ? "text-destructive" : "text-green-600")}>
+                    {solvencyQuery.data?.isBelowThreshold ? 'Creation Blocked' : 'Healthy'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                <div className="space-y-2">
+                  <Label>Real Reserves</Label>
+                  <Input type="number" value={solvencySettings.realReserves} onChange={(e) => setSolvencySettings((current) => ({ ...current, realReserves: Number(e.target.value) || 0 }))} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Threshold</Label>
+                  <Input type="number" step="0.01" value={solvencySettings.threshold} onChange={(e) => setSolvencySettings((current) => ({ ...current, threshold: Number(e.target.value) || 1 }))} />
+                </div>
+                <Button onClick={() => solvencyMutation.mutate()} disabled={solvencyMutation.isPending}>
+                  Save Solvency Settings
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
 
           {/* Create New Market */}
           <Card>
@@ -406,8 +513,8 @@ export default function Admin() {
               <div className="space-y-4 p-4 bg-muted/20 rounded-xl border border-border/50">
                 <div className="flex items-center justify-between">
                   <div>
-                    <Label className="text-base font-bold">Initial Liquidity</Label>
-                    <p className="text-xs text-muted-foreground">Higher liquidity makes the price more stable</p>
+                    <Label className="text-base font-bold">Base Liquidity Parameter</Label>
+                    <p className="text-xs text-muted-foreground">Higher `b` makes prices more stable and harder to move.</p>
                   </div>
                   <Badge variant="secondary" className="text-lg font-black px-3 py-1">
                     ₹{newMarket.initialLiquidity.toLocaleString()}
@@ -463,6 +570,20 @@ export default function Admin() {
                 </div>
               </div>
 
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-muted/20 rounded-xl border border-border/50">
+                <div className="space-y-2">
+                  <Label htmlFor="minB">Minimum Dynamic B</Label>
+                  <Input id="minB" type="number" value={newMarket.minB} onChange={(e) => setNewMarket({ ...newMarket, minB: parseInt(e.target.value) || 1 })} />
+                </div>
+                <div className="flex items-center justify-between rounded-xl border border-border bg-background px-4 py-3">
+                  <div>
+                    <p className="font-semibold">Dynamic Volatility</p>
+                    <p className="text-xs text-muted-foreground">Decay `b` as expiry approaches, but never below the floor.</p>
+                  </div>
+                  <input type="checkbox" checked={newMarket.isDynamic} onChange={(e) => setNewMarket({ ...newMarket, isDynamic: e.target.checked })} className="h-5 w-5 accent-primary" />
+                </div>
+              </div>
+
               {/* End Date */}
               <div className="space-y-2">
                 <Label htmlFor="endDate">End Date & Time</Label>
@@ -514,6 +635,18 @@ export default function Admin() {
                             <Label className="text-[10px] uppercase">Update End Time</Label>
                             <Input type="datetime-local" value={editDate} onChange={(e) => setEditDate(e.target.value)} className="h-8" />
                           </div>
+                          <div className="space-y-1 w-28">
+                            <Label className="text-[10px] uppercase">Base B</Label>
+                            <Input type="number" value={editingMarket.initialB || 1000} onChange={(e) => setEditingMarket({ ...editingMarket, initialB: parseInt(e.target.value) || 1000 })} className="h-8" />
+                          </div>
+                          <div className="space-y-1 w-28">
+                            <Label className="text-[10px] uppercase">Min B</Label>
+                            <Input type="number" value={editingMarket.minB || 250} onChange={(e) => setEditingMarket({ ...editingMarket, minB: parseInt(e.target.value) || 1 })} className="h-8" />
+                          </div>
+                          <label className="flex items-center gap-2 text-xs font-medium">
+                            <input type="checkbox" checked={!!editingMarket.isDynamic} onChange={(e) => setEditingMarket({ ...editingMarket, isDynamic: e.target.checked })} className="h-4 w-4 accent-primary" />
+                            Dynamic
+                          </label>
                           <Button size="sm" onClick={() => handleUpdateMarket(market.id)}>Save</Button>
                           <Button size="sm" variant="ghost" onClick={() => setEditingMarket(null)}>Cancel</Button>
                         </div>
@@ -521,19 +654,15 @@ export default function Admin() {
                     </div>
                     {market.status === 'active' && (
                       <div className="flex flex-col gap-2">
-                        {market.marketType === 'multi' && market.teams ? (
+                        {market.marketType === 'multi' && market.options ? (
                           <div className="space-y-4 border-t border-border pt-4 mt-2">
-                             <Label className="text-xs uppercase text-muted-foreground">Resolve Teams</Label>
+                             <Label className="text-xs uppercase text-muted-foreground">Resolve Winner</Label>
                              <div className="space-y-2">
-                               {market.teams.map((team, tIdx) => (
-                                 <div key={tIdx} className="flex items-center justify-between gap-4 p-2 bg-muted/20 rounded-md">
-                                   <span className="text-sm font-medium">{team.name}</span>
-                                   <div className="flex gap-2">
-                                     <Button size="sm" variant="outline" className="text-yes h-7 px-2"
-                                       onClick={() => handleResolveMarket(market.id, 'yes', tIdx)}>Win</Button>
-                                     <Button size="sm" variant="outline" className="text-no h-7 px-2"
-                                       onClick={() => handleResolveMarket(market.id, 'no', tIdx)}>Lose</Button>
-                                   </div>
+                               {market.options.map((option) => (
+                                 <div key={option.id} className="flex items-center justify-between gap-4 p-2 bg-muted/20 rounded-md">
+                                   <span className="text-sm font-medium">{option.name}</span>
+                                   <Button size="sm" variant="outline" className="text-primary h-7 px-2"
+                                     onClick={() => handleResolveMarket(market.id, option.id)}>Set Winner</Button>
                                  </div>
                                ))}
                              </div>
