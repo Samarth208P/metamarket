@@ -235,7 +235,7 @@ export function BetModal({ isOpen, onClose, market, initialOutcome = 'yes', onTr
   const graphElement = isGraphLoading ? (
     <div className="h-[200px] md:h-[300px] flex flex-col items-center justify-center gap-4 bg-muted/5 rounded-xl border border-border/50">
       <img src="/animated-logo.svg" alt="Loading" className="w-24 h-24" />
-      <p className="text-[10px] font-black uppercase text-muted-foreground tracking-[0.2em] animate-pulse">Fetching Real-time Odds...</p>
+      <p className="text-[10px] font-black uppercase text-muted-foreground tracking-[0.2em]">Fetching Real-time Odds...</p>
     </div>
   ) : (
     <div className="flex flex-col h-full">
