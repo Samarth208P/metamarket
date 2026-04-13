@@ -40,10 +40,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const checkAuthStatus = async () => {
+    const minWait = new Promise(resolve => setTimeout(resolve, 3000));
     try {
-      const response = await fetch('/mapi/user', {
+      const authPromise = fetch('/mapi/user', {
         credentials: 'include',
       });
+      
+      const [response] = await Promise.all([authPromise, minWait]);
 
       if (response.ok) {
         const userData = await response.json();

@@ -4,33 +4,42 @@
       /* Initial state: Transparent fill, visible white outline */
       fill: rgba(255, 255, 255, 0);
       stroke: white;
-      stroke-width: 2;
       
-      /* The "Drawing" animation configuration */
-      stroke-dasharray: 3500;
-      stroke-dashoffset: 3500;
+      /* Thickened the border */
+      stroke-width: 15;
       
-      /* Updated to infinite and alternate for "to and fro" motion */
+      /* Keeps thick corners from spiking AND perfectly seals the start/end gap */
+      stroke-linejoin: round; 
+      stroke-linecap: round;
+      
+      /* Increased to 3800 to ensure the line is long enough to fully close */
+      stroke-dasharray: 3800;
+      stroke-dashoffset: 3800;
+      
+      /* Infinite to and fro motion */
       animation: continuousDraw 4s ease-in-out infinite alternate;
     }
 
-    /* Defines the complete cycle: Draw, Fill, then pause (handled by alternate) */
+    /* Defines the complete cycle: Draw, Fill, then pause */
     @keyframes continuousDraw {
       0% { 
-        stroke-dashoffset: 3500; 
+        stroke-dashoffset: 3800; 
         fill: rgba(255, 255, 255, 0); 
+        stroke-width: 15;
       }
       
-      /* Step 1: Finish drawing the outline */
+      /* Step 1: Finish drawing the thick outline completely */
       75% { 
         stroke-dashoffset: 0; 
         fill: rgba(255, 255, 255, 0); 
+        stroke-width: 15;
       }
       
-      /* Step 2: Fill the shape and pause in the closed state */
+      /* Step 2: Fill the shape and shrink the border to 0 */
       90%, 100% { 
         stroke-dashoffset: 0; 
-        fill: rgba(255, 255, 255, 1); 
+        fill: rgba(255, 255, 255, 1);
+        stroke-width: 0;
       }
     }
   </style>
