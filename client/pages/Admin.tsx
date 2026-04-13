@@ -214,7 +214,7 @@ export default function Admin() {
         title: newMarket.title,
         description: newMarket.description,
         category: newMarket.category,
-        endDate: newMarket.endDate,
+        endDate: new Date(newMarket.endDate).toISOString(),
         marketType: newMarket.marketType,
         logoUrl, // Pass logo for all types
         initialB: newMarket.initialLiquidity,
@@ -274,7 +274,7 @@ export default function Admin() {
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          endDate: editDate,
+          endDate: new Date(editDate).toISOString(),
           initialB: editingMarket?.initialB,
           minB: editingMarket?.minB,
           isDynamic: editingMarket?.isDynamic,
@@ -622,7 +622,10 @@ export default function Admin() {
                              {market.status === 'active' && (
                                <Button variant="ghost" size="sm" className="h-5 px-1 underline" onClick={() => {
                                  setEditingMarket(market);
-                                 setEditDate(new Date(market.endDate!).toISOString().slice(0, 16));
+                                 // Convert UTC to localized string for datetime-local input
+                                 const d = new Date(market.endDate!);
+                                 const offset = d.getTimezoneOffset() * 60000;
+                                 setEditDate(new Date(d.getTime() - offset).toISOString().slice(0, 16));
                                }}>Edit</Button>
                              )}
                           </div>
