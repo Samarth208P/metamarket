@@ -217,10 +217,10 @@ export function clampProbability(p: number): number {
 }
 
 /**
- * Format a probability (0–1) as cents string, e.g. "67¢"
+ * Format a probability (0–1) as paise string, e.g. "67p"
  */
-export function formatCents(probability: number): string {
-  return `${Math.round(probability * 100)}¢`;
+export function formatPaise(probability: number): string {
+  return `${Math.round(probability * 100)}p`;
 }
 
 /**

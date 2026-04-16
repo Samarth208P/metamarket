@@ -160,7 +160,7 @@ async function createNewCycle(): Promise<void> {
       } finally {
         createNewCycle();
       }
-    }, durationMs + 2000);
+    }, durationMs + 500);
 
   } catch (err) {
     console.error("[BinaryScheduler] Create-cycle error:", err);

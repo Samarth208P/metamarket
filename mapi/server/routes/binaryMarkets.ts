@@ -13,6 +13,7 @@ import {
   calculateLiveProbability,
   calculatePotentialPayout,
   MARKET_DURATION_MS,
+  formatPaise,
 } from "../../../shared/binaryPrice.js";
 
 const router = Router();
@@ -106,7 +107,12 @@ router.get("/binary-markets/active", async (_req, res) => {
       });
     }
 
-    const currentPrice = binanceFeed.getLatestPrice();
+    let currentPrice = binanceFeed.getLatestPrice();
+    if (currentPrice <= 0) {
+      const { fetchBinancePriceRest } = await import("../services/binanceFeed.js");
+      currentPrice = await fetchBinancePriceRest();
+    }
+
     const timeRemainingMs = Math.max(
       0,
       new Date(market.endTime).getTime() - Date.now(),
@@ -217,7 +223,14 @@ router.post(
       }
 
       // Calculate current probability at trade time
-      const currentPrice = binanceFeed.getLatestPrice();
+      let currentPrice = binanceFeed.getLatestPrice();
+      
+      // Fallback if WebSocket hasn't received a price yet
+      if (currentPrice <= 0) {
+        const { fetchBinancePriceRest } = await import("../services/binanceFeed.js");
+        currentPrice = await fetchBinancePriceRest();
+      }
+
       const timeRemainingMs = Math.max(
         0,
         new Date(market.endTime).getTime() - Date.now(),
@@ -258,7 +271,7 @@ router.post(
       if (!user.tradeHistory) user.tradeHistory = [];
       user.tradeHistory.push({
         marketId: market.id,
-        marketTitle: `BTC ${side.toUpperCase()} @ ${Math.round(entryProbability * 100)}¢ (Tgt: $${market.targetPrice.toLocaleString()})`,
+        marketTitle: `BTC ${side.toUpperCase()} @ ${formatPaise(entryProbability)} (Tgt: $${market.targetPrice.toLocaleString()})`,
         tradeType: "buy",
         optionId: side,
         optionName: side === "up" ? "Up" : "Down",
@@ -359,7 +372,7 @@ router.post(
       if (!user.tradeHistory) user.tradeHistory = [];
       user.tradeHistory.push({
         marketId: market.id,
-        marketTitle: `BTC ${side.toUpperCase()} @ ${Math.round(currentSideProbability * 100)}¢ (Tgt: $${market.targetPrice.toLocaleString()})`,
+        marketTitle: `BTC ${side.toUpperCase()} @ ${formatPaise(currentSideProbability)} (Tgt: $${market.targetPrice.toLocaleString()})`,
         tradeType: "sell",
         optionId: side,
         optionName: side === "up" ? "Up" : "Down",

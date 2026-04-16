@@ -144,8 +144,9 @@ export async function fetchBinancePriceRest(): Promise<number> {
  */
 export async function fetchBinancePriceAtTime(timestampMs: number): Promise<number> {
   try {
-    // Round down to the nearest minute to get the kline
-    const startTime = Math.floor(timestampMs / 60000) * 60000;
+    // Target the candle that ends AT or JUST BEFORE the timestamp.
+    // If market ends at 20:30:00, we want the close of the 20:29:00-20:29:59 candle.
+    const startTime = Math.floor((timestampMs - 1) / 60000) * 60000;
     const response = await fetch(
       `https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1m&startTime=${startTime}&limit=1`
     );

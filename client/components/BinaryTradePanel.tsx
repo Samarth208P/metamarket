@@ -5,7 +5,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   calculateLiveProbability,
   calculatePotentialPayout,
-  formatCents,
+  formatPaise,
   formatCountdown,
 } from "@shared/binaryPrice";
 import type { BinaryMarket as BinaryMarketType } from "@shared/binaryPrice";
@@ -128,7 +128,7 @@ export function BinaryTradePanel({
         updateBalance(data.userBalance);
         toast({
           title: `${side === "up" ? "🟢 UP" : "🔴 DOWN"} position opened!`,
-          description: `₹${numericAmount} at ${formatCents(
+          description: `₹${numericAmount} at ${formatPaise(
             side === "up" ? pUp : pDown,
           )} — potential payout: ₹${(side === "up"
             ? potentialPayoutUp
@@ -340,7 +340,7 @@ export function BinaryTradePanel({
               >
                 <ArrowUp className="w-5 h-5 text-yes mb-1" />
                 <span className="text-xl text-yes tabular-nums">
-                  {formatCents(pUp)}
+                  {formatPaise(pUp)}
                 </span>
                 <span className="text-xs text-yes/70 mt-0.5 uppercase tracking-wider">
                   Up
@@ -364,7 +364,7 @@ export function BinaryTradePanel({
               >
                 <ArrowDown className="w-5 h-5 text-no mb-1" />
                 <span className="text-xl text-no tabular-nums">
-                  {formatCents(pDown)}
+                  {formatPaise(pDown)}
                 </span>
                 <span className="text-xs text-no/70 mt-0.5 uppercase tracking-wider">
                   Down
