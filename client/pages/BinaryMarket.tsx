@@ -117,8 +117,8 @@ export default function BinaryMarket() {
               frozenPrice={isFrozen ? displayedMarket.finalPrice : undefined}
             />
 
-            {/* History Tracker Between Chart and Description */}
-            <div className="mt-8 flex items-center gap-4 bg-zinc-900/40 border border-white/5 rounded-2xl px-5 py-3.5 backdrop-blur-sm shadow-inner max-w-fit">
+            {/* History Tracker Between Chart and Description - Hidden on Mobile */}
+            <div className="hidden lg:flex mt-8 flex items-center gap-4 bg-zinc-900/40 border border-white/5 rounded-2xl px-5 py-3.5 backdrop-blur-sm shadow-inner max-w-fit">
                <div className="border-r border-white/10 pr-4">
                   <Clock className="w-4 h-4 text-zinc-500" />
                </div>
@@ -127,8 +127,8 @@ export default function BinaryMarket() {
                </div>
             </div>
 
-            {/* Adjusted Market Description Section */}
-            <div className="mt-8 space-y-6">
+            {/* Adjusted Market Description Section - Hidden on Mobile */}
+            <div className="hidden lg:block mt-8 space-y-6">
               <div>
                 <h4 className="text-[10px] font-black uppercase text-zinc-500 mb-2 tracking-[0.2em]">Description</h4>
                 <p className="text-sm text-zinc-400 leading-relaxed max-w-2xl">
