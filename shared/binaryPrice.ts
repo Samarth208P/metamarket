@@ -9,9 +9,9 @@
 
 // ─── Constants ────────────────────────────────────────────────────────
 export const MARKET_DURATION_MS = 5 * 60 * 1000; // 5 minutes
-export const DEFAULT_VOLATILITY = 0.02; // Base annualised vol for BTC
-export const VIV_JITTER_RANGE = 0.0001; // ± jitter on σ
-export const MOMENTUM_BIAS_CAP = 0.01; // Max ±1% ROC sentiment shift
+export const DEFAULT_VOLATILITY = 0.008; // Lowered for higher sensitivity at 5m scales
+export const VIV_JITTER_RANGE = 0.0001;
+export const MOMENTUM_BIAS_CAP = 0.02; // Increased room for sentiment
 export const MIN_PROBABILITY = 0.01; // Floor at 1¢
 export const MAX_PROBABILITY = 0.99; // Cap at 99¢
 export const PRICE_SNAPSHOT_INTERVAL_MS = 1_000; // 1 s chart resolution
@@ -176,6 +176,13 @@ export function calculateLiveProbability(params: {
     timeRemainingMs,
     activeVolatility,
   );
+
+  // If there's any price difference, ensure we don't return exactly 0.5 if possible
+  if (currentPrice > targetPrice && probability <= 0.501) {
+    probability = Math.max(probability, 0.51);
+  } else if (currentPrice < targetPrice && probability >= 0.499) {
+    probability = Math.min(probability, 0.49);
+  }
 
   // 3. Momentum Bias — shift based on Rate of Change
   let momentumBias = 0;
