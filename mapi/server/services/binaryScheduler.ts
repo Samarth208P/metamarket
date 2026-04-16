@@ -11,147 +11,160 @@ import User from "../models/User.js";
 import { binanceFeed, fetchBinancePriceAtTime, fetchBinancePriceRest, type PriceTick } from "./binanceFeed.js";
 import { MARKET_DURATION_MS, PRICE_SNAPSHOT_INTERVAL_MS } from "../../../shared/binaryPrice.js";
 
-let cycleTimer: ReturnType<typeof setInterval> | null = null;
+let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+let cycleTimer: ReturnType<typeof setTimeout> | null = null;
 let snapshotTimer: ReturnType<typeof setInterval> | null = null;
 let currentMarketId: string | null = null;
 
-/**
- * Start the binary market scheduler.
- * Should be called once after the DB is connected and Binance feed is started.
- */
 export function startBinaryScheduler(): void {
   console.log("[BinaryScheduler] Starting market cycle scheduler");
 
-  // Wait for a valid Binance price before creating the first market
+  // Initial cycle creation
   const latest = binanceFeed.getLatestPrice();
   if (latest > 0) {
-    console.log(`[BinaryScheduler] Price ready ($${latest}). Starting first cycle.`);
     createNewCycle();
   } else {
-    console.log("[BinaryScheduler] Waiting for first price from Binance...");
+    // Wait for first price
     const onFirstPrice = () => {
-      console.log(`[BinaryScheduler] Received first price ($${binanceFeed.getLatestPrice()}). Booting scheduler.`);
       binanceFeed.off("price", onFirstPrice);
       createNewCycle();
     };
     binanceFeed.on("price", onFirstPrice);
     
-    // Safety timeout: if no price from WS in 10s, try REST API
+    // Safety fallback
     setTimeout(async () => {
       if (binanceFeed.getLatestPrice() <= 0) {
-        console.log("[BinaryScheduler] WS still offline after 10s, attempting REST fallback...");
         const restPrice = await fetchBinancePriceRest();
         if (restPrice > 0) {
-          console.log(`[BinaryScheduler] REST fallback successful ($${restPrice}).`);
-          binanceFeed.off("price", onFirstPrice);
           createNewCycle();
         }
       }
-    }, 10000);
+    }, 5000);
   }
+
+  // Heartbeat to ensure a market always exists
+  if (heartbeatTimer) clearInterval(heartbeatTimer);
+  heartbeatTimer = setInterval(() => {
+    ensureActiveMarket();
+  }, 30000); // Check every 30s
 }
 
 export function stopBinaryScheduler(): void {
-  if (cycleTimer) {
-    clearInterval(cycleTimer);
-    cycleTimer = null;
-  }
-  if (snapshotTimer) {
-    clearInterval(snapshotTimer);
-    snapshotTimer = null;
-  }
+  if (cycleTimer) clearTimeout(cycleTimer);
+  if (snapshotTimer) clearInterval(snapshotTimer);
+  if (heartbeatTimer) clearInterval(heartbeatTimer);
+  cycleTimer = null;
+  snapshotTimer = null;
+  heartbeatTimer = null;
   currentMarketId = null;
 }
 
-async function createNewCycle(): Promise<void> {
-  // Clear previous timers
-  if (cycleTimer) clearTimeout(cycleTimer as any);
-  if (snapshotTimer) clearInterval(snapshotTimer);
-
-  const currentPrice = binanceFeed.getLatestPrice();
-  if (currentPrice <= 0) {
-    console.warn("[BinaryScheduler] No valid price yet, retrying in 5s...");
-    cycleTimer = setTimeout(() => createNewCycle(), 5000) as any;
-    return;
-  }
-
+/**
+ * Ensures an active market exists for the current time slot.
+ * Used as a self-healing mechanism.
+ */
+async function ensureActiveMarket(): Promise<void> {
   const nowMs = Date.now();
   const cycleLengthMs = MARKET_DURATION_MS;
-  // Snap to next complete interval boundary
   const endTimeMs = Math.floor(nowMs / cycleLengthMs) * cycleLengthMs + cycleLengthMs;
-  const startTimeMs = endTimeMs - cycleLengthMs;
   const endTime = new Date(endTimeMs);
-  const startTime = new Date(startTimeMs);
 
   try {
-    // Settle the previous active market (if any)
-    await settlePreviousMarket();
+    const exists = await BinaryMarket.findOne({
+      endTime,
+      status: "active"
+    });
 
-    // Check if a market for this specific time slot already exists to prevent duplicates
+    if (!exists) {
+      console.log(`[BinaryScheduler] Heartbeat: No active market found for ${endTime.toISOString()}. Creating one...`);
+      await createNewCycle();
+    }
+  } catch (err) {
+    console.error("[BinaryScheduler] Heartbeat check failed:", err);
+  }
+}
+
+async function createNewCycle(): Promise<void> {
+  // Clear previous cycle timer if we are starting fresh
+  if (cycleTimer) clearTimeout(cycleTimer);
+  if (snapshotTimer) clearInterval(snapshotTimer);
+
+  try {
+    // 1. Get latest price (with REST fallback)
+    let currentPrice = binanceFeed.getLatestPrice();
+    if (currentPrice <= 0) {
+      currentPrice = await fetchBinancePriceRest();
+    }
+
+    if (currentPrice <= 0) {
+      console.warn("[BinaryScheduler] No price available. Postponing cycle 5s...");
+      cycleTimer = setTimeout(() => createNewCycle(), 5000);
+      return;
+    }
+
+    const nowMs = Date.now();
+    const cycleLengthMs = MARKET_DURATION_MS;
+    const endTimeMs = Math.floor(nowMs / cycleLengthMs) * cycleLengthMs + cycleLengthMs;
+    const startTimeMs = endTimeMs - cycleLengthMs;
+    const endTime = new Date(endTimeMs);
+    const startTime = new Date(startTimeMs);
+
+    // 2. Settle stale markets (non-blocking)
+    settlePreviousMarket().catch(err => {
+      console.error("[BinaryScheduler] Settle-previous failed:", err);
+    });
+
+    // 3. Prevent duplicate creation for this exact time slot
     const existingMarket = await BinaryMarket.findOne({
-      assetPair: "BTCUSDT",
-      endTime: endTime,
+      endTime,
       status: "active"
     });
 
     let market: IBinaryMarket;
     if (existingMarket) {
-      console.log(`[BinaryScheduler] Re-using existing active market: ${existingMarket.id}`);
+      console.log(`[BinaryScheduler] Cycle exists: ${existingMarket.id}`);
       market = existingMarket;
     } else {
-      // Create a new market
       market = await BinaryMarket.create({
         assetPair: "BTCUSDT",
         targetPrice: currentPrice,
-        startTime: startTime,
+        startTime,
         endTime,
         status: "active",
         priceSnapshots: [{ price: currentPrice, timestamp: new Date(nowMs) }],
       });
-      console.log(
-        `[BinaryScheduler] New market ${market.id} | Target: $${currentPrice.toFixed(2)} | Ends: ${endTime.toISOString()}`,
-      );
+      console.log(`[BinaryScheduler] Created market ${market.id} for ${endTime.toISOString()}`);
     }
 
     currentMarketId = market.id;
-
-    // Prune old history
     await pruneOldMarkets();
 
-    // Snapshot prices periodically for the chart
+    // 4. Start snapshotting
     snapshotTimer = setInterval(async () => {
-      const price = binanceFeed.getLatestPrice();
-      if (price > 0 && currentMarketId) {
-        try {
-          await BinaryMarket.updateOne(
-            { _id: currentMarketId },
-            { $push: { priceSnapshots: { price, timestamp: new Date() } } }
-          );
-        } catch {
-          // non-critical
-        }
+      const p = binanceFeed.getLatestPrice();
+      if (p > 0 && currentMarketId) {
+        BinaryMarket.updateOne(
+          { _id: currentMarketId },
+          { $push: { priceSnapshots: { price: p, timestamp: new Date() } } }
+        ).catch(() => {});
       }
     }, PRICE_SNAPSHOT_INTERVAL_MS);
 
-    // Schedule settlement at cycle end strictly
+    // 5. Schedule settlement
     const durationMs = Math.max(0, endTimeMs - Date.now());
-    
-    // We add a 2-second grace period to ensure the Binance REST API has the 1m candle closed
     cycleTimer = setTimeout(async () => {
       try {
-        if (snapshotTimer) clearInterval(snapshotTimer);
         await settleMarket(market.id);
       } catch (err) {
-        console.error(`[BinaryScheduler] Fatal error settling market ${market.id}:`, err);
+        console.error(`[BinaryScheduler] Settle error:`, err);
       } finally {
-        // Start next cycle only after settlement attempt
         createNewCycle();
       }
-    }, durationMs + 2000) as any;
+    }, durationMs + 2000);
+
   } catch (err) {
-    console.error("[BinaryScheduler] Error creating cycle:", err);
-    // Retry in 5s
-    cycleTimer = setTimeout(() => createNewCycle(), 5000) as any;
+    console.error("[BinaryScheduler] Create-cycle error:", err);
+    cycleTimer = setTimeout(() => createNewCycle(), 5000);
   }
 }
 
