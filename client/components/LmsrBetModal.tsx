@@ -558,7 +558,7 @@ export function LmsrBetModal({ isOpen, onClose, market, initialOptionId, onTrade
           <DrawerHeader className="text-left border-b border-border pb-4 relative">
             <DrawerTitle className="text-lg leading-tight font-bold pr-8">{modalTitle}</DrawerTitle>
             <DrawerClose asChild>
-              <button onClick={onClose} className="absolute right-4 top-4 p-2 rounded-full hover:bg-muted transition-colors"><X className="w-5 h-5" /></button>
+              <button onClick={onClose} aria-label="Close" title="Close" className="absolute right-4 top-4 p-2 rounded-full hover:bg-muted transition-colors"><X className="w-5 h-5" /></button>
             </DrawerClose>
           </DrawerHeader>
           <div className="p-4 flex flex-col gap-5 overflow-y-auto no-scrollbar">

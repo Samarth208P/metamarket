@@ -16,6 +16,7 @@ import Portfolio from "./pages/Portfolio";
 import Leaderboard from "./pages/Leaderboard";
 import MarketDetail from "./pages/MarketDetail";
 import Admin from "./pages/Admin";
+import BinaryMarket from "./pages/BinaryMarket";
 
 import { useEffect } from "react";
 
@@ -74,6 +75,14 @@ function App() {
                   <AdminProtectedRoute>
                     <Admin />
                   </AdminProtectedRoute>
+                }
+              />
+              <Route
+                path="/btc"
+                element={
+                  <ProtectedRoute>
+                    <BinaryMarket />
+                  </ProtectedRoute>
                 }
               />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

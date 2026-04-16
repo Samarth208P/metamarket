@@ -4,7 +4,7 @@ import { Layout } from "@/components/Layout";
 import { MarketCard } from "@/components/MarketCard";
 import { Market } from "@shared/api";
 import { Search, Activity, CheckCircle2, Bookmark } from "lucide-react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, Link } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
@@ -124,6 +124,38 @@ export default function Index() {
               Search results for "{query}"
             </h2>
           </div>
+        )}
+
+        {!query && !selectedTag && !showBookmarksOnly && (
+          <Link to="/btc" className="block mb-8 relative rounded-2xl border border-border bg-card p-5 hover:border-primary/30 transition-all shadow-md group overflow-hidden">
+            <div className="absolute inset-0 bg-gradient-to-r from-orange-500/5 to-transparent pointer-events-none" />
+            <div className="flex flex-col gap-4">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-xl bg-[#f7931a] flex items-center justify-center shrink-0 shadow-lg">
+                  <span className="text-white text-2xl font-black">₿</span>
+                </div>
+                <h3 className="text-xl font-bold group-hover:text-primary transition-colors">BTC 5 Minute Up or Down</h3>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-3 mt-2">
+                <div className="bg-yes/20 rounded-xl p-3 flex justify-center text-yes border border-yes/20 font-bold text-lg hover:bg-yes/30 transition-colors">
+                  Up
+                </div>
+                <div className="bg-no/20 rounded-xl p-3 flex justify-center text-no border border-no/20 font-bold text-lg hover:bg-no/30 transition-colors">
+                  Down
+                </div>
+              </div>
+              
+              <div className="flex items-center justify-between mt-1 text-sm text-muted-foreground">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                  <span className="font-bold text-red-500 tracking-wider">LIVE</span>
+                  <span>· Bitcoin</span>
+                </div>
+                <Bookmark className="w-4 h-4" />
+              </div>
+            </div>
+          </Link>
         )}
 
         {isLoading ? (
