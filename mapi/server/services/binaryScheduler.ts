@@ -8,7 +8,7 @@
 
 import BinaryMarket, { type IBinaryMarket } from "../models/BinaryMarket.js";
 import User from "../models/User.js";
-import { binanceFeed, type PriceTick } from "./binanceFeed.js";
+import { binanceFeed, fetchBinancePriceAtTime, fetchBinancePriceRest, type PriceTick } from "./binanceFeed.js";
 import { MARKET_DURATION_MS, PRICE_SNAPSHOT_INTERVAL_MS } from "../../../shared/binaryPrice.js";
 
 let cycleTimer: ReturnType<typeof setInterval> | null = null;
@@ -23,14 +23,31 @@ export function startBinaryScheduler(): void {
   console.log("[BinaryScheduler] Starting market cycle scheduler");
 
   // Wait for a valid Binance price before creating the first market
-  if (binanceFeed.getLatestPrice() > 0) {
+  const latest = binanceFeed.getLatestPrice();
+  if (latest > 0) {
+    console.log(`[BinaryScheduler] Price ready ($${latest}). Starting first cycle.`);
     createNewCycle();
   } else {
+    console.log("[BinaryScheduler] Waiting for first price from Binance...");
     const onFirstPrice = () => {
+      console.log(`[BinaryScheduler] Received first price ($${binanceFeed.getLatestPrice()}). Booting scheduler.`);
       binanceFeed.off("price", onFirstPrice);
       createNewCycle();
     };
     binanceFeed.on("price", onFirstPrice);
+    
+    // Safety timeout: if no price from WS in 10s, try REST API
+    setTimeout(async () => {
+      if (binanceFeed.getLatestPrice() <= 0) {
+        console.log("[BinaryScheduler] WS still offline after 10s, attempting REST fallback...");
+        const restPrice = await fetchBinancePriceRest();
+        if (restPrice > 0) {
+          console.log(`[BinaryScheduler] REST fallback successful ($${restPrice}).`);
+          binanceFeed.off("price", onFirstPrice);
+          createNewCycle();
+        }
+      }
+    }, 10000);
   }
 }
 
@@ -118,6 +135,8 @@ async function createNewCycle(): Promise<void> {
 
     // Schedule settlement at cycle end strictly
     const durationMs = Math.max(0, endTimeMs - Date.now());
+    
+    // We add a 2-second grace period to ensure the Binance REST API has the 1m candle closed
     cycleTimer = setTimeout(async () => {
       try {
         if (snapshotTimer) clearInterval(snapshotTimer);
@@ -125,10 +144,10 @@ async function createNewCycle(): Promise<void> {
       } catch (err) {
         console.error(`[BinaryScheduler] Fatal error settling market ${market.id}:`, err);
       } finally {
-        // Start next cycle
+        // Start next cycle only after settlement attempt
         createNewCycle();
       }
-    }, durationMs) as any;
+    }, durationMs + 2000) as any;
   } catch (err) {
     console.error("[BinaryScheduler] Error creating cycle:", err);
     // Retry in 5s
@@ -159,7 +178,6 @@ async function settlePreviousMarket(): Promise<void> {
 
 async function settleMarket(marketId: string): Promise<void> {
   // Atomically claim this market for settlement
-  // We allow "active" or "settling" (to resume interrupted settlement)
   const market = await BinaryMarket.findOneAndUpdate(
     { _id: marketId, status: { $in: ["active", "settling"] } },
     { $set: { status: "settling" } },
@@ -167,17 +185,17 @@ async function settleMarket(marketId: string): Promise<void> {
   );
   if (!market) return;
 
-  // Determine final price: live price if current, or closest snapshot if stale
-  let finalPrice = binanceFeed.getLatestPrice();
-  const nowMs = Date.now();
   const endTimeMs = new Date(market.endTime).getTime();
+  console.log(`[BinaryScheduler] Settling market ${marketId}. Expiry: ${market.endTime.toISOString()}`);
+
+  // Fetch the exact price at the endTime using the historical REST API
+  // This is much more reliable than using the live feed which might have drifted
+  let finalPrice = await fetchBinancePriceAtTime(endTimeMs);
   
-  // If market ended more than 30s ago, try to find a price from snapshots
-  if (nowMs - endTimeMs > 30000 && market.priceSnapshots && market.priceSnapshots.length > 0) {
-    // Find snapshot closest to endTime
+  // Fallback to closest snapshot if REST API fails
+  if (finalPrice <= 0 && market.priceSnapshots && market.priceSnapshots.length > 0) {
     let closest = market.priceSnapshots[0];
     let minDiff = Math.abs(new Date(closest.timestamp).getTime() - endTimeMs);
-    
     for (const snap of market.priceSnapshots) {
       const diff = Math.abs(new Date(snap.timestamp).getTime() - endTimeMs);
       if (diff < minDiff) {
@@ -186,12 +204,15 @@ async function settleMarket(marketId: string): Promise<void> {
       }
     }
     finalPrice = closest.price;
-    console.log(`[BinaryScheduler] Using historical price for ${marketId}: $${finalPrice} (diff: ${minDiff}ms)`);
+  }
+
+  // Final fallback to live price if all else fails
+  if (finalPrice <= 0) {
+    finalPrice = binanceFeed.getLatestPrice();
   }
 
   if (finalPrice <= 0) {
     console.warn(`[BinaryScheduler] Cannot settle ${marketId}: no price identified`);
-    // Revert to active so it can be retried later
     await BinaryMarket.updateOne({ _id: marketId }, { $set: { status: "active" } });
     return;
   }
@@ -266,10 +287,10 @@ export function getCurrentMarketId(): string | null {
 
 async function pruneOldMarkets(): Promise<void> {
   try {
-    // Keep the 5 most recently settled markets
+    // Keep 20 most recent settled markets (for history)
     const settledMarkets = await BinaryMarket.find({ status: { $regex: /^settled/ } })
       .sort({ endTime: -1 })
-      .limit(5)
+      .limit(20)
       .select('_id');
       
     // Always keep active/settling markets
@@ -277,13 +298,16 @@ async function pruneOldMarkets(): Promise<void> {
       .select('_id');
     
     const idsToKeep = [
-      ...settledMarkets.map(m => m._id), 
-      ...activeMarkets.map(m => m._id)
+      ...settledMarkets.map(m => m._id.toString()), 
+      ...activeMarkets.map(m => m._id.toString())
     ];
     
+    // Safety check: if for some reason we have no markets to keep, DO NOT delete everything
+    if (idsToKeep.length === 0) return;
+
     const res = await BinaryMarket.deleteMany({ _id: { $nin: idsToKeep } });
     if (res.deletedCount > 0) {
-      console.log(`[BinaryScheduler] Pruned ${res.deletedCount} old market(s). Kept ${settledMarkets.length} history items.`);
+      console.log(`[BinaryScheduler] Pruned ${res.deletedCount} old market(s).`);
     }
   } catch (err) {
     console.error(`[BinaryScheduler] Error pruning markets:`, err);

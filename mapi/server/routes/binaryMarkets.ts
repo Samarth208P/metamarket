@@ -51,6 +51,19 @@ function serializeBinaryMarket(doc: any) {
 }
 
 /**
+ * GET /binary-markets/health
+ * Debug endpoint for scheduler health.
+ */
+router.get("/binary-markets/health", async (_req, res) => {
+  return res.json({
+    currentMarketId: getCurrentMarketId(),
+    binanceConnected: binanceFeed.getIsConnected(),
+    binancePrice: binanceFeed.getLatestPrice(),
+    timestamp: new Date().toISOString()
+  });
+});
+
+/**
  * GET /binary-markets/active
  * Returns the current active market + live pricing data.
  */

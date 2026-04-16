@@ -120,3 +120,46 @@ class BinanceFeedManager extends EventEmitter {
 
 // Singleton instance
 export const binanceFeed = new BinanceFeedManager();
+
+/**
+ * Fetch latest price from Binance REST API as a fallback
+ */
+export async function fetchBinancePriceRest(): Promise<number> {
+  try {
+    const response = await fetch("https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT");
+    const data = await response.json();
+    const price = parseFloat(data.price);
+    if (!isNaN(price) && price > 0) {
+      return price;
+    }
+    return 0;
+  } catch (err) {
+    console.error("[BinanceFeed] REST Fallback failed:", err);
+    return 0;
+  }
+}
+/**
+ * Fetch historical price from Binance REST API for a specific timestamp
+ * Uses the 1-minute kline (candle) closing price.
+ */
+export async function fetchBinancePriceAtTime(timestampMs: number): Promise<number> {
+  try {
+    // Round down to the nearest minute to get the kline
+    const startTime = Math.floor(timestampMs / 60000) * 60000;
+    const response = await fetch(
+      `https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1m&startTime=${startTime}&limit=1`
+    );
+    const data = await response.json();
+    if (Array.isArray(data) && data.length > 0) {
+      // kline[4] is the close price
+      const closePrice = parseFloat(data[0][4]);
+      if (!isNaN(closePrice) && closePrice > 0) {
+        return closePrice;
+      }
+    }
+    return 0;
+  } catch (err) {
+    console.error("[BinanceFeed] Historical fetch failed:", err);
+    return 0;
+  }
+}
