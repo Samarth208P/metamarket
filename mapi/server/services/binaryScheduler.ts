@@ -63,7 +63,7 @@ export function stopBinaryScheduler(): void {
  * Ensures an active market exists for the current time slot.
  * Used as a self-healing mechanism.
  */
-async function ensureActiveMarket(): Promise<void> {
+export async function ensureActiveMarket(): Promise<void> {
   const nowMs = Date.now();
   const cycleLengthMs = MARKET_DURATION_MS;
   const endTimeMs = Math.floor(nowMs / cycleLengthMs) * cycleLengthMs + cycleLengthMs;
@@ -300,10 +300,10 @@ export function getCurrentMarketId(): string | null {
 
 async function pruneOldMarkets(): Promise<void> {
   try {
-    // Keep 20 most recent settled markets (for history)
+    // Keep 5 most recent settled markets (for history)
     const settledMarkets = await BinaryMarket.find({ status: { $regex: /^settled/ } })
       .sort({ endTime: -1 })
-      .limit(20)
+      .limit(5)
       .select('_id');
       
     // Always keep active/settling markets
@@ -315,12 +315,11 @@ async function pruneOldMarkets(): Promise<void> {
       ...activeMarkets.map(m => m._id.toString())
     ];
     
-    // Safety check: if for some reason we have no markets to keep, DO NOT delete everything
     if (idsToKeep.length === 0) return;
 
     const res = await BinaryMarket.deleteMany({ _id: { $nin: idsToKeep } });
     if (res.deletedCount > 0) {
-      console.log(`[BinaryScheduler] Pruned ${res.deletedCount} old market(s).`);
+      console.log(`[BinaryScheduler] Pruned ${res.deletedCount} old market(s). History kept: ${settledMarkets.length}`);
     }
   } catch (err) {
     console.error(`[BinaryScheduler] Error pruning markets:`, err);

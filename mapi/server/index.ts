@@ -9,6 +9,7 @@ export { connectDB } from "./database.js";
 
 import marketRoutes from "./routes/markets.js";
 import binaryMarketRoutes from "./routes/binaryMarkets.js";
+import adminRoutes from "./routes/admin.js";
 import {
   handleGoogleAuth,
   handleGoogleCallback,
@@ -93,6 +94,9 @@ export async function createServer() {
 
   // Binary market routes
   apiRouter.use("/", binaryMarketRoutes);
+
+  // Admin routes
+  apiRouter.use("/", adminRoutes);
 
   // Auth routes
   apiRouter.get('/auth/google', handleGoogleAuth);

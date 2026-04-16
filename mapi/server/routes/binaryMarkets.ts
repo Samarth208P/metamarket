@@ -54,13 +54,31 @@ function serializeBinaryMarket(doc: any) {
  * GET /binary-markets/health
  * Debug endpoint for scheduler health.
  */
-router.get("/binary-markets/health", async (_req, res) => {
-  return res.json({
+router.get("/binary-markets/health", async (req, res) => {
+  const status: any = {
     currentMarketId: getCurrentMarketId(),
     binanceConnected: binanceFeed.getIsConnected(),
     binancePrice: binanceFeed.getLatestPrice(),
     timestamp: new Date().toISOString()
-  });
+  };
+
+  // Add info about active market if possible
+  const active = await BinaryMarket.findOne({ status: 'active' }).sort({ endTime: -1 });
+  if (active) {
+    status.activeMarket = {
+      id: active.id,
+      endTime: active.endTime,
+      targetPrice: active.targetPrice
+    };
+  }
+
+  if (req.query.trigger === '1') {
+    const { startBinaryScheduler } = await import("../services/binaryScheduler.js");
+    startBinaryScheduler();
+    status.schedulerTriggered = true;
+  }
+
+  return res.json(status);
 });
 
 /**
