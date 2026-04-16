@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 export type BinaryMarketStatus =
   | "waiting"
   | "active"
+  | "settling"
   | "settled_up"
   | "settled_down";
 
@@ -67,7 +68,7 @@ const BinaryMarketSchema = new mongoose.Schema<IBinaryMarket>(
     endTime: { type: Date, required: true },
     status: {
       type: String,
-      enum: ["waiting", "active", "settled_up", "settled_down"],
+      enum: ["waiting", "active", "settling", "settled_up", "settled_down"],
       default: "waiting",
     },
     trades: { type: [BinaryTradeSchema], default: [] },

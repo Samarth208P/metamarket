@@ -60,32 +60,45 @@ async function createNewCycle(): Promise<void> {
 
   const nowMs = Date.now();
   const cycleLengthMs = MARKET_DURATION_MS;
-  // Snap to next complete 5-minute (cycleLengthMs) interval boundary
+  // Snap to next complete interval boundary
   const endTimeMs = Math.floor(nowMs / cycleLengthMs) * cycleLengthMs + cycleLengthMs;
+  const startTimeMs = endTimeMs - cycleLengthMs;
   const endTime = new Date(endTimeMs);
-  
-  const now = new Date(nowMs);
+  const startTime = new Date(startTimeMs);
 
   try {
     // Settle the previous active market (if any)
     await settlePreviousMarket();
 
-    // Create a new market
-    const market = await BinaryMarket.create({
+    // Check if a market for this specific time slot already exists to prevent duplicates
+    const existingMarket = await BinaryMarket.findOne({
       assetPair: "BTCUSDT",
-      targetPrice: currentPrice,
-      startTime: now,
-      endTime,
-      status: "active",
-      priceSnapshots: [{ price: currentPrice, timestamp: now }],
+      endTime: endTime,
+      status: "active"
     });
 
-    currentMarketId = market.id;
-    console.log(
-      `[BinaryScheduler] New market ${market.id} | Target: $${currentPrice.toFixed(2)} | Ends: ${endTime.toISOString()}`,
-    );
+    let market: IBinaryMarket;
+    if (existingMarket) {
+      console.log(`[BinaryScheduler] Re-using existing active market: ${existingMarket.id}`);
+      market = existingMarket;
+    } else {
+      // Create a new market
+      market = await BinaryMarket.create({
+        assetPair: "BTCUSDT",
+        targetPrice: currentPrice,
+        startTime: startTime,
+        endTime,
+        status: "active",
+        priceSnapshots: [{ price: currentPrice, timestamp: new Date(nowMs) }],
+      });
+      console.log(
+        `[BinaryScheduler] New market ${market.id} | Target: $${currentPrice.toFixed(2)} | Ends: ${endTime.toISOString()}`,
+      );
+    }
 
-    // Prune old history to keep strictly 6 markets (1 active, 5 history)
+    currentMarketId = market.id;
+
+    // Prune old history
     await pruneOldMarkets();
 
     // Snapshot prices periodically for the chart
@@ -104,7 +117,7 @@ async function createNewCycle(): Promise<void> {
     }, PRICE_SNAPSHOT_INTERVAL_MS);
 
     // Schedule settlement at cycle end strictly
-    const durationMs = endTimeMs - Date.now();
+    const durationMs = Math.max(0, endTimeMs - Date.now());
     cycleTimer = setTimeout(async () => {
       try {
         if (snapshotTimer) clearInterval(snapshotTimer);
@@ -112,32 +125,31 @@ async function createNewCycle(): Promise<void> {
       } catch (err) {
         console.error(`[BinaryScheduler] Fatal error settling market ${market.id}:`, err);
       } finally {
-        // Start next cycle REGARDLESS of settlement success
+        // Start next cycle
         createNewCycle();
       }
     }, durationMs) as any;
   } catch (err) {
     console.error("[BinaryScheduler] Error creating cycle:", err);
-    // Retry in 5s if cycle creation fails (e.g. DB down)
+    // Retry in 5s
     cycleTimer = setTimeout(() => createNewCycle(), 5000) as any;
   }
 }
 
 async function settlePreviousMarket(): Promise<void> {
-  // Settle any markets that are still "active" and past their endTime
+  // Settle any markets that are still "active" or "settling" and past their endTime
   try {
     const staleMarkets = await BinaryMarket.find({
-      status: "active",
+      status: { $in: ["active", "settling"] },
       endTime: { $lte: new Date() },
     });
 
     for (const market of staleMarkets) {
       try {
-        console.log(`[BinaryScheduler] Catching up on stale market: ${market.id}`);
+        console.log(`[BinaryScheduler] Catching up on stale market: ${market.id} (Status: ${market.status})`);
         await settleMarket(market.id);
       } catch (err) {
         console.error(`[BinaryScheduler] Error settling stale market ${market.id}:`, err);
-        // Continue to next stale market
       }
     }
   } catch (err) {
@@ -147,16 +159,39 @@ async function settlePreviousMarket(): Promise<void> {
 
 async function settleMarket(marketId: string): Promise<void> {
   // Atomically claim this market for settlement
+  // We allow "active" or "settling" (to resume interrupted settlement)
   const market = await BinaryMarket.findOneAndUpdate(
-    { _id: marketId, status: "active" },
+    { _id: marketId, status: { $in: ["active", "settling"] } },
     { $set: { status: "settling" } },
     { new: true }
   );
-  if (!market) return; // Already picked up or resolved
+  if (!market) return;
 
-  const finalPrice = binanceFeed.getLatestPrice();
+  // Determine final price: live price if current, or closest snapshot if stale
+  let finalPrice = binanceFeed.getLatestPrice();
+  const nowMs = Date.now();
+  const endTimeMs = new Date(market.endTime).getTime();
+  
+  // If market ended more than 30s ago, try to find a price from snapshots
+  if (nowMs - endTimeMs > 30000 && market.priceSnapshots && market.priceSnapshots.length > 0) {
+    // Find snapshot closest to endTime
+    let closest = market.priceSnapshots[0];
+    let minDiff = Math.abs(new Date(closest.timestamp).getTime() - endTimeMs);
+    
+    for (const snap of market.priceSnapshots) {
+      const diff = Math.abs(new Date(snap.timestamp).getTime() - endTimeMs);
+      if (diff < minDiff) {
+        minDiff = diff;
+        closest = snap;
+      }
+    }
+    finalPrice = closest.price;
+    console.log(`[BinaryScheduler] Using historical price for ${marketId}: $${finalPrice} (diff: ${minDiff}ms)`);
+  }
+
   if (finalPrice <= 0) {
-    console.warn(`[BinaryScheduler] Cannot settle ${marketId}: no final price`);
+    console.warn(`[BinaryScheduler] Cannot settle ${marketId}: no price identified`);
+    // Revert to active so it can be retried later
     await BinaryMarket.updateOne({ _id: marketId }, { $set: { status: "active" } });
     return;
   }
@@ -165,43 +200,40 @@ async function settleMarket(marketId: string): Promise<void> {
     finalPrice >= market.targetPrice ? "settled_up" : "settled_down";
   const winningSide = outcome === "settled_up" ? "up" : "down";
 
-  // Add final price snapshot dynamically inside update layer
-  const finalSnapshot = { price: finalPrice, timestamp: new Date() };
+  // Use the identified price as the final snapshot
+  const finalSnapshot = { price: finalPrice, timestamp: new Date(endTimeMs) };
 
   // Credit winners
   const winningTrades = market.trades.filter((t) => t.side === winningSide && !t.sold);
   const losingTrades = market.trades.filter((t) => t.side !== winningSide && !t.sold);
 
   for (const trade of winningTrades) {
-    // Binary option payout: amount / entryProbability
     const payout = trade.amount / Math.max(trade.entryProbability, 0.01);
-    trade.payout = Math.round(payout * 100) / 100;
+    const roundedPayout = Math.round(payout * 100) / 100;
+    trade.payout = roundedPayout;
 
     try {
       const user = await User.findById(trade.userId);
       if (user) {
-        user.balance += trade.payout;
+        user.balance += roundedPayout;
         if (!user.tradeHistory) user.tradeHistory = [];
         user.tradeHistory.push({
           marketId: market.id,
-          marketTitle: `BTC ${winningSide.toUpperCase()} @ ${Math.round(trade.entryProbability * 100)}¢ (Tgt: $${market.targetPrice.toLocaleString()})`,
+          marketTitle: `BTC ${winningSide.toUpperCase()} Payout (Tgt: $${market.targetPrice.toLocaleString()})`,
           tradeType: "payout",
           optionId: winningSide,
           optionName: winningSide === "up" ? "Up" : "Down",
-          amount: trade.payout,
+          amount: roundedPayout,
           shares: 1,
           averagePrice: trade.entryProbability,
           fee: 0,
-          cashDelta: trade.payout,
+          cashDelta: roundedPayout,
           timestamp: new Date(),
         } as any);
         await user.save();
       }
     } catch (err) {
-      console.error(
-        `[BinaryScheduler] Error crediting user ${trade.userId}:`,
-        err,
-      );
+      console.error(`[BinaryScheduler] Error crediting user ${trade.userId} for market ${marketId}:`, err);
     }
   }
 
@@ -210,7 +242,7 @@ async function settleMarket(marketId: string): Promise<void> {
     trade.payout = 0;
   }
 
-  // Raw versionless update prevents race condition VersionErrors
+  // Final update to the market
   await BinaryMarket.updateOne(
     { _id: marketId },
     {
@@ -224,7 +256,7 @@ async function settleMarket(marketId: string): Promise<void> {
   );
 
   console.log(
-    `[BinaryScheduler] Settled ${marketId}: ${outcome} | Final: $${finalPrice.toFixed(2)} vs Target: $${market.targetPrice.toFixed(2)} | ${winningTrades.length} winners / ${losingTrades.length} losers`,
+    `[BinaryScheduler] Settled ${marketId}: ${outcome} | Final: $${finalPrice.toFixed(2)} vs Target: $${market.targetPrice.toFixed(2)} | ${winningTrades.length} winners`,
   );
 }
 
