@@ -118,6 +118,12 @@ router.get("/binary-markets/active", async (_req, res) => {
       new Date(market.endTime).getTime() - Date.now(),
     );
 
+    // Reactive self-healing: If market is expired but still marked 'active', trigger check
+    if (timeRemainingMs <= 0 && market.status === "active") {
+      const { ensureActiveMarket } = await import("../services/binaryScheduler.js");
+      ensureActiveMarket().catch(err => console.error("[BinaryRoutes] Reactive settle failed:", err));
+    }
+
     const { probability, activeVolatility, momentumBias } =
       calculateLiveProbability({
         currentPrice,
