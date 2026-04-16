@@ -106,26 +106,42 @@ async function createNewCycle(): Promise<void> {
     // Schedule settlement at cycle end strictly
     const durationMs = endTimeMs - Date.now();
     cycleTimer = setTimeout(async () => {
-      if (snapshotTimer) clearInterval(snapshotTimer);
-      await settleMarket(market.id);
-      // Start next cycle
-      createNewCycle();
+      try {
+        if (snapshotTimer) clearInterval(snapshotTimer);
+        await settleMarket(market.id);
+      } catch (err) {
+        console.error(`[BinaryScheduler] Fatal error settling market ${market.id}:`, err);
+      } finally {
+        // Start next cycle REGARDLESS of settlement success
+        createNewCycle();
+      }
     }, durationMs) as any;
   } catch (err) {
     console.error("[BinaryScheduler] Error creating cycle:", err);
+    // Retry in 5s if cycle creation fails (e.g. DB down)
     cycleTimer = setTimeout(() => createNewCycle(), 5000) as any;
   }
 }
 
 async function settlePreviousMarket(): Promise<void> {
   // Settle any markets that are still "active" and past their endTime
-  const staleMarkets = await BinaryMarket.find({
-    status: "active",
-    endTime: { $lte: new Date() },
-  });
+  try {
+    const staleMarkets = await BinaryMarket.find({
+      status: "active",
+      endTime: { $lte: new Date() },
+    });
 
-  for (const market of staleMarkets) {
-    await settleMarket(market.id);
+    for (const market of staleMarkets) {
+      try {
+        console.log(`[BinaryScheduler] Catching up on stale market: ${market.id}`);
+        await settleMarket(market.id);
+      } catch (err) {
+        console.error(`[BinaryScheduler] Error settling stale market ${market.id}:`, err);
+        // Continue to next stale market
+      }
+    }
+  } catch (err) {
+    console.error("[BinaryScheduler] Error fetching stale markets:", err);
   }
 }
 
