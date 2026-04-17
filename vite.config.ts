@@ -1,6 +1,8 @@
+import "dotenv/config";
 import { defineConfig, Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "node:path";
+import "dotenv/config";
 import { createServer } from "./mapi/server";
 
 // https://vitejs.dev/config/
@@ -37,14 +39,14 @@ function expressPlugin(): Plugin {
         const app = await createServer();
         // Add Express app as middleware to Vite dev server, but only for API/Uploads
         server.middlewares.use((req: any, res: any, next: any) => {
-          if (req.url?.startsWith('/mapi') || req.url?.startsWith('/uploads')) {
+          if (req.url?.startsWith("/mapi") || req.url?.startsWith("/uploads")) {
             app(req, res, next);
           } else {
             next();
           }
         });
       } catch (error) {
-        console.error('Failed to initialize server:', error);
+        console.error("Failed to initialize server:", error);
       }
     },
   };

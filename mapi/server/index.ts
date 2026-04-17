@@ -1,3 +1,4 @@
+import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
@@ -8,26 +9,32 @@ import { initializePassport } from "./routes/auth.js";
 export { connectDB } from "./database.js";
 
 import marketRoutes from "./routes/markets.js";
+import binaryMarketRoutes from "./routes/binaryMarkets.js";
+import adminRoutes from "./routes/admin.js";
 import {
   handleGoogleAuth,
   handleGoogleCallback,
   handleAuthSuccess,
   handleLogout,
-  handleGetUser
+  handleGetUser,
 } from "./routes/auth.js";
 import User from "./models/User.js";
+import { binanceFeed } from "./services/binanceFeed.js";
+import { startBinaryScheduler } from "./services/binaryScheduler.js";
 
 export async function createServer() {
   const app = express();
-  
+
   // Important for Vercel behind proxy
   app.set("trust proxy", 1);
 
   // Middleware
-  app.use(cors({
-    origin: true, // Allow all origins since using proxy
-    credentials: true
-  }));
+  app.use(
+    cors({
+      origin: true, // Allow all origins since using proxy
+      credentials: true,
+    }),
+  );
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
 
@@ -36,7 +43,7 @@ export async function createServer() {
   app.use("/uploads", express.static(uploadsPath));
 
   // Cookie parsing (stateless auth)
-  app.use(cookieParser(process.env.SESSION_SECRET || 'metamarket-secret-key'));
+  app.use(cookieParser(process.env.SESSION_SECRET || "metamarket-secret-key"));
 
   // Initialize Passport
   initializePassport();
@@ -72,15 +79,15 @@ export async function createServer() {
       const dbState = mongoose.connection.readyState;
       const isConnected = dbState === 1;
       res.json({
-        status: 'ok',
-        database: isConnected ? 'connected' : 'disconnected',
-        timestamp: new Date().toISOString()
+        status: "ok",
+        database: isConnected ? "connected" : "disconnected",
+        timestamp: new Date().toISOString(),
       });
     } catch (error) {
       res.status(500).json({
-        status: 'error',
-        database: 'error',
-        error: error.message
+        status: "error",
+        database: "error",
+        error: error.message,
       });
     }
   });
@@ -88,16 +95,29 @@ export async function createServer() {
   // Market routes
   apiRouter.use("/", marketRoutes);
 
+  // Binary market routes
+  apiRouter.use("/", binaryMarketRoutes);
+
+  // Admin routes
+  apiRouter.use("/", adminRoutes);
+
   // Auth routes
   apiRouter.get('/auth/google', handleGoogleAuth);
   apiRouter.get('/auth/google/callback', handleGoogleCallback, handleAuthSuccess);
   apiRouter.post('/auth/logout', handleLogout);
   apiRouter.get('/user', handleGetUser);
 
-
   // Mount API router
   app.use("/mapi", apiRouter);
 
+  // Start Binance feed and binary market scheduler
+  try {
+    binanceFeed.start();
+    startBinaryScheduler();
+    console.log("[Server] Binance feed and binary scheduler started");
+  } catch (err) {
+    console.error("[Server] Failed to start binary market services:", err);
+  }
+
   return app;
 }
-
