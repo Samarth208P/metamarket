@@ -7,7 +7,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 
-const BINANCE_WS_URL = "wss://stream.binance.com:9443/ws/btcusdt@aggTrade";
+const BINANCE_WS_URL = "wss://data-stream.binance.vision:9443/ws/btcusdt@aggTrade";
 const MAX_HISTORY = 1000; // Rolling window for chart
 const RECONNECT_DELAY = 3000;
 

@@ -36,8 +36,8 @@ export function startBinaryScheduler(): void {
     ensureActiveMarket();
   }, 5000); // Check every 5s for faster settlement
 
-  // Also run immediately to bootstrap the first market
-  ensureActiveMarket();
+  // Also run after a short delay to allow Binance WebSocket to connect
+  setTimeout(ensureActiveMarket, 3000);
 }
 
 export function stopBinaryScheduler(): void {

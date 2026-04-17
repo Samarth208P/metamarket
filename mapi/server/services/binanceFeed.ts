@@ -7,7 +7,7 @@
 
 import { EventEmitter } from "events";
 
-const BINANCE_WS_URL = "wss://stream.binance.com:9443/ws/btcusdt@aggTrade";
+const BINANCE_WS_URL = "wss://data-stream.binance.vision:9443/ws/btcusdt@aggTrade";
 const RECONNECT_DELAY_MS = 3000;
 const MAX_RECENT_PRICES = 30; // ~30 seconds of data for ROC
 
@@ -127,7 +127,7 @@ export const binanceFeed = new BinanceFeedManager();
 export async function fetchBinancePriceRest(): Promise<number> {
   try {
     const response = await fetch(
-      "https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT",
+      "https://data-api.binance.vision/api/v3/ticker/price?symbol=BTCUSDT",
     );
     const data = await response.json();
     const price = parseFloat(data.price);
@@ -148,7 +148,7 @@ export async function fetchBinancePriceRest(): Promise<number> {
 export async function fetchBinanceRecentPricesRest(): Promise<number[]> {
   try {
     const response = await fetch(
-      "https://api.binance.com/api/v3/trades?symbol=BTCUSDT&limit=20",
+      "https://data-api.binance.vision/api/v3/trades?symbol=BTCUSDT&limit=20",
     );
     const data = await response.json();
     if (Array.isArray(data)) {
@@ -175,7 +175,7 @@ export async function fetchBinancePriceAtTime(
     // If market ends at 20:30:00, we want the close of the 20:29:00-20:29:59 candle.
     const startTime = Math.floor((timestampMs - 1) / 60000) * 60000;
     const response = await fetch(
-      `https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1m&startTime=${startTime}&limit=1`,
+      `https://data-api.binance.vision/api/v3/klines?symbol=BTCUSDT&interval=1m&startTime=${startTime}&limit=1`,
     );
     const data = await response.json();
     if (Array.isArray(data) && data.length > 0) {
