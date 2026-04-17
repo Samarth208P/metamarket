@@ -9,6 +9,8 @@ import { initializePassport } from "./routes/auth.js";
 export { connectDB } from "./database.js";
 
 import marketRoutes from "./routes/markets.js";
+import binaryMarketRoutes from "./routes/binaryMarkets.js";
+import adminRoutes from "./routes/admin.js";
 import {
   handleGoogleAuth,
   handleGoogleCallback,
@@ -17,6 +19,8 @@ import {
   handleGetUser,
 } from "./routes/auth.js";
 import User from "./models/User.js";
+import { binanceFeed } from "./services/binanceFeed.js";
+import { startBinaryScheduler } from "./services/binaryScheduler.js";
 
 export async function createServer() {
   const app = express();
@@ -91,18 +95,29 @@ export async function createServer() {
   // Market routes
   apiRouter.use("/", marketRoutes);
 
+  // Binary market routes
+  apiRouter.use("/", binaryMarketRoutes);
+
+  // Admin routes
+  apiRouter.use("/", adminRoutes);
+
   // Auth routes
-  apiRouter.get("/auth/google", handleGoogleAuth);
-  apiRouter.get(
-    "/auth/google/callback",
-    handleGoogleCallback,
-    handleAuthSuccess,
-  );
-  apiRouter.post("/auth/logout", handleLogout);
-  apiRouter.get("/user", handleGetUser);
+  apiRouter.get('/auth/google', handleGoogleAuth);
+  apiRouter.get('/auth/google/callback', handleGoogleCallback, handleAuthSuccess);
+  apiRouter.post('/auth/logout', handleLogout);
+  apiRouter.get('/user', handleGetUser);
 
   // Mount API router
   app.use("/mapi", apiRouter);
+
+  // Start Binance feed and binary market scheduler
+  try {
+    binanceFeed.start();
+    startBinaryScheduler();
+    console.log("[Server] Binance feed and binary scheduler started");
+  } catch (err) {
+    console.error("[Server] Failed to start binary market services:", err);
+  }
 
   return app;
 }

@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Plus, CheckCircle, XCircle, Clock, Trash2, ImagePlus, Loader2 } from 'lucide-react';
+import { Plus, CheckCircle, XCircle, Clock, Trash2, ImagePlus, Loader2, Shield, UserPlus, ShieldAlert } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 
@@ -61,6 +61,120 @@ async function uploadImage(file: File): Promise<string> {
   if (!res.ok) throw new Error('Upload failed');
   const json = await res.json();
   return json.url as string;
+}
+
+function AdminManagement() {
+  const [email, setEmail] = useState('');
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const { data: admins, isLoading } = useQuery<any[]>({
+    queryKey: ['admin-list'],
+    queryFn: async () => {
+      const res = await fetch('/mapi/admin/list', { credentials: 'include' });
+      if (!res.ok) throw new Error('Failed to fetch admins');
+      return res.json();
+    }
+  });
+
+  const addAdminMutation = useMutation({
+    mutationFn: async (email: string) => {
+      const res = await fetch('/mapi/admin/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ email })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to add admin');
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-list'] });
+      setEmail('');
+      toast({ title: 'Admin Added', description: 'The user has been promoted to administrator.' });
+    },
+    onError: (err: Error) => {
+      toast({ title: 'Error', description: err.message, variant: 'destructive' });
+    }
+  });
+
+  const removeAdminMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const res = await fetch('/mapi/admin/remove', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ userId })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to remove admin');
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-list'] });
+      toast({ title: 'Admin Removed', description: 'Administrator status revoked.' });
+    },
+    onError: (err: Error) => {
+      toast({ title: 'Error', description: err.message, variant: 'destructive' });
+    }
+  });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2"><Shield className="w-5 h-5 text-primary" /> User Management</CardTitle>
+        <CardDescription>Add or remove platform administrators by email.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        <div className="flex gap-3">
+          <div className="flex-1">
+            <Input 
+              placeholder="user@iitr.ac.in" 
+              value={email} 
+              onChange={(e) => setEmail(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && addAdminMutation.mutate(email)}
+            />
+          </div>
+          <Button onClick={() => addAdminMutation.mutate(email)} disabled={addAdminMutation.isPending || !email}>
+            <UserPlus className="w-4 h-4 mr-2" /> Add Admin
+          </Button>
+        </div>
+
+        <div className="space-y-3">
+          <h4 className="text-xs font-black uppercase text-muted-foreground tracking-widest">Current Administrators</h4>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {isLoading ? (
+              <div className="col-span-2 flex justify-center py-4"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
+            ) : admins?.map((admin) => (
+              <div key={admin._id} className="flex items-center justify-between p-3 rounded-xl border border-border bg-muted/20">
+                <div className="min-w-0">
+                  <p className="text-sm font-bold truncate">{admin.name}</p>
+                  <p className="text-xs text-muted-foreground truncate">{admin.email}</p>
+                </div>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  onClick={() => removeAdminMutation.mutate(admin._id)}
+                  className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 flex gap-3">
+          <ShieldAlert className="w-5 h-5 text-amber-500 shrink-0" />
+          <p className="text-xs text-amber-500/80 leading-relaxed">
+            <strong>Warning:</strong> Admins have full control over markets, solvency settings, and user promotions. 
+            Only add trusted individuals from the institution. Users must have logged in at least once before they can be promoted.
+          </p>
+        </div>
+      </CardContent>
+    </Card>
+  );
 }
 
 export default function Admin() {
@@ -352,6 +466,8 @@ export default function Admin() {
               </div>
             </CardContent>
           </Card>
+
+          <AdminManagement />
 
           {/* Create New Market */}
           <Card>

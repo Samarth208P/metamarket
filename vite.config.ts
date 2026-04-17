@@ -2,6 +2,7 @@ import "dotenv/config";
 import { defineConfig, Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "node:path";
+import "dotenv/config";
 import { createServer } from "./mapi/server";
 
 // https://vitejs.dev/config/
