@@ -51,9 +51,12 @@ export function BinaryChart({
     return t * t * (3 - 2 * t);
   }
 
+  const WINDOW_MS = 5 * 60 * 1000; // 5 minutes
+
   const chartData = useMemo(() => {
+    const windowStart = delayedTime - WINDOW_MS;
     const raw = priceHistory
-      .filter((point) => point.timestamp <= delayedTime)
+      .filter((point) => point.timestamp <= delayedTime && point.timestamp >= windowStart)
       .map((point) => ({ time: point.timestamp, price: point.price }));
 
     // Append live point for continuity
@@ -213,7 +216,7 @@ export function BinaryChart({
               <XAxis
                 dataKey="time"
                 type="number"
-                domain={[delayedTime - 30000, delayedTime]}
+                domain={[delayedTime - WINDOW_MS, delayedTime]}
                 axisLine={false}
                 tick={false}
               />

@@ -39,6 +39,8 @@ export function BinaryTradePanel({
   const [isTrading, setIsTrading] = useState(false);
   const [timeRemainingMs, setTimeRemainingMs] = useState(0);
   const [isConfirming, setIsConfirming] = useState(false);
+  const [isSellConfirming, setIsSellConfirming] = useState(false);
+  const [pendingSellRatio, setPendingSellRatio] = useState<number>(1);
 
   // ── Countdown timer ────────────────────────────────────────────
   useEffect(() => {
@@ -168,6 +170,7 @@ export function BinaryTradePanel({
           description: `You received ₹${data.cashOutValue.toFixed(2)}`,
         });
         setIsConfirming(false);
+        setIsSellConfirming(false);
         refreshUser();
       } catch (err: any) {
         toast({
@@ -231,6 +234,7 @@ export function BinaryTradePanel({
             onClick={() => {
               setTradeType("buy");
               setIsConfirming(false);
+              setIsSellConfirming(false);
               setAmount("");
             }}
             className={cn(
@@ -246,6 +250,7 @@ export function BinaryTradePanel({
             onClick={() => {
               setTradeType("sell");
               setIsConfirming(false);
+              setIsSellConfirming(false);
               setAmount("");
             }}
             className={cn(
@@ -428,7 +433,7 @@ export function BinaryTradePanel({
                   </div>
                 </div>
 
-                {/* Sell ratio buttons — matches other market style */}
+                {/* Sell ratio buttons — stage ratio for confirmation */}
                 <div className="grid grid-cols-4 gap-2">
                   {[
                     { label: "25%", ratio: 0.25 },
@@ -441,8 +446,14 @@ export function BinaryTradePanel({
                       variant="outline"
                       size="sm"
                       disabled={isTrading}
-                      className="h-10 text-xs font-bold border-border bg-muted/10 hover:bg-primary/10 hover:text-primary hover:border-primary/30 rounded-lg transition-all"
-                      onClick={() => handleSell(ratio)}
+                      className={cn(
+                        "h-10 text-xs font-bold border-border bg-muted/10 hover:bg-primary/10 hover:text-primary hover:border-primary/30 rounded-lg transition-all",
+                        pendingSellRatio === ratio && isSellConfirming && "border-primary bg-primary/10 text-primary"
+                      )}
+                      onClick={() => {
+                        setPendingSellRatio(ratio);
+                        setIsSellConfirming(false);
+                      }}
                     >
                       {label}
                     </Button>
@@ -485,6 +496,21 @@ export function BinaryTradePanel({
                     </span>
                   </div>
                 </div>
+                {/* Sell estimate box */}
+                <div className="rounded-xl border border-border bg-muted/20 p-4 text-xs space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Selling</span>
+                    <span className="font-bold">
+                      {Math.round(pendingSellRatio * 100)}% of {selectedSide.toUpperCase()}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Est. Return</span>
+                    <span className="font-bold text-yes">
+                      ₹{(currentHolding.value * pendingSellRatio).toFixed(2)}
+                    </span>
+                  </div>
+                </div>
               </>
             ) : (
               <div className="flex flex-col items-center justify-center py-8 text-center rounded-xl border border-border bg-muted/10">
@@ -503,6 +529,50 @@ export function BinaryTradePanel({
           </div>
         )}
       </div>
+
+      {/* ── Sell Submit Button ───────────────────────────────────── */}
+      {tradeType === "sell" && currentHolding.positions.length > 0 && (
+        <div className="p-6 pt-0">
+          <div className="flex flex-col gap-2">
+            {isSellConfirming ? (
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setIsSellConfirming(false)}
+                  disabled={isTrading}
+                  className="flex-1 h-12 font-bold"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={() => handleSell(pendingSellRatio)}
+                  disabled={isTrading}
+                  className={cn(
+                    "flex-[2] h-12 text-base font-black uppercase tracking-widest",
+                    selectedSide === "up"
+                      ? "bg-yes text-white hover:bg-yes/90"
+                      : "bg-no text-white hover:bg-no/90"
+                  )}
+                >
+                  {isTrading ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    `Confirm Sell ${Math.round(pendingSellRatio * 100)}%`
+                  )}
+                </Button>
+              </div>
+            ) : (
+              <Button
+                onClick={() => setIsSellConfirming(true)}
+                disabled={!isMarketActive || isTrading}
+                className="w-full h-12 text-base font-bold bg-primary"
+              >
+                Review Sell — {Math.round(pendingSellRatio * 100)}%
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ── Submit Button ──────────────────────────────────────── */}
       {tradeType === "buy" && (
