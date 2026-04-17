@@ -22,34 +22,14 @@ export function startBinaryScheduler(): void {
   isRunning = true;
   console.log("[BinaryScheduler] Starting market cycle scheduler");
 
-  // Initial cycle creation
-  const latest = binanceFeed.getLatestPrice();
-  if (latest > 0) {
-    createNewCycle();
-  } else {
-    // Wait for first price
-    const onFirstPrice = () => {
-      binanceFeed.off("price", onFirstPrice);
-      createNewCycle();
-    };
-    binanceFeed.on("price", onFirstPrice);
-    
-    // Safety fallback
-    setTimeout(async () => {
-      if (binanceFeed.getLatestPrice() <= 0) {
-        const restPrice = await fetchBinancePriceRest();
-        if (restPrice > 0) {
-          createNewCycle();
-        }
-      }
-    }, 5000);
-  }
-
-  // Heartbeat to ensure a market always exists
+  // Start heartbeat to ensure a market always exists
   if (heartbeatTimer) clearInterval(heartbeatTimer);
   heartbeatTimer = setInterval(() => {
     ensureActiveMarket();
   }, 30000); // Check every 30s
+
+  // Also run immediately to bootstrap the first market
+  ensureActiveMarket();
 }
 
 export function stopBinaryScheduler(): void {
