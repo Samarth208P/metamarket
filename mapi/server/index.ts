@@ -1,3 +1,4 @@
+import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
@@ -15,7 +16,7 @@ import {
   handleGoogleCallback,
   handleAuthSuccess,
   handleLogout,
-  handleGetUser
+  handleGetUser,
 } from "./routes/auth.js";
 import User from "./models/User.js";
 import { binanceFeed } from "./services/binanceFeed.js";
@@ -23,15 +24,17 @@ import { startBinaryScheduler } from "./services/binaryScheduler.js";
 
 export async function createServer() {
   const app = express();
-  
+
   // Important for Vercel behind proxy
   app.set("trust proxy", 1);
 
   // Middleware
-  app.use(cors({
-    origin: true, // Allow all origins since using proxy
-    credentials: true
-  }));
+  app.use(
+    cors({
+      origin: true, // Allow all origins since using proxy
+      credentials: true,
+    }),
+  );
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
 
@@ -40,7 +43,7 @@ export async function createServer() {
   app.use("/uploads", express.static(uploadsPath));
 
   // Cookie parsing (stateless auth)
-  app.use(cookieParser(process.env.SESSION_SECRET || 'metamarket-secret-key'));
+  app.use(cookieParser(process.env.SESSION_SECRET || "metamarket-secret-key"));
 
   // Initialize Passport
   initializePassport();
@@ -76,15 +79,15 @@ export async function createServer() {
       const dbState = mongoose.connection.readyState;
       const isConnected = dbState === 1;
       res.json({
-        status: 'ok',
-        database: isConnected ? 'connected' : 'disconnected',
-        timestamp: new Date().toISOString()
+        status: "ok",
+        database: isConnected ? "connected" : "disconnected",
+        timestamp: new Date().toISOString(),
       });
     } catch (error) {
       res.status(500).json({
-        status: 'error',
-        database: 'error',
-        error: error.message
+        status: "error",
+        database: "error",
+        error: error.message,
       });
     }
   });
@@ -118,4 +121,3 @@ export async function createServer() {
 
   return app;
 }
-
