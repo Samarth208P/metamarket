@@ -162,12 +162,8 @@ export function calculateLiveProbability(params: {
     recentPrices = [],
   } = params;
 
-  // 1. VIV Jitter — add a small random perturbation to σ
-  const jitter =
-    params.jitterSeed !== undefined
-      ? params.jitterSeed
-      : (Math.random() * 2 - 1) * VIV_JITTER_RANGE;
-  const activeVolatility = Math.max(0.001, DEFAULT_VOLATILITY + jitter);
+  // 1. VIV Jitter — removed random component for exact frontend/backend sync
+  const activeVolatility = DEFAULT_VOLATILITY;
 
   // 2. Base CDF probability
   let probability = calculateUpProbability(
@@ -190,15 +186,14 @@ export function calculateLiveProbability(params: {
     const timeFactor = 0.5 + (timeProgress * 0.5); // 0.5 to 1.0
 
     // Boost ranges from 0 to 0.12 based on price distance, scaled by time
-    // Reduced sensitivity (multiplier 200 instead of 5000) to keep prices realistic
+    // Reduced sensitivity (multiplier 200) to keep prices realistic
     const boostMagnitude = Math.min(0.12, Math.abs(pctDiff) * 200) * timeFactor;
     
+    // Instead of a hard floor (which causes 73p -> 43p jumps), we add a smooth bias
     if (priceDiff > 0) {
-      // Ensure it's at least slightly above 50p if price is up
-      probability = Math.max(probability, 0.505 + boostMagnitude);
+      probability = clampProbability(probability + 0.02 + boostMagnitude);
     } else {
-      // Ensure it's at most slightly below 50p if price is down
-      probability = Math.min(probability, 0.495 - boostMagnitude);
+      probability = clampProbability(probability - 0.02 - boostMagnitude);
     }
   }
 

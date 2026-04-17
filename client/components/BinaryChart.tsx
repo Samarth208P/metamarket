@@ -40,18 +40,28 @@ export function BinaryChart({
     return () => cancelAnimationFrame(frameId);
   }, []);
 
-  const delayedTime = frozenAtTime ? frozenAtTime : (now - 1000);
+  const delayedTime = frozenAtTime ? frozenAtTime : (now - 500); // Reduced delay for more responsive feel
   const displayCurrentPrice = frozenPrice !== undefined ? frozenPrice : currentPrice;
 
   const chartData = useMemo(() => {
-    return priceHistory
+    const historical = priceHistory
       .filter((point) => point.timestamp <= delayedTime)
       .map((point) => ({
-        time: point.timestamp, // use raw timestamp for sliding axis
+        time: point.timestamp,
         price: point.price,
-        timestamp: point.timestamp,
       }));
-  }, [priceHistory, delayedTime]);
+
+    // To make the graph "fluid", we append a live point at the exact 'delayedTime'
+    // otherwise the graph "jumps" every second.
+    if (historical.length > 0 && !frozenAtTime) {
+      historical.push({
+        time: delayedTime,
+        price: displayCurrentPrice,
+      });
+    }
+
+    return historical;
+  }, [priceHistory, delayedTime, displayCurrentPrice, frozenAtTime]);
 
   // Dynamic Y-axis domain based on data range
   const { yMin, yMax } = useMemo(() => {
@@ -161,14 +171,18 @@ export function BinaryChart({
                   <stop
                     offset="0%"
                     stopColor={accentColor}
-                    stopOpacity={0.3}
+                    stopOpacity={0.4}
                   />
                   <stop
                     offset="100%"
                     stopColor={accentColor}
-                    stopOpacity={0.02}
+                    stopOpacity={0}
                   />
                 </linearGradient>
+                <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+                  <feGaussianBlur stdDeviation="3" result="blur" />
+                  <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                </filter>
               </defs>
               <XAxis
                 dataKey="time"
@@ -181,20 +195,23 @@ export function BinaryChart({
                 domain={[yMin, yMax]}
                 axisLine={false}
                 tickLine={false}
-                tick={{ fontSize: 10, fill: "#71717a" }}
+                tick={{ fontSize: 10, fill: "#71717a", fontWeight: 500 }}
                 tickFormatter={(v) => `$${v.toLocaleString()}`}
-                width={72}
+                width={70}
+                orientation="right"
               />
               <Tooltip
                 contentStyle={{
-                  backgroundColor: "rgba(24, 24, 27, 0.95)",
-                  border: "1px solid rgba(255,255,255,0.1)",
+                  backgroundColor: "rgba(9, 9, 11, 0.9)",
+                  border: "1px solid rgba(255,255,255,0.08)",
                   borderRadius: "12px",
                   padding: "8px 12px",
-                  backdropFilter: "blur(8px)",
+                  backdropFilter: "blur(12px)",
+                  boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.5)",
                 }}
-                labelStyle={{ color: "#a1a1aa", fontSize: 11, marginBottom: 4 }}
-                itemStyle={{ color: "#fff", fontSize: 13, fontWeight: 600 }}
+                labelStyle={{ color: "#71717a", fontSize: 10, fontWeight: 700, textTransform: "uppercase", marginBottom: 2 }}
+                itemStyle={{ color: "#fff", fontSize: 14, fontWeight: 800 }}
+                cursor={{ stroke: "rgba(255,255,255,0.1)", strokeWidth: 1 }}
                 labelFormatter={(label) => new Date(label).toLocaleTimeString("en-IN", {
                   hour12: false,
                   hour: "2-digit",
@@ -206,36 +223,38 @@ export function BinaryChart({
                     minimumFractionDigits: 2,
                     maximumFractionDigits: 2,
                   })}`,
-                  "BTC Price",
+                  "BTC",
                 ]}
               />
               <ReferenceLine
                 y={targetPrice}
-                stroke="#fbbf24"
-                strokeDasharray="6 4"
-                strokeWidth={1.5}
+                stroke="rgba(251, 191, 36, 0.5)"
+                strokeDasharray="4 4"
+                strokeWidth={1}
                 label={{
                   value: "TARGET",
-                  position: "insideTopLeft",
+                  position: "insideBottomRight",
                   fill: "#fbbf24",
-                  fontSize: 10,
-                  fontWeight: 600,
+                  fontSize: 9,
+                  fontWeight: 800,
+                  opacity: 0.8,
                 }}
               />
               <Area
                 type="monotone"
                 dataKey="price"
                 stroke={accentColor}
-                strokeWidth={2}
+                strokeWidth={2.5}
                 fill={`url(#${gradientId})`}
                 dot={false}
                 activeDot={{
                   r: 4,
-                  fill: accentColor,
-                  stroke: "#18181b",
+                  fill: "#fff",
+                  stroke: accentColor,
                   strokeWidth: 2,
                 }}
                 isAnimationActive={false}
+                filter="url(#glow)"
               />
             </AreaChart>
           </ResponsiveContainer>
