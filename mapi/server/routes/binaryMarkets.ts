@@ -113,10 +113,21 @@ router.get("/binary-markets/active", async (_req, res) => {
       currentPrice = await fetchBinancePriceRest();
     }
 
-    const timeRemainingMs = Math.max(
-      0,
-      new Date(market.endTime).getTime() - Date.now(),
-    );
+    const now = Date.now();
+    const endTimeMs = new Date(market.endTime).getTime();
+    const timeRemainingMs = Math.max(0, endTimeMs - now);
+
+    // Stale check: If market ended more than 5 minutes ago, ignore it in this route
+    if (endTimeMs < now - 5 * 60 * 1000) {
+      const { ensureActiveMarket } = await import("../services/binaryScheduler.js");
+      ensureActiveMarket().catch(() => {});
+      return res.json({
+        market: null,
+        livePrice: currentPrice,
+        isConnected: binanceFeed.getIsConnected(),
+        message: "Waiting for new cycle to start...",
+      });
+    }
 
     // Reactive self-healing: If market is expired but still marked 'active', trigger check
     if (timeRemainingMs <= 0 && market.status === "active") {
