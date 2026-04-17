@@ -8,8 +8,9 @@
 
 [[redirects]]
   from = "/mapi/*"
-  to = "/.netlify/functions/index"
+  to = "https://metamarket-backend.onrender.com/mapi/:splat"
   status = 200
+  force = true
 
 [[redirects]]
   from = "/*"
