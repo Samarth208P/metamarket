@@ -53,12 +53,8 @@ export function BinaryTradePanel({
     return () => clearInterval(interval);
   }, [market]);
 
-  // ── Live probabilities (use server-authoritative when available) ────
+  // ── Live probabilities (Computed locally for smooth UI ticks) ────
   const { pUp, pDown } = useMemo(() => {
-    // Prefer server-computed probability for accuracy
-    if (serverProbability && serverProbability.up > 0) {
-      return { pUp: serverProbability.up, pDown: serverProbability.down };
-    }
     // Fallback to local calculation
     if (!market || currentPrice <= 0) {
       return { pUp: 0.5, pDown: 0.5 };
@@ -70,7 +66,7 @@ export function BinaryTradePanel({
       recentPrices,
     });
     return { pUp: result.probability, pDown: 1 - result.probability };
-  }, [serverProbability, market, currentPrice, timeRemainingMs, recentPrices]);
+  }, [market, currentPrice, timeRemainingMs, recentPrices]);
 
   // ── User positions ─────────────────────────────────────────────
   const userTrades = useMemo(() => {

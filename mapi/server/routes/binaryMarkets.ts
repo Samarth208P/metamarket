@@ -144,12 +144,18 @@ router.get("/binary-markets/active", async (_req, res) => {
       ensureActiveMarket().catch(err => console.error("[BinaryRoutes] Reactive settle failed:", err));
     }
 
+    let recentPrices = binanceFeed.getRecentPrices();
+    if (recentPrices.length === 0) {
+      const { fetchBinanceRecentPricesRest } = await import("../services/binanceFeed.js");
+      recentPrices = await fetchBinanceRecentPricesRest();
+    }
+
     const { probability, activeVolatility, momentumBias } =
       calculateLiveProbability({
         currentPrice,
         targetPrice: market.targetPrice,
         timeRemainingMs,
-        recentPrices: binanceFeed.getRecentPrices(),
+        recentPrices,
       });
 
     return res.json({
@@ -262,11 +268,17 @@ router.post(
         new Date(market.endTime).getTime() - Date.now(),
       );
 
+      let recentPrices = binanceFeed.getRecentPrices();
+      if (recentPrices.length === 0) {
+        const { fetchBinanceRecentPricesRest } = await import("../services/binanceFeed.js");
+        recentPrices = await fetchBinanceRecentPricesRest();
+      }
+
       const { probability } = calculateLiveProbability({
         currentPrice,
         targetPrice: market.targetPrice,
         timeRemainingMs,
-        recentPrices: binanceFeed.getRecentPrices(),
+        recentPrices,
       });
 
       const entryProbability = side === "up" ? probability : 1 - probability;
@@ -370,14 +382,25 @@ router.post(
       const ratio = Math.max(0.01, Math.min(1, parseFloat(req.body.ratio) || 1));
       
       // Compute immediate cash out value
-      const currentPrice = binanceFeed.getLatestPrice();
+      let currentPrice = binanceFeed.getLatestPrice();
+      if (currentPrice <= 0) {
+        const { fetchBinancePriceRest } = await import("../services/binanceFeed.js");
+        currentPrice = await fetchBinancePriceRest();
+      }
+
       const timeRemainingMs = Math.max(0, new Date(market.endTime).getTime() - Date.now());
       
+      let recentPrices = binanceFeed.getRecentPrices();
+      if (recentPrices.length === 0) {
+        const { fetchBinanceRecentPricesRest } = await import("../services/binanceFeed.js");
+        recentPrices = await fetchBinanceRecentPricesRest();
+      }
+
       const { probability } = calculateLiveProbability({
         currentPrice,
         targetPrice: market.targetPrice,
         timeRemainingMs,
-        recentPrices: binanceFeed.getRecentPrices(),
+        recentPrices,
       });
 
       const currentSideProbability = side === "up" ? probability : 1 - probability;

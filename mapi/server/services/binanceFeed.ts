@@ -138,6 +138,25 @@ export async function fetchBinancePriceRest(): Promise<number> {
     return 0;
   }
 }
+
+/**
+ * Fetch recent prices from Binance REST API as a fallback for Serverless
+ * Returns an array of the last ~20 recent trade prices.
+ */
+export async function fetchBinanceRecentPricesRest(): Promise<number[]> {
+  try {
+    const response = await fetch("https://api.binance.com/api/v3/trades?symbol=BTCUSDT&limit=20");
+    const data = await response.json();
+    if (Array.isArray(data)) {
+      return data.map((t: any) => parseFloat(t.price)).filter(p => !isNaN(p) && p > 0);
+    }
+    return [];
+  } catch (err) {
+    console.error("[BinanceFeed] Recent Prices REST Fallback failed:", err);
+    return [];
+  }
+}
+
 /**
  * Fetch historical price from Binance REST API for a specific timestamp
  * Uses the 1-minute kline (candle) closing price.
