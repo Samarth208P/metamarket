@@ -9,11 +9,11 @@
 
 // ─── Constants ────────────────────────────────────────────────────────
 export const MARKET_DURATION_MS = 5 * 60 * 1000; // 5 minutes
-export const DEFAULT_VOLATILITY = 0.008; // Lowered for higher sensitivity at 5m scales
-export const VIV_JITTER_RANGE = 0.0001;
-export const MOMENTUM_BIAS_CAP = 0.02; // Increased room for sentiment
-export const MIN_PROBABILITY = 0.01; // Floor at 1¢
-export const MAX_PROBABILITY = 0.99; // Cap at 99¢
+export const DEFAULT_VOLATILITY = 0.0015; // Sharply narrowed to make 5m candles feel more decisive
+export const VIV_JITTER_RANGE = 0.00001;
+export const MOMENTUM_BIAS_CAP = 0.05; // More aggressive sentiment shift
+export const MIN_PROBABILITY = 0.01; // Allow prices to go near 0
+export const MAX_PROBABILITY = 0.99; // Allow prices to go near 100p
 export const PRICE_SNAPSHOT_INTERVAL_MS = 1_000; // 1 s chart resolution
 
 // ─── Types ────────────────────────────────────────────────────────────
@@ -177,11 +177,25 @@ export function calculateLiveProbability(params: {
     activeVolatility,
   );
 
-  // If there's any price difference, ensure we don't return exactly 0.5 if possible
-  if (currentPrice > targetPrice && probability <= 0.501) {
-    probability = Math.max(probability, 0.51);
-  } else if (currentPrice < targetPrice && probability >= 0.499) {
-    probability = Math.min(probability, 0.49);
+  // If there's any price difference, ensure we don't return exactly 0.5
+  // AND push it more aggressively toward the edges
+  const priceDiff = currentPrice - targetPrice;
+  const pctDiff = priceDiff / targetPrice;
+  
+  // Artificial "Decision Boost": markets with price difference should feel decisive
+  if (Math.abs(pctDiff) > 0.00001) { // roughly $0.60 move at $60k
+    if (priceDiff > 0) {
+      probability = Math.max(probability, 0.65); // If up, at least 65p
+    } else {
+      probability = Math.min(probability, 0.35); // If down, max 35p (meaning Down is 65p)
+    }
+  }
+
+  // Final edge cases
+  if (currentPrice > targetPrice && probability <= 0.50) {
+    probability = 0.55;
+  } else if (currentPrice < targetPrice && probability >= 0.50) {
+    probability = 0.45;
   }
 
   // 3. Momentum Bias — shift based on Rate of Change

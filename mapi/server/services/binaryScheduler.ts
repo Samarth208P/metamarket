@@ -15,8 +15,11 @@ let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 let cycleTimer: ReturnType<typeof setTimeout> | null = null;
 let snapshotTimer: ReturnType<typeof setInterval> | null = null;
 let currentMarketId: string | null = null;
+let isRunning = false;
 
 export function startBinaryScheduler(): void {
+  if (isRunning) return;
+  isRunning = true;
   console.log("[BinaryScheduler] Starting market cycle scheduler");
 
   // Initial cycle creation
@@ -57,6 +60,7 @@ export function stopBinaryScheduler(): void {
   snapshotTimer = null;
   heartbeatTimer = null;
   currentMarketId = null;
+  isRunning = false;
 }
 
 /**
@@ -154,13 +158,40 @@ async function createNewCycle(): Promise<void> {
     const durationMs = Math.max(0, endTimeMs - Date.now());
     cycleTimer = setTimeout(async () => {
       try {
-        await settleMarket(market.id);
+        // Clear current market ID so snapshots stop for this one
+        if (currentMarketId === market.id) {
+          currentMarketId = null;
+          if (snapshotTimer) clearInterval(snapshotTimer);
+        }
+
+        // Retry loop for settlement
+        let settled = false;
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          console.log(`[BinaryScheduler] Settlement attempt ${attempt} for ${market.id}`);
+          await settleMarket(market.id);
+          
+          // Verify settlement status
+          const check = await BinaryMarket.findById(market.id);
+          if (check && check.status.startsWith('settled')) {
+            settled = true;
+            break;
+          }
+          
+          if (attempt < 3) {
+            console.log(`[BinaryScheduler] Settlement failed, retrying in 2s...`);
+            await new Promise(r => setTimeout(r, 2000));
+          }
+        }
+
+        if (!settled) {
+          console.error(`[BinaryScheduler] Could not settle market ${market.id} after 3 attempts.`);
+        }
       } catch (err) {
-        console.error(`[BinaryScheduler] Settle error:`, err);
+        console.error(`[BinaryScheduler] Settle loop error:`, err);
       } finally {
         createNewCycle();
       }
-    }, durationMs + 500);
+    }, durationMs + 3000); // Wait 3s instead of 0.5s for Binance klines to finalize
 
   } catch (err) {
     console.error("[BinaryScheduler] Create-cycle error:", err);
