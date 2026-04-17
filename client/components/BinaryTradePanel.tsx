@@ -9,7 +9,6 @@ import {
   calculateLiveProbability,
   calculatePotentialPayout,
   formatPaise,
-  formatCountdown,
 } from "@shared/binaryPrice";
 import type { BinaryMarket as BinaryMarketType } from "@shared/binaryPrice";
 import { ArrowUp, ArrowDown, TrendingUp, Loader2 } from "lucide-react";
@@ -20,6 +19,7 @@ interface BinaryTradePanelProps {
   recentPrices: number[];
   isConnected: boolean;
   isFrozen?: boolean;
+  serverProbability?: { up: number; down: number } | null;
 }
 
 const PRESET_AMOUNTS = [10, 50, 100, 500];
@@ -30,6 +30,7 @@ export function BinaryTradePanel({
   recentPrices,
   isConnected,
   isFrozen,
+  serverProbability,
 }: BinaryTradePanelProps) {
   const { user, updateBalance, refreshUser } = useAuth();
   const { toast } = useToast();
@@ -52,8 +53,13 @@ export function BinaryTradePanel({
     return () => clearInterval(interval);
   }, [market]);
 
-  // ── Live probabilities ─────────────────────────────────────────
+  // ── Live probabilities (use server-authoritative when available) ────
   const { pUp, pDown } = useMemo(() => {
+    // Prefer server-computed probability for accuracy
+    if (serverProbability && serverProbability.up > 0) {
+      return { pUp: serverProbability.up, pDown: serverProbability.down };
+    }
+    // Fallback to local calculation
     if (!market || currentPrice <= 0) {
       return { pUp: 0.5, pDown: 0.5 };
     }
@@ -64,7 +70,7 @@ export function BinaryTradePanel({
       recentPrices,
     });
     return { pUp: result.probability, pDown: 1 - result.probability };
-  }, [market, currentPrice, timeRemainingMs, recentPrices]);
+  }, [serverProbability, market, currentPrice, timeRemainingMs, recentPrices]);
 
   // ── User positions ─────────────────────────────────────────────
   const userTrades = useMemo(() => {
@@ -191,18 +197,29 @@ export function BinaryTradePanel({
 
   const countdownDisplay = (
     <div className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-muted/50 border border-border/50">
-      <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mr-2">
-        Closes in
-      </span>
-      <div className="flex items-center gap-1 font-mono">
-        <span className="bg-foreground/10 text-foreground text-sm font-black px-1.5 py-0.5 rounded">
-          {String(mins).padStart(2, "0")}
-        </span>
-        <span className="text-muted-foreground font-bold">:</span>
-        <span className="bg-foreground/10 text-foreground text-sm font-black px-1.5 py-0.5 rounded">
-          {String(secs).padStart(2, "0")}
-        </span>
-      </div>
+      {!market || timeRemainingMs <= 0 ? (
+        <>
+          <Loader2 className="w-3.5 h-3.5 text-muted-foreground animate-spin mr-1" />
+          <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+            Next round starting...
+          </span>
+        </>
+      ) : (
+        <>
+          <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mr-2">
+            Closes in
+          </span>
+          <div className="flex items-center gap-1 font-mono">
+            <span className="bg-foreground/10 text-foreground text-sm font-black px-1.5 py-0.5 rounded">
+              {String(mins).padStart(2, "0")}
+            </span>
+            <span className="text-muted-foreground font-bold">:</span>
+            <span className="bg-foreground/10 text-foreground text-sm font-black px-1.5 py-0.5 rounded">
+              {String(secs).padStart(2, "0")}
+            </span>
+          </div>
+        </>
+      )}
     </div>
   );
 

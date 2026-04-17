@@ -91,6 +91,11 @@ router.get("/binary-markets/active", async (_req, res) => {
     const marketId = getCurrentMarketId();
     let market = marketId ? await BinaryMarket.findById(marketId) : null;
 
+    // Only use the cached market if it's still active
+    if (market && market.status !== "active") {
+      market = null;
+    }
+
     // Fallback: find the most recent active market
     if (!market) {
       market = await BinaryMarket.findOne({ status: "active" }).sort({
@@ -99,6 +104,10 @@ router.get("/binary-markets/active", async (_req, res) => {
     }
 
     if (!market) {
+      // Proactively trigger the scheduler to create a new market
+      const { ensureActiveMarket } = await import("../services/binaryScheduler.js");
+      ensureActiveMarket().catch(() => {});
+
       return res.json({
         market: null,
         livePrice: binanceFeed.getLatestPrice(),

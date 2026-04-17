@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/Layout";
@@ -23,7 +23,8 @@ export default function BinaryMarket() {
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
     },
-    refetchInterval: 3000,
+    // Poll faster when no market is active (gap between cycles)
+    refetchInterval: (query) => query.state.data?.market ? 3000 : 1500,
     staleTime: 1000,
   });
 
@@ -46,6 +47,9 @@ export default function BinaryMarket() {
   // Build recent prices array from our client-side feed
   const recentPrices = priceHistory.slice(-30).map((p) => p.price);
 
+  // Server-authoritative probability from /active endpoint
+  const serverProbability = activeData?.probability ?? null;
+
   // Periodic user balance refresh (every 10 seconds)
   useEffect(() => {
     if (!user || user.isGuest) return;
@@ -58,7 +62,20 @@ export default function BinaryMarket() {
   const activeMarket: BinaryMarketType | null = activeData?.market ?? null;
   const history: BinaryMarketType[] = historyData ?? [];
 
+  // Keep a stable reference to the last known target price and market
+  // so the chart doesn't break when market is null between cycles
+  const lastTargetPriceRef = useRef<number>(0);
+  const lastMarketRef = useRef<BinaryMarketType | null>(null);
+
+  useEffect(() => {
+    if (activeMarket) {
+      lastTargetPriceRef.current = activeMarket.targetPrice;
+      lastMarketRef.current = activeMarket;
+    }
+  }, [activeMarket]);
+
   const displayedMarket = activeMarket;
+  const stableTargetPrice = activeMarket?.targetPrice ?? (lastTargetPriceRef.current || price);
   const isFrozen = false; // Never freeze the UI anymore, always show what's current
 
   // Refresh balance when market officially settles
@@ -79,7 +96,7 @@ export default function BinaryMarket() {
           <div className="lg:col-span-2">
             <BinaryChart
               priceHistory={priceHistory}
-              targetPrice={displayedMarket?.targetPrice ?? price}
+              targetPrice={stableTargetPrice}
               currentPrice={price}
               isConnected={isConnected}
               frozenAtTime={isFrozen ? new Date(displayedMarket.endTime).getTime() : undefined}
@@ -137,6 +154,7 @@ export default function BinaryMarket() {
               recentPrices={recentPrices}
               isConnected={isConnected}
               isFrozen={isFrozen}
+              serverProbability={serverProbability}
             />
           </div>
         </div>
