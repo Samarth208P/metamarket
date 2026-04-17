@@ -27,37 +27,7 @@ export default function BinaryMarket() {
     staleTime: 1000,
   });
 
-  const [viewMode, setViewMode] = useState<"live" | "review">("live");
-  const [reviewMarketId, setReviewMarketId] = useState<string | null>(null);
   const lastActiveId = React.useRef<string | null>(null);
-
-  // Transition to review mode when active market changes
-  useEffect(() => {
-    const activeId = activeData?.market?.id;
-    if (!activeId) return;
-
-    if (viewMode === "live" && lastActiveId.current && lastActiveId.current !== activeId) {
-      setReviewMarketId(lastActiveId.current);
-      setViewMode("review");
-    }
-    lastActiveId.current = activeId;
-  }, [activeData?.market?.id, viewMode]);
-
-  // Continuously poll the review market until the backend scheduler officially settles it
-  const { data: reviewMarketData } = useQuery({
-    queryKey: ["binary-market-review", reviewMarketId],
-    queryFn: async () => {
-      if (!reviewMarketId) return null;
-      const res = await fetch(`/mapi/binary-markets/${reviewMarketId}`);
-      if (!res.ok) throw new Error("Failed");
-      return res.json();
-    },
-    enabled: !!reviewMarketId && viewMode === "review",
-    refetchInterval: (query) => {
-      const data: any = query.state?.data;
-      return (data && data.status?.startsWith('settled')) ? false : 2000;
-    },
-  });
 
   // Fetch settled market history
   const { data: historyData } = useQuery({
@@ -73,13 +43,6 @@ export default function BinaryMarket() {
     staleTime: 5000,
   });
 
-  const activeMarket: BinaryMarketType | null = activeData?.market ?? null;
-  const reviewMarket: BinaryMarketType | null = reviewMarketData ?? null;
-  const history: BinaryMarketType[] = historyData ?? [];
-
-  const displayedMarket = viewMode === "review" && reviewMarket ? reviewMarket : activeMarket;
-  const isFrozen = viewMode === "review" && displayedMarket.status.startsWith("settled");
-
   // Build recent prices array from our client-side feed
   const recentPrices = priceHistory.slice(-30).map((p) => p.price);
 
@@ -92,13 +55,19 @@ export default function BinaryMarket() {
     return () => clearInterval(interval);
   }, [user, refreshUser]);
 
+  const activeMarket: BinaryMarketType | null = activeData?.market ?? null;
+  const history: BinaryMarketType[] = historyData ?? [];
+
+  const displayedMarket = activeMarket;
+  const isFrozen = false; // Never freeze the UI anymore, always show what's current
+
   // Refresh balance when market officially settles
-  const marketStatus = displayedMarket?.status;
+  const marketHistoryLength = history.length;
   useEffect(() => {
-    if (marketStatus && marketStatus.startsWith('settled')) {
+    if (marketHistoryLength > 0) {
       refreshUser();
     }
-  }, [marketStatus, refreshUser]);
+  }, [marketHistoryLength, refreshUser]);
 
   return (
     <Layout>
@@ -168,7 +137,6 @@ export default function BinaryMarket() {
               recentPrices={recentPrices}
               isConnected={isConnected}
               isFrozen={isFrozen}
-              onGoLive={() => setViewMode("live")}
             />
           </div>
         </div>

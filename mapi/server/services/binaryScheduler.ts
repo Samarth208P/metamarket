@@ -26,7 +26,7 @@ export function startBinaryScheduler(): void {
   if (heartbeatTimer) clearInterval(heartbeatTimer);
   heartbeatTimer = setInterval(() => {
     ensureActiveMarket();
-  }, 30000); // Check every 30s
+  }, 5000); // Check every 5s for faster settlement
 
   // Also run immediately to bootstrap the first market
   ensureActiveMarket();
@@ -70,6 +70,7 @@ export async function ensureActiveMarket(): Promise<void> {
       
       let currentPrice = binanceFeed.getLatestPrice();
       if (currentPrice <= 0) {
+        const { fetchBinancePriceRest } = await import("./binanceFeed.js");
         currentPrice = await fetchBinancePriceRest();
       }
 
@@ -100,7 +101,7 @@ export async function ensureActiveMarket(): Promise<void> {
         console.warn("[BinaryScheduler] Price feed unavailable. Cannot create market yet.");
       }
     } else {
-      currentMarketId = exists.id;
+      currentMarketId = exists.id.toString();
     }
 
     await pruneOldMarkets();
@@ -117,14 +118,14 @@ async function createNewCycle(): Promise<void> {
 
 async function settlePreviousMarket(): Promise<void> {
   // Settle any markets that are past their endTime
-  // We pick active markets, OR those that have been "settling" for more than 2 minutes (crashed)
+  // We pick active markets, OR those that have been "settling" for more than 30 seconds (crashed)
   try {
     const staleMarkets = await BinaryMarket.find({
       $or: [
         { status: "active" },
-        { status: "settling", updatedAt: { $lte: new Date(Date.now() - 120000) } }
+        { status: "settling", updatedAt: { $lte: new Date(Date.now() - 30000) } }
       ],
-      endTime: { $lte: new Date(Date.now() - 1000) }, // 1s grace period
+      endTime: { $lte: new Date() },
     });
 
     for (const market of staleMarkets) {
@@ -147,7 +148,7 @@ async function settleMarket(marketId: string): Promise<void> {
       _id: marketId, 
       $or: [
         { status: "active" },
-        { status: "settling", updatedAt: { $lte: new Date(Date.now() - 120000) } }
+        { status: "settling", updatedAt: { $lte: new Date(Date.now() - 30000) } }
       ]
     },
     { $set: { status: "settling" } },

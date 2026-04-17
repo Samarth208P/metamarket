@@ -17,7 +17,6 @@ interface BinaryTradePanelProps {
   recentPrices: number[];
   isConnected: boolean;
   isFrozen?: boolean;
-  onGoLive?: () => void;
 }
 
 const PRESET_AMOUNTS = [10, 25, 50, 100];
@@ -28,7 +27,6 @@ export function BinaryTradePanel({
   recentPrices,
   isConnected,
   isFrozen,
-  onGoLive,
 }: BinaryTradePanelProps) {
   const { user, updateBalance, refreshUser } = useAuth();
   const { toast } = useToast();
@@ -206,75 +204,7 @@ export function BinaryTradePanel({
           new Date(market.startTime).getTime())
     : 0;
 
-  if (isFrozen) {
-    const isUp = market?.status === "settled_up";
-    const target = market?.targetPrice ?? 0;
-    const final = market?.finalPrice ?? target;
-    
-    // We filter entirely based on user trades inside this specific historical slice
-    const userFinalTrades = market?.trades?.filter((t) => t.userId === user?.id) || [];
-    const hasTraded = userFinalTrades.length > 0;
-    const totalInvestedFrozen = userFinalTrades.reduce((sum, t) => sum + t.amount, 0);
-    const totalPayoutFrozen = userFinalTrades.reduce((sum, t) => sum + (t.payout || 0), 0);
-    const netProfitFrozen = totalPayoutFrozen - totalInvestedFrozen;
 
-    return (
-      <motion.div
-        initial={{ opacity: 0, x: 20 }}
-        animate={{ opacity: 1, x: 0 }}
-        className="rounded-2xl border border-white/10 bg-gradient-to-br from-zinc-900/80 to-zinc-950/90 backdrop-blur-xl p-5 shadow-2xl flex flex-col h-full justify-center"
-      >
-        <div className="text-center">
-          <div className="w-16 h-16 mx-auto rounded-full bg-zinc-800 flex items-center justify-center mb-4 border border-zinc-700/50 shadow-inner">
-             <Trophy className="w-8 h-8 text-amber-400" />
-          </div>
-          <h2 className="text-2xl font-black text-white tracking-tight mb-3">Market Settled</h2>
-          <div className="flex items-center justify-center gap-2 mb-6">
-             <span className="text-zinc-400 text-sm">Winning Outcome:</span>
-             <span className={`px-3 py-1 rounded-full text-sm font-bold flex items-center gap-1 ${isUp ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-red-500/20 text-red-400 border border-red-500/30'}`}>
-                {isUp ? <ArrowUp className="w-4 h-4" /> : <ArrowDown className="w-4 h-4" />}
-                {isUp ? "UP" : "DOWN"}
-             </span>
-          </div>
-          
-          <div className="grid grid-cols-2 gap-4 mb-6 text-left">
-            <div className="bg-zinc-800/50 p-3 rounded-xl border border-zinc-700/50">
-              <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-1">Target</p>
-              <p className="text-lg font-mono font-bold text-zinc-300">
-                ${target.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2})}
-              </p>
-            </div>
-            <div className="bg-zinc-800/50 p-3 rounded-xl border border-zinc-700/50">
-              <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-1">Final</p>
-              <p className={`text-lg font-mono font-bold ${isUp ? 'text-emerald-400' : 'text-red-400'}`}>
-                ${final.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2})}
-              </p>
-            </div>
-          </div>
-
-          {hasTraded && (
-            <div className={`p-4 rounded-xl mb-6 flex items-center justify-between border shadow-sm ${netProfitFrozen >= 0 ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-red-500/10 border-red-500/30'}`}>
-              <div>
-                 <p className={`text-xs text-left font-bold tracking-wider uppercase mb-0.5 ${netProfitFrozen >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>Your PnL</p>
-                 <p className="text-[10px] text-left opacity-50 text-white leading-none">Invested: ₹{totalInvestedFrozen.toFixed(0)}</p>
-              </div>
-              <div className={`text-2xl font-black tabular-nums tracking-tight ${netProfitFrozen >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                 {netProfitFrozen >= 0 ? '+' : ''}₹{netProfitFrozen.toFixed(2)}
-              </div>
-            </div>
-          )}
-
-          <button 
-            onClick={onGoLive}
-            className="w-full py-4 bg-white hover:bg-zinc-200 text-zinc-900 text-sm font-black uppercase tracking-widest rounded-xl transition-all shadow-xl active:scale-95 flex flex-col items-center justify-center gap-1"
-          >
-            Go Live
-            <span className="text-[10px] opacity-60 font-semibold tracking-normal normal-case">Jump into next market</span>
-          </button>
-        </div>
-      </motion.div>
-    );
-  }
 
   return (
     <motion.div
