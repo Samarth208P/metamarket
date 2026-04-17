@@ -8,8 +8,16 @@
 
 import BinaryMarket, { type IBinaryMarket } from "../models/BinaryMarket.js";
 import User from "../models/User.js";
-import { binanceFeed, fetchBinancePriceAtTime, fetchBinancePriceRest, type PriceTick } from "./binanceFeed.js";
-import { MARKET_DURATION_MS, PRICE_SNAPSHOT_INTERVAL_MS } from "../../../shared/binaryPrice.js";
+import {
+  binanceFeed,
+  fetchBinancePriceAtTime,
+  fetchBinancePriceRest,
+  type PriceTick,
+} from "./binanceFeed.js";
+import {
+  MARKET_DURATION_MS,
+  PRICE_SNAPSHOT_INTERVAL_MS,
+} from "../../../shared/binaryPrice.js";
 
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 let cycleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -50,7 +58,8 @@ export function stopBinaryScheduler(): void {
 export async function ensureActiveMarket(): Promise<void> {
   const nowMs = Date.now();
   const cycleLengthMs = MARKET_DURATION_MS;
-  const endTimeMs = Math.floor(nowMs / cycleLengthMs) * cycleLengthMs + cycleLengthMs;
+  const endTimeMs =
+    Math.floor(nowMs / cycleLengthMs) * cycleLengthMs + cycleLengthMs;
   const startTimeMs = endTimeMs - cycleLengthMs;
   const endTime = new Date(endTimeMs);
   const startTime = new Date(startTimeMs);
@@ -62,12 +71,14 @@ export async function ensureActiveMarket(): Promise<void> {
     // 2. Check if the current slot's market exists
     const exists = await BinaryMarket.findOne({
       endTime,
-      status: "active"
+      status: "active",
     });
 
     if (!exists) {
-      console.log(`[BinaryScheduler] Heartbeat: No active market for slot ending ${endTime.toISOString()}. Creating...`);
-      
+      console.log(
+        `[BinaryScheduler] Heartbeat: No active market for slot ending ${endTime.toISOString()}. Creating...`,
+      );
+
       let currentPrice = binanceFeed.getLatestPrice();
       if (currentPrice <= 0) {
         const { fetchBinancePriceRest } = await import("./binanceFeed.js");
@@ -85,7 +96,7 @@ export async function ensureActiveMarket(): Promise<void> {
         });
         currentMarketId = market.id;
         console.log(`[BinaryScheduler] Created market ${market.id}`);
-        
+
         // Reset snapshot interval for the new market
         if (snapshotTimer) clearInterval(snapshotTimer);
         snapshotTimer = setInterval(async () => {
@@ -93,12 +104,16 @@ export async function ensureActiveMarket(): Promise<void> {
           if (p > 0 && currentMarketId) {
             BinaryMarket.updateOne(
               { _id: currentMarketId },
-              { $push: { priceSnapshots: { price: p, timestamp: new Date() } } }
+              {
+                $push: { priceSnapshots: { price: p, timestamp: new Date() } },
+              },
             ).catch(() => {});
           }
         }, PRICE_SNAPSHOT_INTERVAL_MS);
       } else {
-        console.warn("[BinaryScheduler] Price feed unavailable. Cannot create market yet.");
+        console.warn(
+          "[BinaryScheduler] Price feed unavailable. Cannot create market yet.",
+        );
       }
     } else {
       currentMarketId = exists.id.toString();
@@ -123,7 +138,10 @@ async function settlePreviousMarket(): Promise<void> {
     const staleMarkets = await BinaryMarket.find({
       $or: [
         { status: "active" },
-        { status: "settling", updatedAt: { $lte: new Date(Date.now() - 30000) } }
+        {
+          status: "settling",
+          updatedAt: { $lte: new Date(Date.now() - 30000) },
+        },
       ],
       endTime: { $lte: new Date() },
     });
@@ -132,7 +150,10 @@ async function settlePreviousMarket(): Promise<void> {
       try {
         await settleMarket(market.id);
       } catch (err) {
-        console.error(`[BinaryScheduler] Error settling stale market ${market.id}:`, err);
+        console.error(
+          `[BinaryScheduler] Error settling stale market ${market.id}:`,
+          err,
+        );
       }
     }
   } catch (err) {
@@ -144,35 +165,44 @@ async function settleMarket(marketId: string): Promise<void> {
   // Atomically claim this market for settlement
   // IMPORTANT: We only claim if it's active OR if it's been settling for too long
   const market = await BinaryMarket.findOneAndUpdate(
-    { 
-      _id: marketId, 
+    {
+      _id: marketId,
       $or: [
         { status: "active" },
-        { status: "settling", updatedAt: { $lte: new Date(Date.now() - 30000) } }
-      ]
+        {
+          status: "settling",
+          updatedAt: { $lte: new Date(Date.now() - 30000) },
+        },
+      ],
     },
     { $set: { status: "settling" } },
-    { new: true }
+    { new: true },
   );
 
   if (!market) return;
 
   const endTimeMs = new Date(market.endTime).getTime();
-  console.log(`[BinaryScheduler] Settling market ${marketId}. Expiry: ${market.endTime.toISOString()}`);
+  console.log(
+    `[BinaryScheduler] Settling market ${marketId}. Expiry: ${market.endTime.toISOString()}`,
+  );
 
   // Fetch the exact price at the endTime
   // 1. Try Historical REST API (with a 2s delay if we just reached expiry to let klines populate)
   let finalPrice = 0;
-  
+
   if (Date.now() < endTimeMs + 2000) {
     // Wait slightly if we are exactly at or just after endTime
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    await new Promise((resolve) => setTimeout(resolve, 2000));
   }
-  
+
   finalPrice = await fetchBinancePriceAtTime(endTimeMs);
-  
+
   // 2. Fallback to closest snapshot if REST API fails
-  if (finalPrice <= 0 && market.priceSnapshots && market.priceSnapshots.length > 0) {
+  if (
+    finalPrice <= 0 &&
+    market.priceSnapshots &&
+    market.priceSnapshots.length > 0
+  ) {
     let closest = market.priceSnapshots[0];
     let minDiff = Math.abs(new Date(closest.timestamp).getTime() - endTimeMs);
     for (const snap of market.priceSnapshots) {
@@ -184,8 +214,10 @@ async function settleMarket(marketId: string): Promise<void> {
     }
     // Only use if within 5s of expiry
     if (minDiff < 5000) {
-       finalPrice = closest.price;
-       console.log(`[BinaryScheduler] Using snapshot fallback for ${marketId} (diff: ${minDiff}ms)`);
+      finalPrice = closest.price;
+      console.log(
+        `[BinaryScheduler] Using snapshot fallback for ${marketId} (diff: ${minDiff}ms)`,
+      );
     }
   }
 
@@ -193,13 +225,20 @@ async function settleMarket(marketId: string): Promise<void> {
   if (finalPrice <= 0) {
     finalPrice = binanceFeed.getLatestPrice();
     if (finalPrice > 0) {
-       console.log(`[BinaryScheduler] CRITICAL FALLBACK to live price for ${marketId}`);
+      console.log(
+        `[BinaryScheduler] CRITICAL FALLBACK to live price for ${marketId}`,
+      );
     }
   }
 
   if (finalPrice <= 0) {
-    console.warn(`[BinaryScheduler] Cannot settle ${marketId}: no price identified. Resetting to active.`);
-    await BinaryMarket.updateOne({ _id: marketId }, { $set: { status: "active" } });
+    console.warn(
+      `[BinaryScheduler] Cannot settle ${marketId}: no price identified. Resetting to active.`,
+    );
+    await BinaryMarket.updateOne(
+      { _id: marketId },
+      { $set: { status: "active" } },
+    );
     return;
   }
 
@@ -211,8 +250,12 @@ async function settleMarket(marketId: string): Promise<void> {
   const finalSnapshot = { price: finalPrice, timestamp: new Date(endTimeMs) };
 
   // Credit winners
-  const winningTrades = market.trades.filter((t) => t.side === winningSide && !t.sold && !t.payout); // !t.payout ensures no double-crediting
-  const losingTrades = market.trades.filter((t) => t.side !== winningSide && !t.sold && !t.payout);
+  const winningTrades = market.trades.filter(
+    (t) => t.side === winningSide && !t.sold && !t.payout,
+  ); // !t.payout ensures no double-crediting
+  const losingTrades = market.trades.filter(
+    (t) => t.side !== winningSide && !t.sold && !t.payout,
+  );
 
   for (const trade of winningTrades) {
     const payout = trade.amount / Math.max(trade.entryProbability, 0.01);
@@ -240,7 +283,10 @@ async function settleMarket(marketId: string): Promise<void> {
         await user.save();
       }
     } catch (err) {
-      console.error(`[BinaryScheduler] Error crediting user ${trade.userId} for market ${marketId}:`, err);
+      console.error(
+        `[BinaryScheduler] Error crediting user ${trade.userId} for market ${marketId}:`,
+        err,
+      );
     }
   }
 
@@ -256,10 +302,10 @@ async function settleMarket(marketId: string): Promise<void> {
       $set: {
         status: outcome,
         finalPrice,
-        trades: market.trades
+        trades: market.trades,
       },
-      $push: { priceSnapshots: finalSnapshot }
-    }
+      $push: { priceSnapshots: finalSnapshot },
+    },
   );
 
   console.log(
@@ -274,25 +320,30 @@ export function getCurrentMarketId(): string | null {
 async function pruneOldMarkets(): Promise<void> {
   try {
     // Keep 5 most recent settled markets (for history)
-    const settledMarkets = await BinaryMarket.find({ status: { $regex: /^settled/ } })
+    const settledMarkets = await BinaryMarket.find({
+      status: { $regex: /^settled/ },
+    })
       .sort({ endTime: -1 })
       .limit(5)
-      .select('_id');
-      
+      .select("_id");
+
     // Always keep active/settling markets
-    const activeMarkets = await BinaryMarket.find({ status: { $in: ["active", "settling"] } })
-      .select('_id');
-    
+    const activeMarkets = await BinaryMarket.find({
+      status: { $in: ["active", "settling"] },
+    }).select("_id");
+
     const idsToKeep = [
-      ...settledMarkets.map(m => m._id.toString()), 
-      ...activeMarkets.map(m => m._id.toString())
+      ...settledMarkets.map((m) => m._id.toString()),
+      ...activeMarkets.map((m) => m._id.toString()),
     ];
-    
+
     if (idsToKeep.length === 0) return;
 
     const res = await BinaryMarket.deleteMany({ _id: { $nin: idsToKeep } });
     if (res.deletedCount > 0) {
-      console.log(`[BinaryScheduler] Pruned ${res.deletedCount} old market(s). History kept: ${settledMarkets.length}`);
+      console.log(
+        `[BinaryScheduler] Pruned ${res.deletedCount} old market(s). History kept: ${settledMarkets.length}`,
+      );
     }
   } catch (err) {
     console.error(`[BinaryScheduler] Error pruning markets:`, err);

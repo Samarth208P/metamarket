@@ -6,7 +6,17 @@ import { BinaryChart } from "@/components/BinaryChart";
 import { BinaryTradePanel } from "@/components/BinaryTradePanel";
 import { useBinanceFeed } from "@/hooks/use-binance-feed";
 import type { BinaryMarket as BinaryMarketType } from "@shared/binaryPrice";
-import { ArrowUp, ArrowDown, Clock, Trophy, Activity, Globe, Info, ShieldCheck, Target } from "lucide-react";
+import {
+  ArrowUp,
+  ArrowDown,
+  Clock,
+  Trophy,
+  Activity,
+  Globe,
+  Info,
+  ShieldCheck,
+  Target,
+} from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 
 export default function BinaryMarket() {
@@ -24,7 +34,7 @@ export default function BinaryMarket() {
       return res.json();
     },
     // Poll faster when no market is active (gap between cycles)
-    refetchInterval: (query) => query.state.data?.market ? 3000 : 1500,
+    refetchInterval: (query) => (query.state.data?.market ? 3000 : 1500),
     staleTime: 1000,
   });
 
@@ -75,7 +85,8 @@ export default function BinaryMarket() {
   }, [activeMarket]);
 
   const displayedMarket = activeMarket;
-  const stableTargetPrice = activeMarket?.targetPrice ?? (lastTargetPriceRef.current || price);
+  const stableTargetPrice =
+    activeMarket?.targetPrice ?? (lastTargetPriceRef.current || price);
   const isFrozen = false; // Never freeze the UI anymore, always show what's current
 
   // Refresh balance when market officially settles
@@ -89,7 +100,6 @@ export default function BinaryMarket() {
   return (
     <Layout>
       <div className="min-h-screen py-6 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
-
         {/* Main Content Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
           {/* Chart — spans 2 cols on lg */}
@@ -99,33 +109,43 @@ export default function BinaryMarket() {
               targetPrice={stableTargetPrice}
               currentPrice={price}
               isConnected={isConnected}
-              frozenAtTime={isFrozen ? new Date(displayedMarket.endTime).getTime() : undefined}
+              frozenAtTime={
+                isFrozen
+                  ? new Date(displayedMarket.endTime).getTime()
+                  : undefined
+              }
               frozenPrice={isFrozen ? displayedMarket.finalPrice : undefined}
             />
 
             {/* History Tracker Between Chart and Description - Hidden on Mobile */}
             <div className="hidden lg:flex mt-8 flex items-center gap-4 bg-zinc-900/40 border border-white/5 rounded-2xl px-5 py-3.5 backdrop-blur-sm shadow-inner max-w-fit">
-               <div className="border-r border-white/10 pr-4">
-                  <Clock className="w-4 h-4 text-zinc-500" />
-               </div>
-               <div className="pl-1">
-                  <PastOutcomes history={history} />
-               </div>
+              <div className="border-r border-white/10 pr-4">
+                <Clock className="w-4 h-4 text-zinc-500" />
+              </div>
+              <div className="pl-1">
+                <PastOutcomes history={history} />
+              </div>
             </div>
 
             {/* Adjusted Market Description Section - Hidden on Mobile */}
             <div className="hidden lg:block mt-8 space-y-6">
               <div>
-                <h4 className="text-[10px] font-black uppercase text-zinc-500 mb-2 tracking-[0.2em]">Description</h4>
+                <h4 className="text-[10px] font-black uppercase text-zinc-500 mb-2 tracking-[0.2em]">
+                  Description
+                </h4>
                 <p className="text-sm text-zinc-400 leading-relaxed max-w-2xl">
-                  Predict whether Bitcoin's price will be above or below a target snapshot in 5-minute cycles. 
-                  Markets resolve based on the final price against the target price. If Final ≥ Target, <strong>UP</strong> wins. 
-                  Otherwise, <strong>DOWN</strong> wins.
+                  Predict whether Bitcoin's price will be above or below a
+                  target snapshot in 5-minute cycles. Markets resolve based on
+                  the final price against the target price. If Final ≥ Target,{" "}
+                  <strong>UP</strong> wins. Otherwise, <strong>DOWN</strong>{" "}
+                  wins.
                 </p>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 pt-6 border-t border-white/5">
                 <div>
-                  <h4 className="text-[10px] font-black uppercase text-zinc-500 mb-2 tracking-[0.2em]">Price Source</h4>
+                  <h4 className="text-[10px] font-black uppercase text-zinc-500 mb-2 tracking-[0.2em]">
+                    Price Source
+                  </h4>
                   <p className="text-sm text-zinc-300 font-medium">
                     Binance BTC/USDT Live Feed
                   </p>
@@ -134,7 +154,9 @@ export default function BinaryMarket() {
                   </p>
                 </div>
                 <div>
-                  <h4 className="text-[10px] font-black uppercase text-zinc-500 mb-2 tracking-[0.2em]">Settlement</h4>
+                  <h4 className="text-[10px] font-black uppercase text-zinc-500 mb-2 tracking-[0.2em]">
+                    Settlement
+                  </h4>
                   <p className="text-sm text-zinc-300 font-medium">
                     Automatic Payouts
                   </p>
@@ -158,7 +180,6 @@ export default function BinaryMarket() {
             />
           </div>
         </div>
-
       </div>
     </Layout>
   );
@@ -167,36 +188,46 @@ export default function BinaryMarket() {
 function PastOutcomes({ history }: { history: BinaryMarketType[] }) {
   // Render the oldest left, newest right. We take the most recent 5
   const recent = [...history].slice(0, 5).reverse();
-  
+
   if (recent.length === 0) {
     return (
       <div className="flex gap-2.5 opacity-20">
-        {[1,2,3,4,5].map(i => <div key={i} className="w-7 h-7 rounded-full bg-zinc-700" />)}
+        {[1, 2, 3, 4, 5].map((i) => (
+          <div key={i} className="w-7 h-7 rounded-full bg-zinc-700" />
+        ))}
       </div>
     );
   }
 
   return (
     <div className="flex gap-2.5">
-        {recent.map((m) => {
-          const isUp = m.status === "settled_up";
-          return (
-            <div 
-              key={m.id} 
-              className={`w-7 h-7 rounded-full flex items-center justify-center shadow-inner ${isUp ? 'bg-[#5dbf75]' : 'bg-[#ef4444]'}`}
-            >
-              {isUp ? (
-                <svg className="w-3.5 h-3.5 text-white" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12 5l7 11H5z" />
-                </svg>
-              ) : (
-                <svg className="w-3.5 h-3.5 text-white transform rotate-180" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12 5l7 11H5z" />
-                </svg>
-              )}
-            </div>
-          );
-        })}
+      {recent.map((m) => {
+        const isUp = m.status === "settled_up";
+        return (
+          <div
+            key={m.id}
+            className={`w-7 h-7 rounded-full flex items-center justify-center shadow-inner ${isUp ? "bg-[#5dbf75]" : "bg-[#ef4444]"}`}
+          >
+            {isUp ? (
+              <svg
+                className="w-3.5 h-3.5 text-white"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+              >
+                <path d="M12 5l7 11H5z" />
+              </svg>
+            ) : (
+              <svg
+                className="w-3.5 h-3.5 text-white transform rotate-180"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+              >
+                <path d="M12 5l7 11H5z" />
+              </svg>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

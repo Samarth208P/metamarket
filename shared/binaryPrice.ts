@@ -84,7 +84,9 @@ export function normalCDF(x: number): number {
   const t = 1.0 / (1.0 + p * absX);
   const y =
     1.0 -
-    ((((a5 * t + a4) * t + a3) * t + a2) * t + a1) * t * Math.exp(-absX * absX / 2);
+    ((((a5 * t + a4) * t + a3) * t + a2) * t + a1) *
+      t *
+      Math.exp((-absX * absX) / 2);
 
   return 0.5 * (1.0 + sign * y);
 }
@@ -131,9 +133,7 @@ export function calculateUpProbability(
   const tDays = Math.max(0, timeRemainingMs) / (24 * 60 * 60 * 1000);
 
   if (tDays <= 0) {
-    return currentPrice >= targetPrice
-      ? MAX_PROBABILITY
-      : MIN_PROBABILITY;
+    return currentPrice >= targetPrice ? MAX_PROBABILITY : MIN_PROBABILITY;
   }
 
   const d2 = calculateD2(currentPrice, targetPrice, tDays, volatility);
@@ -178,17 +178,17 @@ export function calculateLiveProbability(params: {
   // This makes the transition from 50p to higher/lower feel more natural.
   const priceDiff = currentPrice - targetPrice;
   const pctDiff = priceDiff / targetPrice;
-  
+
   if (Math.abs(pctDiff) > 0) {
     // Decision intensity increases as time runs out
     const totalDuration = MARKET_DURATION_MS;
-    const timeProgress = 1 - (timeRemainingMs / totalDuration);
-    const timeFactor = 0.5 + (timeProgress * 0.5); // 0.5 to 1.0
+    const timeProgress = 1 - timeRemainingMs / totalDuration;
+    const timeFactor = 0.5 + timeProgress * 0.5; // 0.5 to 1.0
 
     // Boost ranges from 0 to 0.12 based on price distance, scaled by time
     // Reduced sensitivity (multiplier 200) to keep prices realistic
     const boostMagnitude = Math.min(0.12, Math.abs(pctDiff) * 200) * timeFactor;
-    
+
     // Instead of a hard floor (which causes 73p -> 43p jumps), we add a smooth bias
     if (priceDiff > 0) {
       probability = clampProbability(probability + 0.02 + boostMagnitude);

@@ -3,7 +3,11 @@
  */
 
 export type MarketType = "binary" | "versus" | "multi";
-export type MarketStatus = "active" | "resolved_yes" | "resolved_no" | "resolved_option";
+export type MarketStatus =
+  | "active"
+  | "resolved_yes"
+  | "resolved_no"
+  | "resolved_option";
 export type AmmType = "legacy" | "lmsr";
 
 export interface Position {
@@ -93,7 +97,14 @@ export interface Market {
   shortA?: string;
   shortB?: string;
   logoUrl?: string;
-  teams?: { name: string; imageUrl?: string; yesPool?: number; noPool?: number; yesPrice?: number; noPrice?: number }[];
+  teams?: {
+    name: string;
+    imageUrl?: string;
+    yesPool?: number;
+    noPool?: number;
+    yesPrice?: number;
+    noPrice?: number;
+  }[];
   options: MarketOption[];
   status: MarketStatus;
   volume: number;

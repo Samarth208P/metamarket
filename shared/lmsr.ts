@@ -15,7 +15,10 @@ export interface LmsrState {
 
 function logSumExp(values: number[]): number {
   const maxValue = Math.max(...values);
-  const sum = values.reduce((acc, value) => acc + Math.exp(value - maxValue), 0);
+  const sum = values.reduce(
+    (acc, value) => acc + Math.exp(value - maxValue),
+    0,
+  );
   return maxValue + Math.log(sum);
 }
 
@@ -39,7 +42,11 @@ export function calculateCurrentB(params: {
   const endDate = new Date(params.endDate).getTime();
   const now = Date.now();
 
-  if (!Number.isFinite(createdAt) || !Number.isFinite(endDate) || endDate <= createdAt) {
+  if (
+    !Number.isFinite(createdAt) ||
+    !Number.isFinite(endDate) ||
+    endDate <= createdAt
+  ) {
     return clampMinB(params.initialB, minB);
   }
 
@@ -55,7 +62,10 @@ export function costFunction(state: LmsrState, b: number): number {
   return b * logSumExp(scaled);
 }
 
-export function getOptionPrices(state: LmsrState, b: number): Record<string, number> {
+export function getOptionPrices(
+  state: LmsrState,
+  b: number,
+): Record<string, number> {
   const scaled = state.options.map((option) => option.shares / b);
   const logDenominator = logSumExp(scaled);
   const prices: Record<string, number> = {};
@@ -67,20 +77,36 @@ export function getOptionPrices(state: LmsrState, b: number): Record<string, num
   return prices;
 }
 
-export function getOptionPrice(state: LmsrState, b: number, optionId: string): number {
+export function getOptionPrice(
+  state: LmsrState,
+  b: number,
+  optionId: string,
+): number {
   return getOptionPrices(state, b)[optionId] ?? 0;
 }
 
-export function applyShareDelta(state: LmsrState, optionId: string, delta: number): LmsrState {
+export function applyShareDelta(
+  state: LmsrState,
+  optionId: string,
+  delta: number,
+): LmsrState {
   return {
     options: state.options.map((option) => ({
       ...option,
-      shares: option.id === optionId ? Math.max(0, option.shares + delta) : option.shares,
+      shares:
+        option.id === optionId
+          ? Math.max(0, option.shares + delta)
+          : option.shares,
     })),
   };
 }
 
-export function quoteBuy(state: LmsrState, b: number, optionId: string, spend: number): {
+export function quoteBuy(
+  state: LmsrState,
+  b: number,
+  optionId: string,
+  spend: number,
+): {
   shares: number;
   averagePrice: number;
   currentPrice: number;
@@ -94,14 +120,18 @@ export function quoteBuy(state: LmsrState, b: number, optionId: string, spend: n
   let low = 0;
   let high = Math.max((spend / Math.max(currentPrice, 0.01)) * 2, 1);
 
-  while (costFunction(applyShareDelta(state, optionId, high), b) - baseCost < spend) {
+  while (
+    costFunction(applyShareDelta(state, optionId, high), b) - baseCost <
+    spend
+  ) {
     high *= 2;
     if (high > 1_000_000) break;
   }
 
   for (let i = 0; i < 40; i += 1) {
     const mid = (low + high) / 2;
-    const cost = costFunction(applyShareDelta(state, optionId, mid), b) - baseCost;
+    const cost =
+      costFunction(applyShareDelta(state, optionId, mid), b) - baseCost;
     if (cost < spend) low = mid;
     else high = mid;
   }
@@ -114,7 +144,12 @@ export function quoteBuy(state: LmsrState, b: number, optionId: string, spend: n
   };
 }
 
-export function quoteSell(state: LmsrState, b: number, optionId: string, shares: number): {
+export function quoteSell(
+  state: LmsrState,
+  b: number,
+  optionId: string,
+  shares: number,
+): {
   grossPayout: number;
   netPayout: number;
   fee: number;
@@ -123,11 +158,20 @@ export function quoteSell(state: LmsrState, b: number, optionId: string, shares:
 } {
   const currentPrice = getOptionPrice(state, b, optionId);
   if (shares <= 0) {
-    return { grossPayout: 0, netPayout: 0, fee: 0, averagePrice: 0, currentPrice };
+    return {
+      grossPayout: 0,
+      netPayout: 0,
+      fee: 0,
+      averagePrice: 0,
+      currentPrice,
+    };
   }
 
   const nextState = applyShareDelta(state, optionId, -shares);
-  const grossPayout = Math.max(costFunction(state, b) - costFunction(nextState, b), 0);
+  const grossPayout = Math.max(
+    costFunction(state, b) - costFunction(nextState, b),
+    0,
+  );
   const fee = grossPayout * SELL_FEE_RATE;
   const netPayout = grossPayout - fee;
 
@@ -164,7 +208,10 @@ export function createQuote(params: {
     type: params.type,
     amount: params.amount,
     expectedShares: params.expectedShares,
-    minShares: params.type === "buy" ? params.expectedShares * (1 - tolerance) : params.expectedShares,
+    minShares:
+      params.type === "buy"
+        ? params.expectedShares * (1 - tolerance)
+        : params.expectedShares,
     grossPayout: params.grossPayout ?? 0,
     netPayout: params.netPayout ?? 0,
     fee: params.fee ?? 0,

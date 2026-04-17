@@ -462,12 +462,10 @@ router.post("/markets", ensureAuthenticated, ensureAdmin, async (req, res) => {
 
   const { overview } = await getSolvencyOverview();
   if (overview.isBelowThreshold) {
-    return res
-      .status(400)
-      .json({
-        error:
-          "Solvency guard active. Add reserves or lower platform liability before creating new markets.",
-      });
+    return res.status(400).json({
+      error:
+        "Solvency guard active. Add reserves or lower platform liability before creating new markets.",
+    });
   }
 
   const baseB = Math.max(
@@ -688,11 +686,9 @@ router.post("/markets/:id/trade", ensureAuthenticated, async (req, res) => {
   ensureUserPositions(user, market);
 
   if (!quotedAt || Date.now() - new Date(quotedAt).getTime() > QUOTE_TTL_MS) {
-    return res
-      .status(409)
-      .json({
-        error: "Quote expired. Please refresh the quote and try again.",
-      });
+    return res.status(409).json({
+      error: "Quote expired. Please refresh the quote and try again.",
+    });
   }
 
   const currentB = calculateCurrentB({
@@ -731,13 +727,10 @@ router.post("/markets/:id/trade", ensureAuthenticated, async (req, res) => {
         currentB,
         tolerance,
       });
-      return res
-        .status(409)
-        .json({
-          error:
-            "Price moved before execution. Please review the updated quote.",
-          quote: quoteResponse,
-        });
+      return res.status(409).json({
+        error: "Price moved before execution. Please review the updated quote.",
+        quote: quoteResponse,
+      });
     }
 
     shares = result.shares;
@@ -766,11 +759,9 @@ router.post("/markets/:id/trade", ensureAuthenticated, async (req, res) => {
       option.name,
     );
     if (numericAmount > position.shares + 1e-6)
-      return res
-        .status(400)
-        .json({
-          error: `Not enough shares to sell. You have ${position.shares.toFixed(2)} shares.`,
-        });
+      return res.status(400).json({
+        error: `Not enough shares to sell. You have ${position.shares.toFixed(2)} shares.`,
+      });
 
     const result = quoteSell(state, currentB, nextOptionId, numericAmount);
     shares = numericAmount;

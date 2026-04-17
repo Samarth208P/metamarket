@@ -126,7 +126,9 @@ export const binanceFeed = new BinanceFeedManager();
  */
 export async function fetchBinancePriceRest(): Promise<number> {
   try {
-    const response = await fetch("https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT");
+    const response = await fetch(
+      "https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT",
+    );
     const data = await response.json();
     const price = parseFloat(data.price);
     if (!isNaN(price) && price > 0) {
@@ -145,10 +147,14 @@ export async function fetchBinancePriceRest(): Promise<number> {
  */
 export async function fetchBinanceRecentPricesRest(): Promise<number[]> {
   try {
-    const response = await fetch("https://api.binance.com/api/v3/trades?symbol=BTCUSDT&limit=20");
+    const response = await fetch(
+      "https://api.binance.com/api/v3/trades?symbol=BTCUSDT&limit=20",
+    );
     const data = await response.json();
     if (Array.isArray(data)) {
-      return data.map((t: any) => parseFloat(t.price)).filter(p => !isNaN(p) && p > 0);
+      return data
+        .map((t: any) => parseFloat(t.price))
+        .filter((p) => !isNaN(p) && p > 0);
     }
     return [];
   } catch (err) {
@@ -161,13 +167,15 @@ export async function fetchBinanceRecentPricesRest(): Promise<number[]> {
  * Fetch historical price from Binance REST API for a specific timestamp
  * Uses the 1-minute kline (candle) closing price.
  */
-export async function fetchBinancePriceAtTime(timestampMs: number): Promise<number> {
+export async function fetchBinancePriceAtTime(
+  timestampMs: number,
+): Promise<number> {
   try {
     // Target the candle that ends AT or JUST BEFORE the timestamp.
     // If market ends at 20:30:00, we want the close of the 20:29:00-20:29:59 candle.
     const startTime = Math.floor((timestampMs - 1) / 60000) * 60000;
     const response = await fetch(
-      `https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1m&startTime=${startTime}&limit=1`
+      `https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1m&startTime=${startTime}&limit=1`,
     );
     const data = await response.json();
     if (Array.isArray(data) && data.length > 0) {

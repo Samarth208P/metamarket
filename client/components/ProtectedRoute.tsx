@@ -1,13 +1,16 @@
-import { ReactNode } from 'react';
-import { Navigate } from 'react-router-dom';
-import { useAuth } from '@/hooks/use-auth';
+import { ReactNode } from "react";
+import { Navigate } from "react-router-dom";
+import { useAuth } from "@/hooks/use-auth";
 
 interface ProtectedRouteProps {
   children: ReactNode;
   allowGuest?: boolean;
 }
 
-export function ProtectedRoute({ children, allowGuest = true }: ProtectedRouteProps) {
+export function ProtectedRoute({
+  children,
+  allowGuest = true,
+}: ProtectedRouteProps) {
   const { isAuthenticated, isGuestUser, isLoading } = useAuth();
 
   if (isLoading) {

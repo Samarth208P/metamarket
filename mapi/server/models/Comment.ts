@@ -15,8 +15,10 @@ const CommentSchema = new mongoose.Schema<IComment>(
     userName: { type: String, required: true },
     content: { type: String, required: true },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
-const Comment = (mongoose.models.Comment as mongoose.Model<IComment>) || mongoose.model<IComment>("Comment", CommentSchema);
+const Comment =
+  (mongoose.models.Comment as mongoose.Model<IComment>) ||
+  mongoose.model<IComment>("Comment", CommentSchema);
 export default Comment;

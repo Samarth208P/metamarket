@@ -21,14 +21,20 @@ router.post("/admin/add", ensureAdmin, async (req, res) => {
     const user = await User.findOneAndUpdate(
       { email: email.toLowerCase() },
       { $set: { isAdmin: true } },
-      { new: true }
+      { new: true },
     );
 
     if (!user) {
-      return res.status(404).json({ error: "User with this email not found. They must sign in at least once." });
+      return res.status(404).json({
+        error:
+          "User with this email not found. They must sign in at least once.",
+      });
     }
 
-    return res.json({ success: true, user: { email: user.email, name: user.name, isAdmin: user.isAdmin } });
+    return res.json({
+      success: true,
+      user: { email: user.email, name: user.name, isAdmin: user.isAdmin },
+    });
   } catch (err) {
     console.error("[AdminRoute] Error adding admin:", err);
     return res.status(500).json({ error: "Internal server error" });
@@ -41,7 +47,9 @@ router.post("/admin/add", ensureAdmin, async (req, res) => {
  */
 router.get("/admin/list", ensureAdmin, async (req, res) => {
   try {
-    const admins = await User.find({ isAdmin: true }).select("email name isAdmin");
+    const admins = await User.find({ isAdmin: true }).select(
+      "email name isAdmin",
+    );
     return res.json(admins);
   } catch (err) {
     return res.status(500).json({ error: "Internal server error" });
@@ -54,14 +62,20 @@ router.get("/admin/list", ensureAdmin, async (req, res) => {
  */
 router.delete("/admin/remove", ensureAdmin, async (req, res) => {
   const { userId } = req.body;
-  
+
   // Prevent removing own admin status
   if (userId === (req.user as any)?.id?.toString()) {
-    return res.status(400).json({ error: "You cannot remove your own admin status" });
+    return res
+      .status(400)
+      .json({ error: "You cannot remove your own admin status" });
   }
 
   try {
-    const user = await User.findByIdAndUpdate(userId, { $set: { isAdmin: false } }, { new: true });
+    const user = await User.findByIdAndUpdate(
+      userId,
+      { $set: { isAdmin: false } },
+      { new: true },
+    );
     if (!user) return res.status(404).json({ error: "User not found" });
     return res.json({ success: true });
   } catch (err) {

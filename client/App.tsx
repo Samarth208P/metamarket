@@ -25,7 +25,7 @@ const queryClient = new QueryClient();
 function App() {
   useEffect(() => {
     // Force dark mode as default for the premium look
-    document.documentElement.classList.add('dark');
+    document.documentElement.classList.add("dark");
   }, []);
 
   return (

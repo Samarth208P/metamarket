@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { User } from '@shared/api';
+import React, { createContext, useContext, useState, useEffect } from "react";
+import { User } from "@shared/api";
 
 interface AuthContextType {
   user: User | null;
@@ -22,7 +22,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [bookmarks, setBookmarks] = useState<string[]>(() => {
     try {
-      const stored = localStorage.getItem('metamarket_bookmarks');
+      const stored = localStorage.getItem("metamarket_bookmarks");
       return stored ? JSON.parse(stored) : [];
     } catch (e) {
       console.error("Failed to parse initial bookmarks", e);
@@ -33,7 +33,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Sync bookmarks to localStorage whenever they change
   useEffect(() => {
-    localStorage.setItem('metamarket_bookmarks', JSON.stringify(bookmarks));
+    localStorage.setItem("metamarket_bookmarks", JSON.stringify(bookmarks));
   }, [bookmarks]);
 
   useEffect(() => {
@@ -42,12 +42,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const checkAuthStatus = async () => {
-    const minWait = new Promise(resolve => setTimeout(resolve, 3000));
+    const minWait = new Promise((resolve) => setTimeout(resolve, 3000));
     try {
-      const authPromise = fetch('/mapi/user', {
-        credentials: 'include',
+      const authPromise = fetch("/mapi/user", {
+        credentials: "include",
       });
-      
+
       const [response] = await Promise.all([authPromise, minWait]);
 
       if (response.ok) {
@@ -55,7 +55,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(userData);
       }
     } catch (error) {
-      console.error('Auth check failed:', error);
+      console.error("Auth check failed:", error);
     } finally {
       setIsLoading(false);
     }
@@ -63,7 +63,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = () => {
     // Redirect to Google OAuth
-    window.location.href = '/mapi/auth/google';
+    window.location.href = "/mapi/auth/google";
   };
 
   const logout = async () => {
@@ -73,13 +73,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      await fetch('/mapi/auth/logout', {
-        method: 'POST',
-        credentials: 'include',
+      await fetch("/mapi/auth/logout", {
+        method: "POST",
+        credentials: "include",
       });
       setUser(null);
     } catch (error) {
-      console.error('Logout failed:', error);
+      console.error("Logout failed:", error);
     }
   };
 
@@ -93,13 +93,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      const response = await fetch('/mapi/user', { credentials: 'include' });
+      const response = await fetch("/mapi/user", { credentials: "include" });
       if (response.ok) {
         const userData = await response.json();
         setUser(userData);
       }
     } catch (error) {
-      console.error('Manual user refresh failed:', error);
+      console.error("Manual user refresh failed:", error);
     }
   };
 
@@ -110,10 +110,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const toggleBookmark = (marketId: string) => {
-    setBookmarks(prev => 
+    setBookmarks((prev) =>
       prev.includes(marketId)
-        ? prev.filter(id => id !== marketId)
-        : [...prev, marketId]
+        ? prev.filter((id) => id !== marketId)
+        : [...prev, marketId],
     );
   };
 
@@ -141,7 +141,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         tradeHistory: [],
         positions: [],
       } as any);
-    }
+    },
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -150,7 +150,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 export function useAuth() {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
 }

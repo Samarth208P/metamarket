@@ -27,7 +27,11 @@ export default function Leaderboard() {
     return () => clearTimeout(timer);
   }, []);
 
-  const { data: users = [], isLoading: isQueryLoading, isError } = useQuery<LeaderboardUser[]>({
+  const {
+    data: users = [],
+    isLoading: isQueryLoading,
+    isError,
+  } = useQuery<LeaderboardUser[]>({
     queryKey: ["leaderboard"],
     queryFn: fetchLeaderboard,
     refetchInterval: 15000,
@@ -36,8 +40,16 @@ export default function Leaderboard() {
   const isLoading = isQueryLoading || isBranding;
 
   const getRankIndicator = (trend: number) => {
-    if (trend > 0) return <span className="text-xs font-bold text-green-500 ml-1">▲ {trend}</span>;
-    if (trend < 0) return <span className="text-xs font-bold text-red-500 ml-1">▼ {Math.abs(trend)}</span>;
+    if (trend > 0)
+      return (
+        <span className="text-xs font-bold text-green-500 ml-1">▲ {trend}</span>
+      );
+    if (trend < 0)
+      return (
+        <span className="text-xs font-bold text-red-500 ml-1">
+          ▼ {Math.abs(trend)}
+        </span>
+      );
     return null;
   };
 
@@ -67,7 +79,9 @@ export default function Leaderboard() {
               <Trophy className="w-8 h-8 text-primary" />
             </div>
 
-            <h1 className="text-3xl md:text-4xl font-bold text-foreground mb-4">IITR Leaderboard</h1>
+            <h1 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
+              IITR Leaderboard
+            </h1>
             <p className="text-lg text-muted-foreground mb-8">
               Top performers in MetaMarket prediction trading
             </p>
@@ -75,12 +89,20 @@ export default function Leaderboard() {
 
           {isLoading ? (
             <div className="flex flex-col items-center justify-center py-24 gap-6">
-              <img src="/animated-logo.svg" alt="Loading" className="w-32 h-32" />
-              <p className="text-sm font-bold text-muted-foreground uppercase tracking-widest">Loading Rankings</p>
+              <img
+                src="/animated-logo.svg"
+                alt="Loading"
+                className="w-32 h-32"
+              />
+              <p className="text-sm font-bold text-muted-foreground uppercase tracking-widest">
+                Loading Rankings
+              </p>
             </div>
           ) : isError ? (
             <div className="text-center py-16">
-              <p className="text-muted-foreground">Unable to load leaderboard.</p>
+              <p className="text-muted-foreground">
+                Unable to load leaderboard.
+              </p>
             </div>
           ) : users.length > 0 ? (
             <div className="space-y-4">
@@ -91,31 +113,48 @@ export default function Leaderboard() {
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ duration: 0.3 }}
                 >
-                  <Card className={`transition-all hover:shadow-lg ${getRankBorder(user.rank)}`}>
+                  <Card
+                    className={`transition-all hover:shadow-lg ${getRankBorder(user.rank)}`}
+                  >
                     <CardContent className="p-6">
                       <div className="flex items-center justify-between gap-4 flex-wrap">
                         <div className="flex items-center gap-4">
                           <div className="flex flex-col items-center justify-center w-12 h-12">
-                            <span className="text-2xl font-black text-foreground">#{user.rank}</span>
+                            <span className="text-2xl font-black text-foreground">
+                              #{user.rank}
+                            </span>
                             {getRankIndicator(user.rankTrend)}
                           </div>
                           <div>
-                            <h3 className="text-lg font-bold text-foreground">{user.name}</h3>
-                            <p className="text-sm font-medium text-muted-foreground">{user.enrollmentNumber}</p>
+                            <h3 className="text-lg font-bold text-foreground">
+                              {user.name}
+                            </h3>
+                            <p className="text-sm font-medium text-muted-foreground">
+                              {user.enrollmentNumber}
+                            </p>
                           </div>
                         </div>
 
                         <div className="text-right">
                           <div className="flex flex-col items-end">
-                            <span className="text-2xl font-black text-foreground">₹{user.totalNetWorth.toLocaleString()}</span>
+                            <span className="text-2xl font-black text-foreground">
+                              ₹{user.totalNetWorth.toLocaleString()}
+                            </span>
                             <div className="flex gap-2 text-[10px] uppercase tracking-wider font-bold text-muted-foreground mt-1">
-                              <span>Cash: ₹{user.balance.toLocaleString()}</span>
+                              <span>
+                                Cash: ₹{user.balance.toLocaleString()}
+                              </span>
                               <span className="text-primary/40">•</span>
-                              <span>Holdings: ₹{user.holdingsValue.toLocaleString()}</span>
+                              <span>
+                                Holdings: ₹{user.holdingsValue.toLocaleString()}
+                              </span>
                             </div>
                           </div>
                           {user.rank <= 3 && (
-                            <Badge variant="secondary" className="bg-primary/10 text-primary mt-2 inline-flex">
+                            <Badge
+                              variant="secondary"
+                              className="bg-primary/10 text-primary mt-2 inline-flex"
+                            >
                               Top {user.rank}
                             </Badge>
                           )}
@@ -131,8 +170,12 @@ export default function Leaderboard() {
               <div className="flex items-center justify-center w-12 h-12 rounded-full bg-muted mx-auto mb-4">
                 <Trophy className="w-6 h-6 text-muted-foreground" />
               </div>
-              <h3 className="text-lg font-semibold text-foreground mb-2">No rankings available</h3>
-              <p className="text-muted-foreground">Rankings will appear once users start trading.</p>
+              <h3 className="text-lg font-semibold text-foreground mb-2">
+                No rankings available
+              </h3>
+              <p className="text-muted-foreground">
+                Rankings will appear once users start trading.
+              </p>
             </div>
           )}
         </motion.div>

@@ -70,7 +70,9 @@ export function BinaryTradePanel({
 
   // ── User positions ─────────────────────────────────────────────
   const userTrades = useMemo(() => {
-    return market?.trades?.filter((t) => t.userId === user?.id && !t.sold) || [];
+    return (
+      market?.trades?.filter((t) => t.userId === user?.id && !t.sold) || []
+    );
   }, [market, user]);
 
   const upPositions = userTrades.filter((t) => t.side === "up");
@@ -79,12 +81,12 @@ export function BinaryTradePanel({
   const upInvested = upPositions.reduce((s, t) => s + t.amount, 0);
   const upValue = upPositions.reduce(
     (s, t) => s + (t.amount / Math.max(t.entryProbability, 0.01)) * pUp,
-    0
+    0,
   );
   const downInvested = downPositions.reduce((s, t) => s + t.amount, 0);
   const downValue = downPositions.reduce(
     (s, t) => s + (t.amount / Math.max(t.entryProbability, 0.01)) * pDown,
-    0
+    0,
   );
 
   const currentHolding =
@@ -126,7 +128,7 @@ export function BinaryTradePanel({
       toast({
         title: `${selectedSide === "up" ? "🟢 UP" : "🔴 DOWN"} position opened!`,
         description: `₹${numericAmount} at ${formatPaise(
-          selectedSide === "up" ? pUp : pDown
+          selectedSide === "up" ? pUp : pDown,
         )}`,
       });
       setAmount("");
@@ -141,7 +143,18 @@ export function BinaryTradePanel({
     } finally {
       setIsTrading(false);
     }
-  }, [market, user, numericAmount, selectedSide, pUp, pDown, isTrading, toast, updateBalance, refreshUser]);
+  }, [
+    market,
+    user,
+    numericAmount,
+    selectedSide,
+    pUp,
+    pDown,
+    isTrading,
+    toast,
+    updateBalance,
+    refreshUser,
+  ]);
 
   // ── Sell handler ───────────────────────────────────────────────
   const handleSell = useCallback(
@@ -184,7 +197,16 @@ export function BinaryTradePanel({
         setIsTrading(false);
       }
     },
-    [market, user, isTrading, selectedSide, currentHolding, toast, updateBalance, refreshUser]
+    [
+      market,
+      user,
+      isTrading,
+      selectedSide,
+      currentHolding,
+      toast,
+      updateBalance,
+      refreshUser,
+    ],
   );
 
   // ── Countdown display ──────────────────────────────────────────
@@ -240,7 +262,7 @@ export function BinaryTradePanel({
         <div
           className={cn(
             "flex p-1 bg-muted rounded-lg",
-            isTrading && "opacity-50 pointer-events-none"
+            isTrading && "opacity-50 pointer-events-none",
           )}
         >
           <button
@@ -254,7 +276,7 @@ export function BinaryTradePanel({
               "flex-1 py-1.5 text-sm font-semibold rounded-md transition-colors",
               tradeType === "buy"
                 ? "bg-background shadow-sm text-foreground"
-                : "text-muted-foreground"
+                : "text-muted-foreground",
             )}
           >
             Buy
@@ -270,7 +292,7 @@ export function BinaryTradePanel({
               "flex-1 py-1.5 text-sm font-semibold rounded-md transition-colors",
               tradeType === "sell"
                 ? "bg-background shadow-sm text-foreground"
-                : "text-muted-foreground"
+                : "text-muted-foreground",
             )}
           >
             Sell
@@ -285,13 +307,13 @@ export function BinaryTradePanel({
               "flex flex-col items-center py-4 rounded-xl border-2 transition-all",
               selectedSide === "up"
                 ? "border-yes bg-yes/15 ring-2 ring-yes/20"
-                : "border-transparent bg-muted/50 hover:bg-muted"
+                : "border-transparent bg-muted/50 hover:bg-muted",
             )}
           >
             <span
               className={cn(
                 "text-[10px] font-black mb-1 uppercase tracking-wider",
-                selectedSide === "up" ? "text-yes" : "text-muted-foreground"
+                selectedSide === "up" ? "text-yes" : "text-muted-foreground",
               )}
             >
               Up
@@ -304,13 +326,13 @@ export function BinaryTradePanel({
               "flex flex-col items-center py-4 rounded-xl border-2 transition-all",
               selectedSide === "down"
                 ? "border-no bg-no/15 ring-2 ring-no/20"
-                : "border-transparent bg-muted/50 hover:bg-muted"
+                : "border-transparent bg-muted/50 hover:bg-muted",
             )}
           >
             <span
               className={cn(
                 "text-[10px] font-black mb-1 uppercase tracking-wider",
-                selectedSide === "down" ? "text-no" : "text-muted-foreground"
+                selectedSide === "down" ? "text-no" : "text-muted-foreground",
               )}
             >
               Down
@@ -405,8 +427,8 @@ export function BinaryTradePanel({
                 Sell Position
               </span>
               <span className="font-bold text-primary bg-primary/5 px-2 py-1 rounded-md">
-                Holding: ₹{currentHolding.invested.toFixed(0)} →{" "}
-                ₹{currentHolding.value.toFixed(2)}
+                Holding: ₹{currentHolding.invested.toFixed(0)} → ₹
+                {currentHolding.value.toFixed(2)}
               </span>
             </div>
 
@@ -418,7 +440,7 @@ export function BinaryTradePanel({
                     "p-4 rounded-xl border flex items-center justify-between",
                     selectedSide === "up"
                       ? "border-yes/30 bg-yes/5"
-                      : "border-no/30 bg-no/5"
+                      : "border-no/30 bg-no/5",
                   )}
                 >
                   <div className="flex items-center gap-2">
@@ -430,7 +452,7 @@ export function BinaryTradePanel({
                     <span
                       className={cn(
                         "font-bold text-sm",
-                        selectedSide === "up" ? "text-yes" : "text-no"
+                        selectedSide === "up" ? "text-yes" : "text-no",
                       )}
                     >
                       {selectedSide.toUpperCase()}
@@ -461,7 +483,9 @@ export function BinaryTradePanel({
                       disabled={isTrading}
                       className={cn(
                         "h-10 text-xs font-bold border-border bg-muted/10 hover:bg-primary/10 hover:text-primary hover:border-primary/30 rounded-lg transition-all",
-                        pendingSellRatio === ratio && isSellConfirming && "border-primary bg-primary/10 text-primary"
+                        pendingSellRatio === ratio &&
+                          isSellConfirming &&
+                          "border-primary bg-primary/10 text-primary",
                       )}
                       onClick={() => {
                         setPendingSellRatio(ratio);
@@ -496,16 +520,16 @@ export function BinaryTradePanel({
                         "font-black text-sm",
                         currentHolding.value - currentHolding.invested >= 0
                           ? "text-yes"
-                          : "text-no"
+                          : "text-no",
                       )}
                     >
                       {currentHolding.value - currentHolding.invested >= 0
                         ? "+"
                         : ""}
                       ₹
-                      {(
-                        currentHolding.value - currentHolding.invested
-                      ).toFixed(2)}
+                      {(currentHolding.value - currentHolding.invested).toFixed(
+                        2,
+                      )}
                     </span>
                   </div>
                 </div>
@@ -514,7 +538,8 @@ export function BinaryTradePanel({
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">Selling</span>
                     <span className="font-bold">
-                      {Math.round(pendingSellRatio * 100)}% of {selectedSide.toUpperCase()}
+                      {Math.round(pendingSellRatio * 100)}% of{" "}
+                      {selectedSide.toUpperCase()}
                     </span>
                   </div>
                   <div className="flex items-center justify-between">
@@ -564,7 +589,7 @@ export function BinaryTradePanel({
                     "flex-[2] h-12 text-base font-black uppercase tracking-widest",
                     selectedSide === "up"
                       ? "bg-yes text-white hover:bg-yes/90"
-                      : "bg-no text-white hover:bg-no/90"
+                      : "bg-no text-white hover:bg-no/90",
                   )}
                 >
                   {isTrading ? (
@@ -608,7 +633,7 @@ export function BinaryTradePanel({
                     "flex-[2] h-12 text-base font-black uppercase tracking-widest",
                     selectedSide === "up"
                       ? "bg-yes text-white hover:bg-yes/90"
-                      : "bg-no text-white hover:bg-no/90"
+                      : "bg-no text-white hover:bg-no/90",
                   )}
                 >
                   {isTrading ? (

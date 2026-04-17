@@ -33,10 +33,10 @@ const UserSchema = new mongoose.Schema<IUser>(
     name: { type: String, required: true },
     enrollmentNumber: { type: String, required: true },
     isAdmin: { type: Boolean, default: false },
-    balance: { 
-      type: Number, 
+    balance: {
+      type: Number,
       default: 1000,
-      set: (v: number) => Math.round(v * 100) / 100
+      set: (v: number) => Math.round(v * 100) / 100,
     },
     tradeHistory: { type: [Object], default: [] },
     positions: [
@@ -71,8 +71,10 @@ const UserSchema = new mongoose.Schema<IUser>(
         delete record._id;
       },
     },
-  }
+  },
 );
 
-const User = (mongoose.models.User as mongoose.Model<IUser>) || mongoose.model<IUser>("User", UserSchema);
+const User =
+  (mongoose.models.User as mongoose.Model<IUser>) ||
+  mongoose.model<IUser>("User", UserSchema);
 export default User;

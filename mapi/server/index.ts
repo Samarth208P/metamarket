@@ -102,10 +102,14 @@ export async function createServer() {
   apiRouter.use("/", adminRoutes);
 
   // Auth routes
-  apiRouter.get('/auth/google', handleGoogleAuth);
-  apiRouter.get('/auth/google/callback', handleGoogleCallback, handleAuthSuccess);
-  apiRouter.post('/auth/logout', handleLogout);
-  apiRouter.get('/user', handleGetUser);
+  apiRouter.get("/auth/google", handleGoogleAuth);
+  apiRouter.get(
+    "/auth/google/callback",
+    handleGoogleCallback,
+    handleAuthSuccess,
+  );
+  apiRouter.post("/auth/logout", handleLogout);
+  apiRouter.get("/user", handleGetUser);
 
   // Mount API router
   app.use("/mapi", apiRouter);

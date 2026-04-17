@@ -23,7 +23,7 @@ const TreasurySchema = new mongoose.Schema<ITreasury>(
         delete record._id;
       },
     },
-  }
+  },
 );
 
 const Treasury =

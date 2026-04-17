@@ -98,16 +98,16 @@ pnpm install
 
 Create a `.env` file in the project root using `.env.example` as the starting point.
 
-| Variable | Required | Purpose |
-| --- | --- | --- |
-| `MONGODB_URI` | Yes | MongoDB connection string. Local development will fail without it because the API connects during Vite startup. |
-| `SESSION_SECRET` | Yes | Secret used to sign the auth cookie. |
-| `GOOGLE_CLIENT_ID` | Recommended | Google OAuth client ID for IITR sign-in. |
-| `GOOGLE_CLIENT_SECRET` | Recommended | Google OAuth client secret. |
-| `GOOGLE_CALLBACK_URL` | Recommended | OAuth callback URL. For local development, use `http://localhost:8080/mapi/auth/google/callback`. |
-| `CLOUDINARY_CLOUD_NAME` | Optional | Required for admin image uploads. |
-| `CLOUDINARY_API_KEY` | Optional | Required for admin image uploads. |
-| `CLOUDINARY_API_SECRET` | Optional | Required for admin image uploads. |
+| Variable                | Required    | Purpose                                                                                                         |
+| ----------------------- | ----------- | --------------------------------------------------------------------------------------------------------------- |
+| `MONGODB_URI`           | Yes         | MongoDB connection string. Local development will fail without it because the API connects during Vite startup. |
+| `SESSION_SECRET`        | Yes         | Secret used to sign the auth cookie.                                                                            |
+| `GOOGLE_CLIENT_ID`      | Recommended | Google OAuth client ID for IITR sign-in.                                                                        |
+| `GOOGLE_CLIENT_SECRET`  | Recommended | Google OAuth client secret.                                                                                     |
+| `GOOGLE_CALLBACK_URL`   | Recommended | OAuth callback URL. For local development, use `http://localhost:8080/mapi/auth/google/callback`.               |
+| `CLOUDINARY_CLOUD_NAME` | Optional    | Required for admin image uploads.                                                                               |
+| `CLOUDINARY_API_KEY`    | Optional    | Required for admin image uploads.                                                                               |
+| `CLOUDINARY_API_SECRET` | Optional    | Required for admin image uploads.                                                                               |
 
 ### Run the App
 
@@ -127,13 +127,13 @@ No separate API process is needed for local work.
 
 ## Available Scripts
 
-| Command | Description |
-| --- | --- |
-| `pnpm dev` | Start the Vite development server with the embedded Express API |
-| `pnpm build` | Build the production frontend bundle |
-| `pnpm test` | Run Vitest test suites |
-| `pnpm typecheck` | Run TypeScript type-checking |
-| `pnpm format.fix` | Format the repository with Prettier |
+| Command           | Description                                                     |
+| ----------------- | --------------------------------------------------------------- |
+| `pnpm dev`        | Start the Vite development server with the embedded Express API |
+| `pnpm build`      | Build the production frontend bundle                            |
+| `pnpm test`       | Run Vitest test suites                                          |
+| `pnpm typecheck`  | Run TypeScript type-checking                                    |
+| `pnpm format.fix` | Format the repository with Prettier                             |
 
 ## Authentication and Access
 

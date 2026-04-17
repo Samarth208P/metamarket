@@ -1,6 +1,10 @@
 import mongoose from "mongoose";
 
-export type MarketStatus = "active" | "resolved_yes" | "resolved_no" | "resolved_option";
+export type MarketStatus =
+  | "active"
+  | "resolved_yes"
+  | "resolved_no"
+  | "resolved_option";
 
 export interface PriceHistoryPoint {
   yesPrice: number;
@@ -22,8 +26,19 @@ export interface IMarket extends mongoose.Document {
   shortA?: string;
   shortB?: string;
   logoUrl?: string;
-  options: { id: string; name: string; shortName?: string; imageUrl?: string; shares: number }[];
-  teams?: { name: string; imageUrl?: string; yesPool: number; noPool: number }[];
+  options: {
+    id: string;
+    name: string;
+    shortName?: string;
+    imageUrl?: string;
+    shares: number;
+  }[];
+  teams?: {
+    name: string;
+    imageUrl?: string;
+    yesPool: number;
+    noPool: number;
+  }[];
   creatorId?: string;
   status: MarketStatus;
   yesPool: number;
@@ -57,7 +72,7 @@ const PriceHistorySchema = new mongoose.Schema<PriceHistoryPoint>(
     note: { type: String, required: true },
     timestamp: { type: Date, default: Date.now },
   },
-  { _id: false }
+  { _id: false },
 );
 
 const MarketSchema = new mongoose.Schema<IMarket>(
@@ -65,7 +80,11 @@ const MarketSchema = new mongoose.Schema<IMarket>(
     title: { type: String, required: true },
     description: { type: String, required: true },
     category: { type: String, default: "General" },
-    marketType: { type: String, enum: ["binary", "versus", "multi"], default: "binary" },
+    marketType: {
+      type: String,
+      enum: ["binary", "versus", "multi"],
+      default: "binary",
+    },
     ammType: { type: String, enum: ["legacy", "lmsr"], default: "lmsr" },
     optionA: { type: String },
     optionB: { type: String },
@@ -92,7 +111,11 @@ const MarketSchema = new mongoose.Schema<IMarket>(
       },
     ],
     creatorId: { type: String },
-    status: { type: String, enum: ["active", "resolved_yes", "resolved_no", "resolved_option"], default: "active" },
+    status: {
+      type: String,
+      enum: ["active", "resolved_yes", "resolved_no", "resolved_option"],
+      default: "active",
+    },
     yesPool: { type: Number, default: 1000 },
     noPool: { type: Number, default: 1000 },
     volume: { type: Number, default: 0 },
@@ -115,7 +138,7 @@ const MarketSchema = new mongoose.Schema<IMarket>(
         delete record._id;
       },
     },
-  }
+  },
 );
 
 export function calculateYesPrice(yesPool: number, noPool: number): number {
@@ -130,5 +153,7 @@ export function calculateNoPrice(yesPool: number, noPool: number): number {
   return Math.min(100, Math.max(0, (yesPool / total) * 100));
 }
 
-const Market = (mongoose.models.Market as mongoose.Model<IMarket>) || mongoose.model<IMarket>("Market", MarketSchema);
+const Market =
+  (mongoose.models.Market as mongoose.Model<IMarket>) ||
+  mongoose.model<IMarket>("Market", MarketSchema);
 export default Market;

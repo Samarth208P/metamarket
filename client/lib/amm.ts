@@ -20,7 +20,10 @@ const B = 100; // Liquidity parameter (higher = more liquidity, smoother prices)
 /**
  * Calculate current prices based on pool state
  */
-export function calculatePrices(pool: MarketPool): { yesPrice: number; noPrice: number } {
+export function calculatePrices(pool: MarketPool): {
+  yesPrice: number;
+  noPrice: number;
+} {
   const total = pool.yesPool + pool.noPool;
   if (total === 0) {
     return { yesPrice: 50, noPrice: 50 };
@@ -40,8 +43,8 @@ export function calculatePrices(pool: MarketPool): { yesPrice: number; noPrice: 
  */
 export function calculateBuyCost(
   pool: MarketPool,
-  outcome: 'yes' | 'no',
-  amount: number
+  outcome: "yes" | "no",
+  amount: number,
 ): number {
   return amount; // Amount represents rupees invested
 }
@@ -51,11 +54,12 @@ export function calculateBuyCost(
  */
 export function calculateSellPayout(
   pool: MarketPool,
-  outcome: 'yes' | 'no',
-  amount: number
+  outcome: "yes" | "no",
+  amount: number,
 ): number {
   const currentPrices = calculatePrices(pool);
-  const price = outcome === 'yes' ? currentPrices.yesPrice : currentPrices.noPrice;
+  const price =
+    outcome === "yes" ? currentPrices.yesPrice : currentPrices.noPrice;
   return (price / 100) * amount * 0.95; // 5% fee
 }
 
@@ -64,16 +68,16 @@ export function calculateSellPayout(
  */
 export function executeTrade(
   pool: MarketPool,
-  outcome: 'yes' | 'no',
+  outcome: "yes" | "no",
   amount: number,
-  isBuy: boolean
+  isBuy: boolean,
 ): TradeResult {
   let cost = 0;
   let newPool = { ...pool };
 
   if (isBuy) {
     cost = calculateBuyCost(pool, outcome, amount);
-    if (outcome === 'yes') {
+    if (outcome === "yes") {
       newPool.yesPool = Math.max(1, newPool.yesPool - amount);
       newPool.noPool += amount;
     } else {
@@ -83,7 +87,7 @@ export function executeTrade(
   } else {
     const payout = calculateSellPayout(pool, outcome, amount);
     cost = -payout;
-    if (outcome === 'yes') {
+    if (outcome === "yes") {
       newPool.yesPool += amount;
       newPool.noPool = Math.max(1, newPool.noPool - amount);
     } else {

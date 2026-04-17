@@ -1,11 +1,17 @@
-import { useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { useAuth } from '@/hooks/use-auth';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Mail } from 'lucide-react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useToast } from '@/hooks/use-toast';
+import { useEffect } from "react";
+import { motion } from "framer-motion";
+import { useAuth } from "@/hooks/use-auth";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Mail } from "lucide-react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Login() {
   const { login, isLoading, guestLogin, isAuthenticated } = useAuth();
@@ -15,17 +21,18 @@ export default function Login() {
 
   useEffect(() => {
     if (isAuthenticated) {
-      navigate('/', { replace: true });
+      navigate("/", { replace: true });
     }
   }, [isAuthenticated, navigate]);
 
   useEffect(() => {
     // Check for auth error in URL params
-    const error = searchParams.get('error');
-    if (error === 'auth_failed') {
+    const error = searchParams.get("error");
+    if (error === "auth_failed") {
       toast({
         title: "Authentication Failed",
-        description: "Only @iitr.ac.in emails are allowed or authentication failed.",
+        description:
+          "Only @iitr.ac.in emails are allowed or authentication failed.",
         variant: "destructive",
       });
     }
@@ -52,12 +59,19 @@ export default function Login() {
               className="flex items-center justify-center w-20 h-20 mx-auto"
             >
               <div className="bg-primary/10 p-4 rounded-2xl border border-primary/20 shadow-sm flex items-center justify-center">
-                <img src="/logo.svg" alt="MetaMarket Logo" className="w-12 h-12 object-contain" />
+                <img
+                  src="/logo.svg"
+                  alt="MetaMarket Logo"
+                  className="w-12 h-12 object-contain"
+                />
               </div>
             </motion.div>
             <div>
               <CardTitle className="text-2xl font-bold">
-                Welcome to <span className="font-extrabold tracking-tight bg-gradient-to-br from-foreground to-foreground/70 text-transparent bg-clip-text">MetaMarket</span>
+                Welcome to{" "}
+                <span className="font-extrabold tracking-tight bg-gradient-to-br from-foreground to-foreground/70 text-transparent bg-clip-text">
+                  MetaMarket
+                </span>
               </CardTitle>
               <CardDescription className="text-base">
                 IIT Roorkee's Prediction Market Platform
@@ -117,7 +131,9 @@ export default function Login() {
                 <span className="w-full border-t border-border/50"></span>
               </div>
               <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-card px-2 text-muted-foreground font-medium">Or</span>
+                <span className="bg-card px-2 text-muted-foreground font-medium">
+                  Or
+                </span>
               </div>
             </div>
 
@@ -125,7 +141,7 @@ export default function Login() {
               variant="outline"
               onClick={() => {
                 guestLogin();
-                navigate('/', { replace: true });
+                navigate("/", { replace: true });
               }}
               className="w-full text-foreground border-border/60 hover:bg-muted font-bold h-11"
             >
@@ -134,7 +150,8 @@ export default function Login() {
 
             <div className="text-center space-y-2">
               <p className="text-xs text-muted-foreground">
-                By signing in, you agree to participate in prediction markets responsibly
+                By signing in, you agree to participate in prediction markets
+                responsibly
               </p>
             </div>
           </CardContent>

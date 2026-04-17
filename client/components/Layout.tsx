@@ -52,7 +52,10 @@ export function Layout({ children }: LayoutProps) {
       <header className="sticky top-0 z-50 border-b border-border bg-background">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           {/* Logo - Text only, clean */}
-          <Link to="/" className="flex items-center gap-0 font-bold text-xl tracking-tight text-foreground shrink-0">
+          <Link
+            to="/"
+            className="flex items-center gap-0 font-bold text-xl tracking-tight text-foreground shrink-0"
+          >
             <img src="/logo.svg" alt="logo" className="w-10 h-10" />
             <span className="tracking-tight -ml-1.5">etaMarket</span>
           </Link>
@@ -83,22 +86,32 @@ export function Layout({ children }: LayoutProps) {
               </Link>
             ))}
           </nav>
-          
+
           <div className="hidden md:flex items-center gap-6 ml-auto pl-6 border-l border-border/50">
             {user ? (
               <>
                 {!isGuestUser && (
                   <div className="flex items-center gap-4 mr-2">
-                    <Link to="/portfolio" className="flex flex-col items-center group transition-opacity hover:opacity-80">
-                      <span className="text-[10px] uppercase font-bold text-muted-foreground leading-none">Portfolio</span>
-                      <span className="text-sm font-bold text-yes">₹{user.balance.toLocaleString()}</span>
+                    <Link
+                      to="/portfolio"
+                      className="flex flex-col items-center group transition-opacity hover:opacity-80"
+                    >
+                      <span className="text-[10px] uppercase font-bold text-muted-foreground leading-none">
+                        Portfolio
+                      </span>
+                      <span className="text-sm font-bold text-yes">
+                        ₹{user.balance.toLocaleString()}
+                      </span>
                     </Link>
                   </div>
                 )}
 
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" className="h-8 w-8 p-0 rounded-full bg-muted border border-border">
+                    <Button
+                      variant="ghost"
+                      className="h-8 w-8 p-0 rounded-full bg-muted border border-border"
+                    >
                       <User className="w-4 h-4 text-muted-foreground" />
                     </Button>
                   </DropdownMenuTrigger>
@@ -107,11 +120,17 @@ export function Layout({ children }: LayoutProps) {
                       {isGuestUser ? "Guest Mode" : user.email}
                     </div>
                     <DropdownMenuSeparator />
-                    {!isGuestUser && <DropdownMenuItem>
-                      <Settings className="w-4 h-4 mr-2" /> Settings
-                    </DropdownMenuItem>}
-                    <DropdownMenuItem onClick={() => logout()} className="text-destructive">
-                      <LogOut className="w-4 h-4 mr-2" /> {isGuestUser ? "Exit Guest Mode" : "Sign Out"}
+                    {!isGuestUser && (
+                      <DropdownMenuItem>
+                        <Settings className="w-4 h-4 mr-2" /> Settings
+                      </DropdownMenuItem>
+                    )}
+                    <DropdownMenuItem
+                      onClick={() => logout()}
+                      className="text-destructive"
+                    >
+                      <LogOut className="w-4 h-4 mr-2" />{" "}
+                      {isGuestUser ? "Exit Guest Mode" : "Sign Out"}
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -127,9 +146,15 @@ export function Layout({ children }: LayoutProps) {
 
           {/* Mobile Actions */}
           <div className="md:hidden flex items-center gap-2">
-
-            <button className="p-2 -mr-2" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
-              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            <button
+              className="p-2 -mr-2"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            >
+              {mobileMenuOpen ? (
+                <X className="w-5 h-5" />
+              ) : (
+                <Menu className="w-5 h-5" />
+              )}
             </button>
           </div>
         </div>
@@ -138,9 +163,15 @@ export function Layout({ children }: LayoutProps) {
         {mobileMenuOpen && (
           <nav className="md:hidden border-t border-border bg-background px-4 py-4 flex flex-col gap-4">
             {user && !isGuestUser && (
-              <Link to="/portfolio" onClick={() => setMobileMenuOpen(false)} className="flex items-center justify-between p-3 bg-muted/30 rounded-md">
+              <Link
+                to="/portfolio"
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex items-center justify-between p-3 bg-muted/30 rounded-md"
+              >
                 <span className="text-sm font-semibold">Portfolio Balance</span>
-                <span className="font-bold text-foreground">₹{user.balance.toLocaleString()}</span>
+                <span className="font-bold text-foreground">
+                  ₹{user.balance.toLocaleString()}
+                </span>
               </Link>
             )}
 
@@ -155,11 +186,14 @@ export function Layout({ children }: LayoutProps) {
                   {link.label}
                 </Link>
               ))}
-
             </div>
 
             {user ? (
-              <Button variant="outline" onClick={() => logout()} className="w-full justify-start text-destructive mt-2">
+              <Button
+                variant="outline"
+                onClick={() => logout()}
+                className="w-full justify-start text-destructive mt-2"
+              >
                 <LogOut className="w-4 h-4 mr-2" /> Sign Out
               </Button>
             ) : (

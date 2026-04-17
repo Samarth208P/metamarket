@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { costFunction, getOptionPrices, quoteBuy, quoteSell, type LmsrState } from "./lmsr";
+import {
+  costFunction,
+  getOptionPrices,
+  quoteBuy,
+  quoteSell,
+  type LmsrState,
+} from "./lmsr";
 
 describe("lmsr math", () => {
   const state: LmsrState = {
@@ -41,7 +47,7 @@ describe("lmsr math", () => {
       },
       100,
       "yes",
-      25
+      25,
     );
 
     expect(result.grossPayout).toBeGreaterThan(result.netPayout);

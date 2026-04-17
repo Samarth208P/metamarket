@@ -29,7 +29,7 @@ export function BinaryChart({
   frozenPrice,
 }: BinaryChartProps) {
   const [now, setNow] = useState(Date.now());
-  
+
   useEffect(() => {
     let frameId: number;
     const loop = () => {
@@ -40,8 +40,9 @@ export function BinaryChart({
     return () => cancelAnimationFrame(frameId);
   }, []);
 
-  const delayedTime = frozenAtTime ? frozenAtTime : (now - 300);
-  const displayCurrentPrice = frozenPrice !== undefined ? frozenPrice : currentPrice;
+  const delayedTime = frozenAtTime ? frozenAtTime : now - 300;
+  const displayCurrentPrice =
+    frozenPrice !== undefined ? frozenPrice : currentPrice;
 
   // Cubic spline interpolation for ultra-smooth curves
   function lerp(a: number, b: number, t: number) {
@@ -56,7 +57,10 @@ export function BinaryChart({
   const chartData = useMemo(() => {
     const windowStart = delayedTime - WINDOW_MS;
     const raw = priceHistory
-      .filter((point) => point.timestamp <= delayedTime && point.timestamp >= windowStart)
+      .filter(
+        (point) =>
+          point.timestamp <= delayedTime && point.timestamp >= windowStart,
+      )
       .map((point) => ({ time: point.timestamp, price: point.price }));
 
     // Append live point for continuity
@@ -98,22 +102,25 @@ export function BinaryChart({
     const allPrices = [...prices, targetPrice];
     const min = Math.min(...allPrices);
     const max = Math.max(...allPrices);
-    
+
     // We use a fixed percentage padding but round to the nearest $5 or $10
     // to prevent the "vibrating" Y-axis effect when prices move by cents.
     const range = max - min || 10;
     const padding = Math.max(range * 0.2, 5);
-    
+
     return {
       yMin: Math.floor((min - padding) / 10) * 10,
       yMax: Math.ceil((max + padding) / 10) * 10,
     };
   }, [chartData, targetPrice]);
 
-  const plottedPrice = chartData.length > 0 ? chartData[chartData.length - 1].price : displayCurrentPrice;
+  const plottedPrice =
+    chartData.length > 0
+      ? chartData[chartData.length - 1].price
+      : displayCurrentPrice;
   const isAboveTargetVisual = plottedPrice >= targetPrice;
   const isAboveTargetLive = displayCurrentPrice >= targetPrice;
-  
+
   const accentColor = isAboveTargetVisual ? "#22c55e" : "#ef4444";
   const liveAccentColor = isAboveTargetLive ? "#34d399" : "#f87171"; // emerald-400 / red-400
   const gradientId = "priceGradient";
@@ -129,7 +136,11 @@ export function BinaryChart({
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
-            <img src="/bitcoin-logo.svg" className="w-4 h-4 drop-shadow-md" alt="BTC" />
+            <img
+              src="/bitcoin-logo.svg"
+              className="w-4 h-4 drop-shadow-md"
+              alt="BTC"
+            />
             <span className="text-sm font-semibold text-zinc-400 tracking-wider uppercase">
               BTC/USDT
             </span>
@@ -142,9 +153,7 @@ export function BinaryChart({
             >
               <span
                 className={`w-1.5 h-1.5 rounded-full ${
-                  isConnected
-                    ? "bg-emerald-400 animate-pulse"
-                    : "bg-red-400"
+                  isConnected ? "bg-emerald-400 animate-pulse" : "bg-red-400"
                 }`}
               />
               {isConnected ? "LIVE" : "OFFLINE"}
@@ -153,7 +162,8 @@ export function BinaryChart({
         </div>
         <div className="text-right">
           <p className="text-2xl sm:text-3xl font-bold tracking-tight text-white tabular-nums">
-            ${displayCurrentPrice.toLocaleString("en-US", {
+            $
+            {displayCurrentPrice.toLocaleString("en-US", {
               minimumFractionDigits: 2,
               maximumFractionDigits: 2,
             })}
@@ -169,7 +179,8 @@ export function BinaryChart({
           <p className="text-xs text-zinc-500 mt-0.5">
             Target:{" "}
             <span className="text-zinc-300 font-medium">
-              ${targetPrice.toLocaleString("en-US", {
+              $
+              {targetPrice.toLocaleString("en-US", {
                 minimumFractionDigits: 2,
                 maximumFractionDigits: 2,
               })}
@@ -184,9 +195,7 @@ export function BinaryChart({
           <div className="h-full flex items-center justify-center">
             <div className="text-center">
               <div className="w-8 h-8 border-2 border-zinc-600 border-t-zinc-400 rounded-full animate-spin mx-auto mb-3" />
-              <p className="text-sm text-zinc-500">
-                Waiting for price data...
-              </p>
+              <p className="text-sm text-zinc-500">Waiting for price data...</p>
             </div>
           </div>
         ) : (
@@ -197,16 +206,8 @@ export function BinaryChart({
             >
               <defs>
                 <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-                  <stop
-                    offset="0%"
-                    stopColor={accentColor}
-                    stopOpacity={0.4}
-                  />
-                  <stop
-                    offset="100%"
-                    stopColor={accentColor}
-                    stopOpacity={0}
-                  />
+                  <stop offset="0%" stopColor={accentColor} stopOpacity={0.4} />
+                  <stop offset="100%" stopColor={accentColor} stopOpacity={0} />
                 </linearGradient>
                 <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
                   <feGaussianBlur stdDeviation="3" result="blur" />
@@ -257,15 +258,23 @@ export function BinaryChart({
                   backdropFilter: "blur(12px)",
                   boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.5)",
                 }}
-                labelStyle={{ color: "#71717a", fontSize: 10, fontWeight: 700, textTransform: "uppercase", marginBottom: 2 }}
+                labelStyle={{
+                  color: "#71717a",
+                  fontSize: 10,
+                  fontWeight: 700,
+                  textTransform: "uppercase",
+                  marginBottom: 2,
+                }}
                 itemStyle={{ color: "#fff", fontSize: 14, fontWeight: 800 }}
                 cursor={{ stroke: "rgba(255,255,255,0.1)", strokeWidth: 1 }}
-                labelFormatter={(label) => new Date(label).toLocaleTimeString("en-IN", {
-                  hour12: false,
-                  hour: "2-digit",
-                  minute: "2-digit",
-                  second: "2-digit",
-                })}
+                labelFormatter={(label) =>
+                  new Date(label).toLocaleTimeString("en-IN", {
+                    hour12: false,
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    second: "2-digit",
+                  })
+                }
                 formatter={(value: number) => [
                   `$${value.toLocaleString("en-US", {
                     minimumFractionDigits: 2,
@@ -300,7 +309,6 @@ export function BinaryChart({
           </ResponsiveContainer>
         )}
       </div>
-
     </motion.div>
   );
 }
