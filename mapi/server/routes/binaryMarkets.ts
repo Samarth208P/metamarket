@@ -358,6 +358,8 @@ router.post(
         return res.status(400).json({ error: `No active '${side}' positions to sell.` });
       }
 
+      const ratio = Math.max(0.01, Math.min(1, parseFloat(req.body.ratio) || 1));
+      
       // Compute immediate cash out value
       const currentPrice = binanceFeed.getLatestPrice();
       const timeRemainingMs = Math.max(0, new Date(market.endTime).getTime() - Date.now());
@@ -374,12 +376,18 @@ router.post(
       let totalPayoutValue = 0;
       for (const trade of activeTrades) {
         const fullPayout = trade.amount / Math.max(trade.entryProbability, 0.01);
-        const cashValue = fullPayout * currentSideProbability;
+        const cashValue = (fullPayout * currentSideProbability) * ratio;
         totalPayoutValue += cashValue;
         
-        // Mark as sold
-        trade.sold = true;
-        trade.payout = cashValue; 
+        if (ratio >= 0.99) {
+          // Fully sold
+          trade.sold = true;
+          trade.payout = cashValue;
+        } else {
+          // Partial sell - we reduce the amount and entry basis proportionally
+          // This keeps the remaining 'shares' active
+          trade.amount = trade.amount * (1 - ratio);
+        }
       }
 
       totalPayoutValue = Math.round(totalPayoutValue * 100) / 100;

@@ -2,6 +2,9 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   calculateLiveProbability,
   calculatePotentialPayout,
@@ -9,7 +12,7 @@ import {
   formatCountdown,
 } from "@shared/binaryPrice";
 import type { BinaryMarket as BinaryMarketType } from "@shared/binaryPrice";
-import { ArrowUp, ArrowDown, Clock, Zap, TrendingUp, Trophy } from "lucide-react";
+import { ArrowUp, ArrowDown, TrendingUp, Loader2 } from "lucide-react";
 
 interface BinaryTradePanelProps {
   market: BinaryMarketType | null;
@@ -19,7 +22,7 @@ interface BinaryTradePanelProps {
   isFrozen?: boolean;
 }
 
-const PRESET_AMOUNTS = [10, 25, 50, 100];
+const PRESET_AMOUNTS = [10, 50, 100, 500];
 
 export function BinaryTradePanel({
   market,
@@ -30,48 +33,38 @@ export function BinaryTradePanel({
 }: BinaryTradePanelProps) {
   const { user, updateBalance, refreshUser } = useAuth();
   const { toast } = useToast();
-  const [amount, setAmount] = useState<string>("25");
+  const [tradeType, setTradeType] = useState<"buy" | "sell">("buy");
+  const [amount, setAmount] = useState<string>("");
+  const [selectedSide, setSelectedSide] = useState<"up" | "down">("up");
   const [isTrading, setIsTrading] = useState(false);
   const [timeRemainingMs, setTimeRemainingMs] = useState(0);
-  const [lastPUp, setLastPUp] = useState(0.5);
-  const [confirmSide, setConfirmSide] = useState<"up" | "down" | null>(null);
+  const [isConfirming, setIsConfirming] = useState(false);
 
-  // Update countdown timer
+  // ── Countdown timer ────────────────────────────────────────────
   useEffect(() => {
     if (!market) return;
     const endTime = new Date(market.endTime).getTime();
-
-    const tick = () => {
-      const remaining = Math.max(0, endTime - Date.now());
-      setTimeRemainingMs(remaining);
-    };
-
+    const tick = () => setTimeRemainingMs(Math.max(0, endTime - Date.now()));
     tick();
     const interval = setInterval(tick, 100);
     return () => clearInterval(interval);
   }, [market]);
 
-  // Calculate live probabilities
-  const { pUp, pDown, activeVolatility, momentumBias } = useMemo(() => {
+  // ── Live probabilities ─────────────────────────────────────────
+  const { pUp, pDown } = useMemo(() => {
     if (!market || currentPrice <= 0) {
-      return { pUp: 0.5, pDown: 0.5, activeVolatility: 0.02, momentumBias: 0 };
+      return { pUp: 0.5, pDown: 0.5 };
     }
-
     const result = calculateLiveProbability({
       currentPrice,
       targetPrice: market.targetPrice,
       timeRemainingMs,
       recentPrices,
     });
-
-    return {
-      pUp: result.probability,
-      pDown: 1 - result.probability,
-      activeVolatility: result.activeVolatility,
-      momentumBias: result.momentumBias,
-    };
+    return { pUp: result.probability, pDown: 1 - result.probability };
   }, [market, currentPrice, timeRemainingMs, recentPrices]);
 
+  // ── User positions ─────────────────────────────────────────────
   const userTrades = useMemo(() => {
     return market?.trades?.filter((t) => t.userId === user?.id && !t.sold) || [];
   }, [market, user]);
@@ -80,65 +73,105 @@ export function BinaryTradePanel({
   const downPositions = userTrades.filter((t) => t.side === "down");
 
   const upInvested = upPositions.reduce((s, t) => s + t.amount, 0);
-  const upValue = upPositions.reduce((s, t) => s + (t.amount / Math.max(t.entryProbability, 0.01)) * pUp, 0);
-
+  const upValue = upPositions.reduce(
+    (s, t) => s + (t.amount / Math.max(t.entryProbability, 0.01)) * pUp,
+    0
+  );
   const downInvested = downPositions.reduce((s, t) => s + t.amount, 0);
-  const downValue = downPositions.reduce((s, t) => s + (t.amount / Math.max(t.entryProbability, 0.01)) * pDown, 0);
+  const downValue = downPositions.reduce(
+    (s, t) => s + (t.amount / Math.max(t.entryProbability, 0.01)) * pDown,
+    0
+  );
 
-  // Track probability shifts for animation
-  useEffect(() => {
-    setLastPUp(pUp);
-  }, [pUp]);
+  const currentHolding =
+    selectedSide === "up"
+      ? { positions: upPositions, invested: upInvested, value: upValue }
+      : { positions: downPositions, invested: downInvested, value: downValue };
 
-  const probShift = Math.abs(pUp - lastPUp);
-  const shouldAnimate = probShift > 0.02;
-
-  const numericAmount = parseFloat(amount) || 0;
+  const numericAmount = Number(amount) || 0;
   const potentialPayoutUp = calculatePotentialPayout(numericAmount, pUp);
   const potentialPayoutDown = calculatePotentialPayout(numericAmount, pDown);
 
-  const handleTrade = useCallback(
-    async (side: "up" | "down") => {
+  const isMarketActive = market?.status === "active" && timeRemainingMs > 0;
+
+  // ── Trade handler ──────────────────────────────────────────────
+  const handleTrade = useCallback(async () => {
+    if (!market || !user || user.isGuest || isTrading) return;
+    if (numericAmount < 1) {
+      toast({ title: "Minimum bet is ₹1", variant: "destructive" });
+      return;
+    }
+    if (numericAmount > (user.balance || 0)) {
+      toast({ title: "Insufficient balance", variant: "destructive" });
+      return;
+    }
+
+    setIsTrading(true);
+    try {
+      const res = await fetch(`/mapi/binary-markets/${market.id}/trade`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ side: selectedSide, amount: numericAmount }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Trade failed");
+
+      updateBalance(data.userBalance);
+      toast({
+        title: `${selectedSide === "up" ? "🟢 UP" : "🔴 DOWN"} position opened!`,
+        description: `₹${numericAmount} at ${formatPaise(
+          selectedSide === "up" ? pUp : pDown
+        )}`,
+      });
+      setAmount("");
+      setIsConfirming(false);
+      refreshUser();
+    } catch (err: any) {
+      toast({
+        title: "Trade failed",
+        description: err.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsTrading(false);
+    }
+  }, [market, user, numericAmount, selectedSide, pUp, pDown, isTrading, toast, updateBalance, refreshUser]);
+
+  // ── Sell handler ───────────────────────────────────────────────
+  const handleSell = useCallback(
+    async (ratio: number = 1) => {
       if (!market || !user || user.isGuest || isTrading) return;
-      if (numericAmount < 1) {
-        toast({ title: "Minimum bet is ₹1", variant: "destructive" });
-        return;
-      }
-      if (numericAmount > (user.balance || 0)) {
-        toast({ title: "Insufficient balance", variant: "destructive" });
+      if (currentHolding.positions.length === 0) {
+        toast({ title: "No position to sell", variant: "destructive" });
         return;
       }
 
       setIsTrading(true);
       try {
-        const res = await fetch(`/mapi/binary-markets/${market.id}/trade`, {
+        const res = await fetch(`/mapi/binary-markets/${market.id}/sell`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
-          body: JSON.stringify({ side, amount: numericAmount }),
+          body: JSON.stringify({ side: selectedSide, ratio }),
         });
-
         const data = await res.json();
-        if (!res.ok) {
-          throw new Error(data.error || "Trade failed");
-        }
+        if (!res.ok) throw new Error(data.error || "Sell failed");
 
         updateBalance(data.userBalance);
         toast({
-          title: `${side === "up" ? "🟢 UP" : "🔴 DOWN"} position opened!`,
-          description: `₹${numericAmount} at ${formatPaise(
-            side === "up" ? pUp : pDown,
-          )} — potential payout: ₹${(side === "up"
-            ? potentialPayoutUp
-            : potentialPayoutDown
-          ).toFixed(0)}`,
+          title:
+            ratio >= 1
+              ? "Position closed!"
+              : `Sold ${Math.round(ratio * 100)}% of ${selectedSide.toUpperCase()}`,
+          description: `You received ₹${data.cashOutValue.toFixed(2)}`,
         });
-
-        // Refresh user data
+        setIsConfirming(false);
         refreshUser();
       } catch (err: any) {
         toast({
-          title: "Trade failed",
+          title: "Sell failed",
           description: err.message,
           variant: "destructive",
         });
@@ -146,319 +179,403 @@ export function BinaryTradePanel({
         setIsTrading(false);
       }
     },
-    [
-      market,
-      user,
-      numericAmount,
-      pUp,
-      pDown,
-      potentialPayoutUp,
-      potentialPayoutDown,
-      isTrading,
-      toast,
-      updateBalance,
-      refreshUser,
-    ],
+    [market, user, isTrading, selectedSide, currentHolding, toast, updateBalance, refreshUser]
   );
 
-  const handleSell = useCallback(
-    async (side: "up" | "down") => {
-      if (!market || !user || user.isGuest || isTrading) return;
-      setIsTrading(true);
-      try {
-        const res = await fetch(`/mapi/binary-markets/${market.id}/sell`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({ side }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "Cash out failed");
-        
-        updateBalance(data.userBalance);
-        toast({
-          title: `Positions Cashed Out!`,
-          description: `You sold your ${side.toUpperCase()} trades for ₹${data.cashOutValue.toFixed(2)}`,
-        });
-        refreshUser();
-      } catch (err: any) {
-        toast({
-          title: "Cash out failed",
-          description: err.message,
-          variant: "destructive"
-        });
-      } finally {
-        setIsTrading(false);
-      }
-    },
-    [market, user, isTrading, toast, updateBalance, refreshUser]
+  // ── Countdown display ──────────────────────────────────────────
+  const mins = Math.floor(timeRemainingMs / 60000);
+  const secs = Math.floor((timeRemainingMs % 60000) / 1000);
+
+  const countdownDisplay = (
+    <div className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-muted/50 border border-border/50">
+      <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mr-2">
+        Closes in
+      </span>
+      <div className="flex items-center gap-1 font-mono">
+        <span className="bg-foreground/10 text-foreground text-sm font-black px-1.5 py-0.5 rounded">
+          {String(mins).padStart(2, "0")}
+        </span>
+        <span className="text-muted-foreground font-bold">:</span>
+        <span className="bg-foreground/10 text-foreground text-sm font-black px-1.5 py-0.5 rounded">
+          {String(secs).padStart(2, "0")}
+        </span>
+      </div>
+    </div>
   );
 
-  const isMarketActive = market?.status === "active" && timeRemainingMs > 0;
-
-  // Countdown progress (0→1)
-  const progress = market
-    ? 1 -
-      timeRemainingMs /
-        (new Date(market.endTime).getTime() -
-          new Date(market.startTime).getTime())
-    : 0;
-
-
+  // ── Max handler ────────────────────────────────────────────────
+  const handleMax = () => {
+    if (!user) return;
+    if (tradeType === "buy") {
+      setAmount(String(user.balance));
+    } else {
+      // For sell, max = 100% (will use ratio)
+      setAmount("100");
+    }
+  };
 
   return (
-    <motion.div
-      initial={{ opacity: 0, x: 20 }}
-      animate={{ opacity: 1, x: 0 }}
-      transition={{ duration: 0.5, delay: 0.2 }}
-      className="rounded-2xl border border-white/10 bg-gradient-to-br from-zinc-900/80 to-zinc-950/90 backdrop-blur-xl p-5 shadow-2xl"
-    >
-      {/* Header */}
-      <div className="flex items-center justify-between mb-5">
-        <h3 className="text-lg font-bold text-white flex items-center gap-2">
-          <Zap className="w-4 h-4 text-amber-400" />
-          Quick Trade
-        </h3>
-      </div>
+    <div className="bg-card border border-border rounded-xl flex flex-col overflow-hidden">
+      {/* ── Trade controls ─────────────────────────────────────── */}
+      <div className="p-6 flex flex-col gap-5">
+        {countdownDisplay}
 
-      {/* Countdown Timer */}
-      <div className="mb-5">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-sm text-zinc-400 flex items-center gap-1.5">
-            <Clock className="w-3.5 h-3.5" />
-            Time Remaining
-          </span>
-          <motion.span
-            key={formatCountdown(timeRemainingMs)}
-            animate={{ scale: 1 }}
-            className={`text-xl font-mono font-bold tabular-nums ${
-              timeRemainingMs < 60_000
-                ? "text-amber-400"
-                : "text-white"
-            }`}
+        {/* Buy / Sell Toggle — matches LmsrBetModal */}
+        <div
+          className={cn(
+            "flex p-1 bg-muted rounded-lg",
+            isTrading && "opacity-50 pointer-events-none"
+          )}
+        >
+          <button
+            onClick={() => {
+              setTradeType("buy");
+              setIsConfirming(false);
+              setAmount("");
+            }}
+            className={cn(
+              "flex-1 py-1.5 text-sm font-semibold rounded-md transition-colors",
+              tradeType === "buy"
+                ? "bg-background shadow-sm text-foreground"
+                : "text-muted-foreground"
+            )}
           >
-            {formatCountdown(timeRemainingMs)}
-          </motion.span>
+            Buy
+          </button>
+          <button
+            onClick={() => {
+              setTradeType("sell");
+              setIsConfirming(false);
+              setAmount("");
+            }}
+            className={cn(
+              "flex-1 py-1.5 text-sm font-semibold rounded-md transition-colors",
+              tradeType === "sell"
+                ? "bg-background shadow-sm text-foreground"
+                : "text-muted-foreground"
+            )}
+          >
+            Sell
+          </button>
         </div>
-        {/* Progress bar */}
-        <div className="h-1.5 rounded-full bg-zinc-800 overflow-hidden">
-          <motion.div
-            className="h-full rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500"
-            animate={{ width: `${progress * 100}%` }}
-            transition={{ duration: 0.3 }}
-          />
+
+        {/* Outcome Selector — Up / Down */}
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            onClick={() => setSelectedSide("up")}
+            className={cn(
+              "flex flex-col items-center py-4 rounded-xl border-2 transition-all",
+              selectedSide === "up"
+                ? "border-yes bg-yes/15 ring-2 ring-yes/20"
+                : "border-transparent bg-muted/50 hover:bg-muted"
+            )}
+          >
+            <span
+              className={cn(
+                "text-[10px] font-black mb-1 uppercase tracking-wider",
+                selectedSide === "up" ? "text-yes" : "text-muted-foreground"
+              )}
+            >
+              Up
+            </span>
+            <span className="text-xl font-black">{formatPaise(pUp)}</span>
+          </button>
+          <button
+            onClick={() => setSelectedSide("down")}
+            className={cn(
+              "flex flex-col items-center py-4 rounded-xl border-2 transition-all",
+              selectedSide === "down"
+                ? "border-no bg-no/15 ring-2 ring-no/20"
+                : "border-transparent bg-muted/50 hover:bg-muted"
+            )}
+          >
+            <span
+              className={cn(
+                "text-[10px] font-black mb-1 uppercase tracking-wider",
+                selectedSide === "down" ? "text-no" : "text-muted-foreground"
+              )}
+            >
+              Down
+            </span>
+            <span className="text-xl font-black">{formatPaise(pDown)}</span>
+          </button>
         </div>
-      </div>
 
-      {/* Up / Down Buttons */}
-      <div className="grid grid-cols-2 gap-3 mb-5">
-        {!confirmSide ? (
-          <>
-            <AnimatePresence mode="wait">
-              <motion.button
-                key={`up-${Math.round(pUp * 100)}`}
-                initial={shouldAnimate ? { scale: 0.95 } : undefined}
-                animate={{ scale: 1 }}
-                transition={{ type: "spring", stiffness: 400, damping: 15 }}
-                disabled={!isMarketActive || isTrading || user?.isGuest}
-                onClick={() => setConfirmSide("up")}
-                className={`relative flex flex-col items-center justify-center py-4 px-3 rounded-xl font-bold transition-all duration-200 ${
-                  isMarketActive && !isTrading
-                    ? "bg-yes/20 border border-yes/30 hover:border-yes/60 hover:shadow-lg hover:shadow-yes/10 active:scale-95 cursor-pointer"
-                    : "bg-zinc-800/50 border border-zinc-700/30 cursor-not-allowed opacity-50"
-                }`}
-              >
-                <ArrowUp className="w-5 h-5 text-yes mb-1" />
-                <span className="text-xl text-yes tabular-nums">
-                  {formatPaise(pUp)}
-                </span>
-                <span className="text-xs text-yes/70 mt-0.5 uppercase tracking-wider">
-                  Up
-                </span>
-              </motion.button>
-            </AnimatePresence>
-
-            <AnimatePresence mode="wait">
-              <motion.button
-                key={`down-${Math.round(pDown * 100)}`}
-                initial={shouldAnimate ? { scale: 0.95 } : undefined}
-                animate={{ scale: 1 }}
-                transition={{ type: "spring", stiffness: 400, damping: 15 }}
-                disabled={!isMarketActive || isTrading || user?.isGuest}
-                onClick={() => setConfirmSide("down")}
-                className={`relative flex flex-col items-center justify-center py-4 px-3 rounded-xl font-bold transition-all duration-200 ${
-                  isMarketActive && !isTrading
-                    ? "bg-no/20 border border-no/30 hover:border-no/60 hover:shadow-lg hover:shadow-no/10 active:scale-95 cursor-pointer"
-                    : "bg-zinc-800/50 border border-zinc-700/30 cursor-not-allowed opacity-50"
-                }`}
-              >
-                <ArrowDown className="w-5 h-5 text-no mb-1" />
-                <span className="text-xl text-no tabular-nums">
-                  {formatPaise(pDown)}
-                </span>
-                <span className="text-xs text-no/70 mt-0.5 uppercase tracking-wider">
-                  Down
-                </span>
-              </motion.button>
-            </AnimatePresence>
-          </>
-        ) : (
-          <div className="col-span-2 flex flex-col gap-2 animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex gap-2 min-h-[96px]">
-              <button onClick={() => setConfirmSide(null)} className="flex-1 py-3 text-sm font-bold text-zinc-300 bg-zinc-800 hover:bg-zinc-700/80 rounded-xl transition-all border border-zinc-700">Cancel</button>
-              <button onClick={() => { handleTrade(confirmSide); setConfirmSide(null); }} className={`flex-[2] py-3 text-base font-black uppercase tracking-widest rounded-xl transition-all shadow-[0_0_20px_rgba(0,0,0,0.2)] ${confirmSide === 'up' ? 'bg-yes text-background hover:bg-yes/90' : 'bg-no text-background hover:bg-no/90'}`}>
-                Confirm {confirmSide}
-              </button>
+        {/* ── BUY MODE ──────────────────────────────────────────── */}
+        {tradeType === "buy" && (
+          <div className="space-y-3">
+            <div className="flex justify-between items-center text-xs">
+              <span className="text-muted-foreground font-medium uppercase tracking-wider">
+                Amount in ₹
+              </span>
+              <span className="font-bold text-primary bg-primary/5 px-2 py-1 rounded-md">
+                Balance: ₹{user?.balance?.toLocaleString() ?? 0}
+              </span>
             </div>
-            <p className="text-center text-[10px] uppercase font-bold text-zinc-500 tracking-wider">Lock in {confirmSide} trade</p>
+            <div className="relative group">
+              <Input
+                type="number"
+                placeholder="0"
+                value={amount}
+                disabled={isTrading}
+                onChange={(e) => setAmount(e.target.value)}
+                className="h-12 text-lg font-bold bg-muted/20 border-border focus:border-primary/50 focus:ring-1 focus:ring-primary/50 transition-all pr-16 rounded-xl"
+              />
+              <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                <button
+                  onClick={handleMax}
+                  className="px-2 py-1 text-[10px] font-black uppercase bg-primary text-primary-foreground hover:bg-primary/90 rounded transition-colors shadow-sm"
+                >
+                  MAX
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-4 gap-2">
+              {PRESET_AMOUNTS.map((val) => (
+                <Button
+                  key={val}
+                  variant="outline"
+                  size="sm"
+                  className="h-8 text-[10px] font-bold border-border bg-muted/10 hover:bg-primary/10 hover:text-primary hover:border-primary/30 rounded-lg transition-all"
+                  onClick={() =>
+                    setAmount((prev) => String((Number(prev) || 0) + val))
+                  }
+                >
+                  +₹{val}
+                </Button>
+              ))}
+            </div>
+
+            {/* Quote box */}
+            <div className="rounded-xl border border-border bg-muted/20 p-4 text-xs">
+              {numericAmount > 0 ? (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">
+                      Potential Payout
+                    </span>
+                    <span className="font-bold text-yes">
+                      ₹
+                      {(selectedSide === "up"
+                        ? potentialPayoutUp
+                        : potentialPayoutDown
+                      ).toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Entry Price</span>
+                    <span className="font-bold">
+                      {formatPaise(selectedSide === "up" ? pUp : pDown)}
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-muted-foreground italic text-center">
+                  Enter an amount to see potential returns.
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ── SELL MODE ─────────────────────────────────────────── */}
+        {tradeType === "sell" && (
+          <div className="space-y-3">
+            <div className="flex justify-between items-center text-xs">
+              <span className="text-muted-foreground font-medium uppercase tracking-wider">
+                Sell Position
+              </span>
+              <span className="font-bold text-primary bg-primary/5 px-2 py-1 rounded-md">
+                Holding: ₹{currentHolding.invested.toFixed(0)} →{" "}
+                ₹{currentHolding.value.toFixed(2)}
+              </span>
+            </div>
+
+            {currentHolding.positions.length > 0 ? (
+              <>
+                {/* Current Position Card */}
+                <div
+                  className={cn(
+                    "p-4 rounded-xl border flex items-center justify-between",
+                    selectedSide === "up"
+                      ? "border-yes/30 bg-yes/5"
+                      : "border-no/30 bg-no/5"
+                  )}
+                >
+                  <div className="flex items-center gap-2">
+                    {selectedSide === "up" ? (
+                      <ArrowUp className="w-4 h-4 text-yes" />
+                    ) : (
+                      <ArrowDown className="w-4 h-4 text-no" />
+                    )}
+                    <span
+                      className={cn(
+                        "font-bold text-sm",
+                        selectedSide === "up" ? "text-yes" : "text-no"
+                      )}
+                    >
+                      {selectedSide.toUpperCase()}
+                    </span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-lg font-black">
+                      ₹{currentHolding.value.toFixed(2)}
+                    </span>
+                    <p className="text-[10px] text-muted-foreground">
+                      Invested: ₹{currentHolding.invested.toFixed(0)}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Sell ratio buttons — matches other market style */}
+                <div className="grid grid-cols-4 gap-2">
+                  {[
+                    { label: "25%", ratio: 0.25 },
+                    { label: "50%", ratio: 0.5 },
+                    { label: "75%", ratio: 0.75 },
+                    { label: "MAX", ratio: 1 },
+                  ].map(({ label, ratio }) => (
+                    <Button
+                      key={label}
+                      variant="outline"
+                      size="sm"
+                      disabled={isTrading}
+                      className="h-10 text-xs font-bold border-border bg-muted/10 hover:bg-primary/10 hover:text-primary hover:border-primary/30 rounded-lg transition-all"
+                      onClick={() => handleSell(ratio)}
+                    >
+                      {label}
+                    </Button>
+                  ))}
+                </div>
+
+                {/* PnL Info */}
+                <div className="rounded-xl border border-border bg-muted/20 p-4 text-xs space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Current Value</span>
+                    <span className="font-bold">
+                      ₹{currentHolding.value.toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Cost Basis</span>
+                    <span className="font-bold">
+                      ₹{currentHolding.invested.toFixed(0)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between border-t border-border/50 pt-2">
+                    <span className="text-muted-foreground font-medium">
+                      P&L
+                    </span>
+                    <span
+                      className={cn(
+                        "font-black text-sm",
+                        currentHolding.value - currentHolding.invested >= 0
+                          ? "text-yes"
+                          : "text-no"
+                      )}
+                    >
+                      {currentHolding.value - currentHolding.invested >= 0
+                        ? "+"
+                        : ""}
+                      ₹
+                      {(
+                        currentHolding.value - currentHolding.invested
+                      ).toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-8 text-center rounded-xl border border-border bg-muted/10">
+                <TrendingUp className="w-8 h-8 text-muted-foreground/30 mb-2" />
+                <p className="text-sm text-muted-foreground">
+                  No {selectedSide.toUpperCase()} position to sell
+                </p>
+                <button
+                  onClick={() => setTradeType("buy")}
+                  className="mt-3 text-xs font-bold text-primary hover:text-primary/80"
+                >
+                  Open a trade first
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>
 
-      {/* Amount Input */}
-      <div className="mb-4">
-        <label className="text-xs text-zinc-400 mb-1.5 block font-medium">
-          Bet Amount
-        </label>
-        <div className="relative">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm font-medium">
-            ₹
-          </span>
-          <input
-            type="number"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            min="1"
-            step="1"
-            className="w-full bg-zinc-800/60 border border-zinc-700/50 rounded-xl py-2.5 pl-7 pr-3 text-white text-lg font-semibold tabular-nums focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500/50 transition-all placeholder:text-zinc-600"
-            placeholder="25"
-          />
-        </div>
-        <div className="flex gap-2 mt-2">
-          {PRESET_AMOUNTS.map((preset) => (
-            <button
-              key={preset}
-              onClick={() => setAmount(prev => String((parseFloat(prev) || 0) + preset))}
-              className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${
-                amount === String(preset)
-                  ? "bg-violet-600/30 text-violet-300 border border-violet-500/40"
-                  : "bg-zinc-800/50 text-zinc-400 border border-zinc-700/30 hover:bg-zinc-700/50 hover:text-zinc-300"
-              }`}
-            >
-              +{preset}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Payout Preview */}
-      {numericAmount >= 1 && (
-        <motion.div
-          initial={{ opacity: 0, height: 0 }}
-          animate={{ opacity: 1, height: "auto" }}
-          className="mb-4 p-3 rounded-xl bg-zinc-800/40 border border-zinc-700/30"
-        >
-          <p className="text-xs text-zinc-500 mb-2 font-medium">
-            Potential Payout
-          </p>
-          <div className="grid grid-cols-2 gap-3 text-center">
-            <div>
-              <p className="text-sm font-bold text-yes">
-                ₹{potentialPayoutUp.toFixed(2)}
-              </p>
-              <p className="text-[10px] text-zinc-500">if Up wins</p>
-            </div>
-            <div>
-              <p className="text-sm font-bold text-no">
-                ₹{potentialPayoutDown.toFixed(2)}
-              </p>
-              <p className="text-[10px] text-zinc-500">if Down wins</p>
-            </div>
-          </div>
-        </motion.div>
-      )}
-
-      {/* Active Positions */}
-      {(upPositions.length > 0 || downPositions.length > 0) && (
-        <div className="mb-4">
-          <p className="text-xs text-zinc-500 mb-2 font-medium">Your Active Positions</p>
-          <div className="space-y-2">
-            {upPositions.length > 0 && (
-              <div className="p-3 rounded-xl bg-yes/10 border border-yes/20 flex items-center justify-between">
-                <div>
-                  <div className="flex items-center gap-1.5 mb-1">
-                    <ArrowUp className="w-3.5 h-3.5 text-yes" />
-                    <span className="text-sm font-bold text-yes">UP</span>
-                  </div>
-                  <p className="text-[10px] text-zinc-400">Invested: ₹{upInvested.toFixed(0)}</p>
-                </div>
-                <div className="text-right">
-                  <div className="text-sm font-bold text-white mb-1 tracking-tight">₹{upValue.toFixed(2)}</div>
-                  <button 
-                    onClick={() => handleSell('up')}
-                    disabled={isTrading}
-                    className="px-3 py-1 bg-yes/20 hover:bg-yes/30 text-yes text-xs font-bold rounded-lg transition-colors border border-yes/30 disabled:opacity-50"
-                  >
-                    Cash Out
-                  </button>
-                </div>
+      {/* ── Submit Button ──────────────────────────────────────── */}
+      {tradeType === "buy" && (
+        <div className="p-6 pt-0">
+          <div className="flex flex-col gap-2">
+            {isConfirming ? (
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setIsConfirming(false)}
+                  disabled={isTrading}
+                  className="flex-1 h-12 font-bold"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleTrade}
+                  disabled={isTrading || numericAmount <= 0}
+                  className={cn(
+                    "flex-[2] h-12 text-base font-black uppercase tracking-widest",
+                    selectedSide === "up"
+                      ? "bg-yes text-white hover:bg-yes/90"
+                      : "bg-no text-white hover:bg-no/90"
+                  )}
+                >
+                  {isTrading ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    "Confirm Order"
+                  )}
+                </Button>
               </div>
-            )}
-            
-            {downPositions.length > 0 && (
-              <div className="p-3 rounded-xl bg-no/10 border border-no/20 flex items-center justify-between">
-                <div>
-                  <div className="flex items-center gap-1.5 mb-1">
-                    <ArrowDown className="w-3.5 h-3.5 text-no" />
-                    <span className="text-sm font-bold text-no">DOWN</span>
-                  </div>
-                  <p className="text-[10px] text-zinc-400">Invested: ₹{downInvested.toFixed(0)}</p>
-                </div>
-                <div className="text-right">
-                  <div className="text-sm font-bold text-white mb-1 tracking-tight">₹{downValue.toFixed(2)}</div>
-                  <button 
-                    onClick={() => handleSell('down')}
-                    disabled={isTrading}
-                    className="px-3 py-1 bg-no/20 hover:bg-no/30 text-no text-xs font-bold rounded-lg transition-colors border border-no/30 disabled:opacity-50"
-                  >
-                    Cash Out
-                  </button>
-                </div>
-              </div>
+            ) : (
+              <Button
+                onClick={() => setIsConfirming(true)}
+                disabled={
+                  numericAmount <= 0 ||
+                  !isMarketActive ||
+                  numericAmount > (user?.balance || 0)
+                }
+                className="w-full h-12 text-base font-bold bg-primary"
+              >
+                Review Purchase
+              </Button>
             )}
           </div>
         </div>
       )}
 
-      {/* Balance */}
-      <div className="flex items-center justify-between text-sm border-t border-zinc-800 pt-3">
-        <span className="text-zinc-500">Your Balance</span>
-        <span className="text-white font-bold tabular-nums">
-          ₹{(user?.balance ?? 0).toLocaleString("en-IN", {
+      {/* ── Footer info ────────────────────────────────────────── */}
+      <div className="border-t border-border p-4 flex items-center justify-between text-xs">
+        <span className="text-muted-foreground font-medium uppercase tracking-wider">
+          Balance
+        </span>
+        <span className="font-bold text-foreground">
+          ₹
+          {(user?.balance ?? 0).toLocaleString("en-IN", {
             minimumFractionDigits: 0,
             maximumFractionDigits: 0,
           })}
         </span>
       </div>
 
-      {/* Status messages */}
-      {user?.isGuest && (
-        <p className="text-xs text-amber-400/80 text-center mt-3">
-          Sign in to trade
-        </p>
-      )}
+      {/* Status Messages */}
       {!isMarketActive && market && (
-        <p className="text-xs text-zinc-500 text-center mt-3">
-          {timeRemainingMs <= 0
-            ? "⏳ Market settling... next round starts soon"
-            : "Waiting for market to open..."}
-        </p>
+        <div className="px-6 pb-4">
+          <p className="text-xs text-muted-foreground text-center">
+            {timeRemainingMs <= 0
+              ? "⏳ Market settling... next round starts soon"
+              : "Waiting for market to open..."}
+          </p>
+        </div>
       )}
-      {!market && (
-        <p className="text-xs text-zinc-500 text-center mt-3">
-          No active market. Next cycle starting soon...
-        </p>
-      )}
-    </motion.div>
+    </div>
   );
 }

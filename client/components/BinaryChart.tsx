@@ -40,30 +40,52 @@ export function BinaryChart({
     return () => cancelAnimationFrame(frameId);
   }, []);
 
-  const delayedTime = frozenAtTime ? frozenAtTime : (now - 500); // Reduced delay for more responsive feel
+  const delayedTime = frozenAtTime ? frozenAtTime : (now - 300);
   const displayCurrentPrice = frozenPrice !== undefined ? frozenPrice : currentPrice;
 
-  const chartData = useMemo(() => {
-    const historical = priceHistory
-      .filter((point) => point.timestamp <= delayedTime)
-      .map((point) => ({
-        time: point.timestamp,
-        price: point.price,
-      }));
+  // Cubic spline interpolation for ultra-smooth curves
+  function lerp(a: number, b: number, t: number) {
+    return a + (b - a) * t;
+  }
+  function smoothStep(t: number) {
+    return t * t * (3 - 2 * t);
+  }
 
-    // To make the graph "fluid", we append a live point at the exact 'delayedTime'
-    // otherwise the graph "jumps" every second.
-    if (historical.length > 0 && !frozenAtTime) {
-      historical.push({
-        time: delayedTime,
-        price: displayCurrentPrice,
-      });
+  const chartData = useMemo(() => {
+    const raw = priceHistory
+      .filter((point) => point.timestamp <= delayedTime)
+      .map((point) => ({ time: point.timestamp, price: point.price }));
+
+    // Append live point for continuity
+    if (raw.length > 0 && !frozenAtTime) {
+      raw.push({ time: delayedTime, price: displayCurrentPrice });
     }
 
-    return historical;
+    if (raw.length < 3) return raw;
+
+    // Interpolate between points for a fluid curve
+    const interpolated: { time: number; price: number }[] = [];
+    const STEPS = 3; // sub-steps between each real point
+
+    for (let i = 0; i < raw.length - 1; i++) {
+      const p0 = raw[i];
+      const p1 = raw[i + 1];
+      interpolated.push(p0);
+
+      for (let s = 1; s < STEPS; s++) {
+        const t = smoothStep(s / STEPS);
+        interpolated.push({
+          time: lerp(p0.time, p1.time, s / STEPS),
+          price: lerp(p0.price, p1.price, t),
+        });
+      }
+    }
+    interpolated.push(raw[raw.length - 1]);
+
+    return interpolated;
   }, [priceHistory, delayedTime, displayCurrentPrice, frozenAtTime]);
 
-  // Dynamic Y-axis domain based on data range
+  // Dynamic Y-axis domain based on data range with hysteresis to prevent stuttering
   const { yMin, yMax } = useMemo(() => {
     if (chartData.length === 0) {
       const padding = targetPrice * 0.001;
@@ -73,11 +95,15 @@ export function BinaryChart({
     const allPrices = [...prices, targetPrice];
     const min = Math.min(...allPrices);
     const max = Math.max(...allPrices);
-    const range = max - min || targetPrice * 0.001;
-    const padding = range * 0.15;
+    
+    // We use a fixed percentage padding but round to the nearest $5 or $10
+    // to prevent the "vibrating" Y-axis effect when prices move by cents.
+    const range = max - min || 10;
+    const padding = Math.max(range * 0.2, 5);
+    
     return {
-      yMin: Math.floor(min - padding),
-      yMax: Math.ceil(max + padding),
+      yMin: Math.floor((min - padding) / 10) * 10,
+      yMax: Math.ceil((max + padding) / 10) * 10,
     };
   }, [chartData, targetPrice]);
 
@@ -94,7 +120,7 @@ export function BinaryChart({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.6, ease: "easeOut" }}
-      className="relative rounded-2xl border border-white/10 bg-gradient-to-br from-zinc-900/80 to-zinc-950/90 backdrop-blur-xl p-4 sm:p-6 shadow-2xl"
+      className="relative rounded-xl border border-border bg-card p-4 sm:p-6 shadow-sm"
     >
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
@@ -195,8 +221,27 @@ export function BinaryChart({
                 domain={[yMin, yMax]}
                 axisLine={false}
                 tickLine={false}
-                tick={{ fontSize: 10, fill: "#71717a", fontWeight: 500 }}
-                tickFormatter={(v) => `$${v.toLocaleString()}`}
+                ticks={[
+                  yMin,
+                  ...([yMin, yMax].includes(targetPrice) ? [] : [targetPrice]),
+                  yMax,
+                ]}
+                tick={({ x, y, payload }: any) => {
+                  const isTarget = Math.abs(payload.value - targetPrice) < 0.5;
+                  return (
+                    <text
+                      x={x}
+                      y={y}
+                      dy={4}
+                      textAnchor="start"
+                      fontSize={isTarget ? 11 : 10}
+                      fontWeight={isTarget ? 800 : 500}
+                      fill={isTarget ? "#fbbf24" : "#71717a"}
+                    >
+                      ${payload.value.toLocaleString()}
+                    </text>
+                  );
+                }}
                 width={70}
                 orientation="right"
               />
@@ -228,20 +273,12 @@ export function BinaryChart({
               />
               <ReferenceLine
                 y={targetPrice}
-                stroke="rgba(251, 191, 36, 0.5)"
+                stroke="rgba(251, 191, 36, 0.4)"
                 strokeDasharray="4 4"
                 strokeWidth={1}
-                label={{
-                  value: "TARGET",
-                  position: "insideBottomRight",
-                  fill: "#fbbf24",
-                  fontSize: 9,
-                  fontWeight: 800,
-                  opacity: 0.8,
-                }}
               />
               <Area
-                type="monotone"
+                type="basis"
                 dataKey="price"
                 stroke={accentColor}
                 strokeWidth={2.5}
