@@ -9,9 +9,9 @@
 
 // ─── Constants ────────────────────────────────────────────────────────
 export const MARKET_DURATION_MS = 5 * 60 * 1000; // 5 minutes
-export const DEFAULT_VOLATILITY = 0.0015; // Sharply narrowed to make 5m candles feel more decisive
-export const VIV_JITTER_RANGE = 0.00001;
-export const MOMENTUM_BIAS_CAP = 0.05; // More aggressive sentiment shift
+export const DEFAULT_VOLATILITY = 0.04; // Increased from 0.0015 for more realistic (less jumpy) pricing
+export const VIV_JITTER_RANGE = 0.0001;
+export const MOMENTUM_BIAS_CAP = 0.05; // Max 5p shift from momentum
 export const MIN_PROBABILITY = 0.01; // Allow prices to go near 0
 export const MAX_PROBABILITY = 0.99; // Allow prices to go near 100p
 export const PRICE_SNAPSHOT_INTERVAL_MS = 1_000; // 1 s chart resolution
@@ -189,15 +189,16 @@ export function calculateLiveProbability(params: {
     const timeProgress = 1 - (timeRemainingMs / totalDuration);
     const timeFactor = 0.5 + (timeProgress * 0.5); // 0.5 to 1.0
 
-    // Boost ranges from 0 to 0.15 based on price distance, scaled by time
-    const boostMagnitude = Math.min(0.15, Math.abs(pctDiff) * 5000) * timeFactor;
+    // Boost ranges from 0 to 0.12 based on price distance, scaled by time
+    // Reduced sensitivity (multiplier 200 instead of 5000) to keep prices realistic
+    const boostMagnitude = Math.min(0.12, Math.abs(pctDiff) * 200) * timeFactor;
     
     if (priceDiff > 0) {
       // Ensure it's at least slightly above 50p if price is up
-      probability = Math.max(probability, 0.52 + boostMagnitude);
+      probability = Math.max(probability, 0.505 + boostMagnitude);
     } else {
       // Ensure it's at most slightly below 50p if price is down
-      probability = Math.min(probability, 0.48 - boostMagnitude);
+      probability = Math.min(probability, 0.495 - boostMagnitude);
     }
   }
 
