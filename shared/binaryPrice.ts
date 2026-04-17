@@ -177,28 +177,31 @@ export function calculateLiveProbability(params: {
     activeVolatility,
   );
 
-  // If there's any price difference, ensure we don't return exactly 0.5
-  // AND push it more aggressively toward the edges
+  // 3. Smoother "Decision Boost"
+  // Instead of a hard threshold, we use a sigmoid-like boost that scales with pctDiff
+  // This makes the transition from 50p to higher/lower feel more natural.
   const priceDiff = currentPrice - targetPrice;
   const pctDiff = priceDiff / targetPrice;
   
-  // Artificial "Decision Boost": markets with price difference should feel decisive
-  if (Math.abs(pctDiff) > 0.00001) { // roughly $0.60 move at $60k
+  if (Math.abs(pctDiff) > 0) {
+    // Decision intensity increases as time runs out
+    const totalDuration = MARKET_DURATION_MS;
+    const timeProgress = 1 - (timeRemainingMs / totalDuration);
+    const timeFactor = 0.5 + (timeProgress * 0.5); // 0.5 to 1.0
+
+    // Boost ranges from 0 to 0.15 based on price distance, scaled by time
+    const boostMagnitude = Math.min(0.15, Math.abs(pctDiff) * 5000) * timeFactor;
+    
     if (priceDiff > 0) {
-      probability = Math.max(probability, 0.65); // If up, at least 65p
+      // Ensure it's at least slightly above 50p if price is up
+      probability = Math.max(probability, 0.52 + boostMagnitude);
     } else {
-      probability = Math.min(probability, 0.35); // If down, max 35p (meaning Down is 65p)
+      // Ensure it's at most slightly below 50p if price is down
+      probability = Math.min(probability, 0.48 - boostMagnitude);
     }
   }
 
-  // Final edge cases
-  if (currentPrice > targetPrice && probability <= 0.50) {
-    probability = 0.55;
-  } else if (currentPrice < targetPrice && probability >= 0.50) {
-    probability = 0.45;
-  }
-
-  // 3. Momentum Bias — shift based on Rate of Change
+  // 4. Momentum Bias — shift based on Rate of Change
   let momentumBias = 0;
   if (recentPrices.length >= 3) {
     const recent = recentPrices.slice(-5);
@@ -206,8 +209,8 @@ export function calculateLiveProbability(params: {
     const last = recent[recent.length - 1];
     if (first > 0) {
       const roc = (last - first) / first;
-      // Scale ROC to a ±2% bias
-      momentumBias = clamp(roc * 10, -MOMENTUM_BIAS_CAP, MOMENTUM_BIAS_CAP);
+      // Scale ROC to a ±5% bias
+      momentumBias = clamp(roc * 20, -MOMENTUM_BIAS_CAP, MOMENTUM_BIAS_CAP);
       probability = clampProbability(probability + momentumBias);
     }
   }

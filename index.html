@@ -35,8 +35,6 @@
     content="The premier decentralized prediction market for global events. Trade on politics, sports, crypto, and more.">
   <meta property="twitter:image" content="https://metamarket.live/metamarket.jpg">
 
-  <link rel="manifest" href="/manifest.json" />
-
   <script type="application/ld+json">
     {
       "@context": "https://schema.org",
@@ -49,16 +47,6 @@
         "target": "https://metamarket.live/?q={search_term_string}",
         "query-input": "required name=search_term_string"
       }
-    }
-  </script>
-
-  <script>
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js')
-          .then(reg => console.log('Service Worker registered!'))
-          .catch(err => console.log('Registration failed:', err));
-      });
     }
   </script>
 </head>

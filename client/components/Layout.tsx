@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { Search, Menu, X, User, LogOut, Settings, Download } from "lucide-react";
+import { Search, Menu, X, User, LogOut, Settings } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
@@ -21,39 +21,8 @@ export function Layout({ children }: LayoutProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const { user, logout, isGuestUser } = useAuth();
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-  const [showInstallBtn, setShowInstallBtn] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
-
-  useEffect(() => {
-    const handleBeforeInstallPrompt = (e: Event) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
-      setShowInstallBtn(true);
-    };
-
-    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-
-    return () => {
-      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-    };
-  }, []);
-
-  const handleInstallClick = async () => {
-    if (!deferredPrompt) return;
-    
-    // Show the install prompt
-    deferredPrompt.prompt();
-    
-    // Wait for the user to respond to the prompt
-    const { outcome } = await deferredPrompt.userChoice;
-    console.log(`User response to the install prompt: ${outcome}`);
-    
-    // We've used the prompt, and can't use it again, throw it away
-    setDeferredPrompt(null);
-    setShowInstallBtn(false);
-  };
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -116,18 +85,6 @@ export function Layout({ children }: LayoutProps) {
           </nav>
           
           <div className="hidden md:flex items-center gap-6 ml-auto pl-6 border-l border-border/50">
-            {showInstallBtn && (
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={handleInstallClick} 
-                className="h-8 flex items-center gap-1.5 border-primary/40 text-primary hover:bg-primary/5 transition-all px-3 rounded-full"
-              >
-                <Download className="w-3.5 h-3.5" />
-                <span className="text-[10px] uppercase font-black">Install App</span>
-              </Button>
-            )}
-
             {user ? (
               <>
                 {!isGuestUser && (
@@ -170,17 +127,7 @@ export function Layout({ children }: LayoutProps) {
 
           {/* Mobile Actions */}
           <div className="md:hidden flex items-center gap-2">
-            {showInstallBtn && (
-              <Button 
-                variant="outline"
-                size="sm"
-                onClick={handleInstallClick} 
-                className="h-8 px-3 text-xs font-bold border-primary text-primary hover:bg-primary/10 transition-all rounded-full flex items-center gap-1.5"
-              >
-                <Download className="w-3.5 h-3.5" />
-                <span>App</span>
-              </Button>
-            )}
+
             <button className="p-2 -mr-2" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
               {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
@@ -208,15 +155,7 @@ export function Layout({ children }: LayoutProps) {
                   {link.label}
                 </Link>
               ))}
-              {showInstallBtn && (
-                <button
-                  onClick={() => { handleInstallClick(); setMobileMenuOpen(false); }}
-                  className="text-sm font-bold text-primary py-2 flex items-center gap-2"
-                >
-                  <Download className="w-4 h-4" />
-                  Install MetaMarket App
-                </button>
-              )}
+
             </div>
 
             {user ? (
