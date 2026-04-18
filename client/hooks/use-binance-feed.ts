@@ -1,14 +1,7 @@
-/**
- * Client-side Binance WebSocket hook for live BTC price.
- *
- * Connects directly to wss://stream.binance.com:9443/ws/btcusdt@aggTrade
- * for sub-second price updates in the browser.
- */
-
 import { useState, useEffect, useRef, useCallback } from "react";
 
 const BINANCE_WS_URL = "wss://data-stream.binance.vision:9443/ws/btcusdt@aggTrade";
-const MAX_HISTORY = 1000; // Rolling window for chart
+const MAX_HISTORY = 1000;
 const RECONNECT_DELAY = 3000;
 
 export interface PricePoint {
@@ -16,85 +9,102 @@ export interface PricePoint {
   timestamp: number;
 }
 
-export function useBinanceFeed() {
-  const [price, setPrice] = useState<number>(0);
-  const [isConnected, setIsConnected] = useState<boolean>(false);
-  const [priceHistory, setPriceHistory] = useState<PricePoint[]>([]);
-  const wsRef = useRef<WebSocket | null>(null);
-  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const shouldReconnectRef = useRef(true);
-  const lastSampleRef = useRef<number>(0);
+// Global state to persist data across page navigations
+let globalPrice = 0;
+let globalIsConnected = false;
+let globalPriceHistory: PricePoint[] = [];
+let observers: Set<(data: { price: number; isConnected: boolean; history: PricePoint[] }) => void> = new Set();
+let ws: WebSocket | null = null;
+let lastSampleTime = 0;
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
-  const connect = useCallback(() => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) return;
+function notifyObservers() {
+  const data = {
+    price: globalPrice,
+    isConnected: globalIsConnected,
+    history: [...globalPriceHistory]
+  };
+  observers.forEach(callback => callback(data));
+}
 
-    try {
-      const ws = new WebSocket(BINANCE_WS_URL);
-      wsRef.current = ws;
+function startGlobalFeed() {
+  if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
 
-      ws.onopen = () => {
-        setIsConnected(true);
-      };
+  try {
+    ws = new WebSocket(BINANCE_WS_URL);
 
-      ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          const newPrice = parseFloat(data.p);
-          if (!isNaN(newPrice) && newPrice > 0) {
-            // Sample every 1 sec to smooth graph and stabilize Up/Down odds
-            const now = Date.now();
-            if (now - lastSampleRef.current >= 1000) {
-              setPrice(newPrice);
-              lastSampleRef.current = now;
-              setPriceHistory((prev) => {
-                const next = [...prev, { price: newPrice, timestamp: now }];
-                if (next.length > MAX_HISTORY) next.shift();
-                return next;
-              });
+    ws.onopen = () => {
+      globalIsConnected = true;
+      notifyObservers();
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        const newPrice = parseFloat(data.p);
+        if (!isNaN(newPrice) && newPrice > 0) {
+          const now = Date.now();
+          if (now - lastSampleTime >= 1000) {
+            globalPrice = newPrice;
+            lastSampleTime = now;
+            globalPriceHistory.push({ price: newPrice, timestamp: now });
+            if (globalPriceHistory.length > MAX_HISTORY) {
+              globalPriceHistory.shift();
             }
+            notifyObservers();
           }
-        } catch {
-          // Ignore parse errors
         }
-      };
-
-      ws.onerror = () => {
-        // Error handling via onclose
-      };
-
-      ws.onclose = () => {
-        setIsConnected(false);
-        wsRef.current = null;
-        if (shouldReconnectRef.current) {
-          reconnectTimerRef.current = setTimeout(() => {
-            connect();
-          }, RECONNECT_DELAY);
-        }
-      };
-    } catch {
-      if (shouldReconnectRef.current) {
-        reconnectTimerRef.current = setTimeout(() => {
-          connect();
-        }, RECONNECT_DELAY);
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    shouldReconnectRef.current = true;
-    connect();
-
-    return () => {
-      shouldReconnectRef.current = false;
-      if (reconnectTimerRef.current) {
-        clearTimeout(reconnectTimerRef.current);
-      }
-      if (wsRef.current) {
-        wsRef.current.close();
-        wsRef.current = null;
+      } catch (e) {
+        // Ignore parse errors
       }
     };
-  }, [connect]);
 
-  return { price, isConnected, priceHistory };
+    ws.onclose = () => {
+      globalIsConnected = false;
+      ws = null;
+      notifyObservers();
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      reconnectTimer = setTimeout(startGlobalFeed, RECONNECT_DELAY);
+    };
+
+    ws.onerror = () => {
+      if (ws) ws.close();
+    };
+  } catch (e) {
+    if (reconnectTimer) clearTimeout(reconnectTimer);
+    reconnectTimer = setTimeout(startGlobalFeed, RECONNECT_DELAY);
+  }
+}
+
+// Start the feed immediately when the module is loaded
+if (typeof window !== "undefined") {
+  startGlobalFeed();
+}
+
+export function useBinanceFeed() {
+  const [data, setData] = useState({
+    price: globalPrice,
+    isConnected: globalIsConnected,
+    priceHistory: globalPriceHistory
+  });
+
+  useEffect(() => {
+    const observer = (newData: { price: number; isConnected: boolean; history: PricePoint[] }) => {
+      setData({
+        price: newData.price,
+        isConnected: newData.isConnected,
+        priceHistory: newData.history
+      });
+    };
+
+    observers.add(observer);
+    // Sync immediately
+    observer({ price: globalPrice, isConnected: globalIsConnected, history: globalPriceHistory });
+
+    return () => {
+      observers.delete(observer);
+    };
+  }, []);
+
+  return data;
 }

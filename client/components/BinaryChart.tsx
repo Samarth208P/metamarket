@@ -69,9 +69,7 @@ export function BinaryChart({
     }
 
     // Force chart to span the full 5 minutes by extending the first known price backwards
-    if (raw.length > 0 && raw[0].time > windowStart) {
-      raw.unshift({ time: windowStart, price: raw[0].price });
-    }
+    // Removed to allow the chart to ignore the "before part" if no past was known
 
     if (raw.length < 3) return raw;
 
