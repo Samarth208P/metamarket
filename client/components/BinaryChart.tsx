@@ -68,6 +68,11 @@ export function BinaryChart({
       raw.push({ time: delayedTime, price: displayCurrentPrice });
     }
 
+    // Force chart to span the full 5 minutes by extending the first known price backwards
+    if (raw.length > 0 && raw[0].time > windowStart) {
+      raw.unshift({ time: windowStart, price: raw[0].price });
+    }
+
     if (raw.length < 3) return raw;
 
     // Interpolate between points for a fluid curve
@@ -126,10 +131,7 @@ export function BinaryChart({
   const gradientId = "priceGradient";
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.6, ease: "easeOut" }}
+    <div
       className="relative rounded-xl border border-border bg-card p-4 sm:p-6 shadow-sm"
     >
       {/* Header */}
@@ -193,9 +195,11 @@ export function BinaryChart({
       <div className="h-[250px] sm:h-[320px] w-full">
         {chartData.length < 2 ? (
           <div className="h-full flex items-center justify-center">
-            <div className="text-center">
-              <div className="w-8 h-8 border-2 border-zinc-600 border-t-zinc-400 rounded-full animate-spin mx-auto mb-3" />
-              <p className="text-sm text-zinc-500">Waiting for price data...</p>
+            <div className="text-center flex flex-col items-center gap-3">
+              <img src="/animated-logo.svg" alt="Loading" className="w-16 h-16" />
+              <p className="text-sm font-bold text-zinc-500 uppercase tracking-widest">
+                Waiting for price data...
+              </p>
             </div>
           </div>
         ) : (
@@ -309,6 +313,6 @@ export function BinaryChart({
           </ResponsiveContainer>
         )}
       </div>
-    </motion.div>
+    </div>
   );
 }
