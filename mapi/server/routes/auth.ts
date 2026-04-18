@@ -109,6 +109,30 @@ export const handleLogout: RequestHandler = (req, res) => {
   res.json({ success: true });
 };
 
+export const handleClearHistory: RequestHandler = async (req, res) => {
+  try {
+    const userId = (req as any).signedCookies?.userId;
+    if (!userId) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+
+    const user = await User.findByIdAndUpdate(
+      userId,
+      { $set: { tradeHistory: [] } },
+      { new: true }
+    );
+
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    res.json({ success: true, user });
+  } catch (error) {
+    console.error("Clear history error:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
 export const handleGetUser: RequestHandler = async (req, res) => {
   try {
     const userId = (req as any).signedCookies?.userId;

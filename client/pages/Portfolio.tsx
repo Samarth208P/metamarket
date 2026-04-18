@@ -1,15 +1,22 @@
 import { Layout } from "@/components/Layout";
-import { Briefcase, ArrowUpRight, ArrowDownRight, Clock } from "lucide-react";
+import { Briefcase, ArrowUpRight, ArrowDownRight, Clock, Trash2 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
 export default function Portfolio() {
-  const { user } = useAuth();
+  const { user, clearHistory } = useAuth();
 
   // Sort trades by newest first safely
   const sortedTrades = [...(user?.tradeHistory || [])].sort(
     (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
   );
+
+  const handleClearHistory = async () => {
+    if (window.confirm("Are you sure you want to clear your entire trade history? This cannot be undone.")) {
+      await clearHistory();
+    }
+  };
 
   return (
     <Layout>
@@ -53,16 +60,24 @@ export default function Portfolio() {
           </div>
 
           <div className="bg-card border border-border rounded-xl overflow-hidden">
-            <div className="p-4 border-b border-border bg-muted/30">
+            <div className="p-4 border-b border-border bg-muted/30 flex items-center justify-between">
               <h2 className="font-semibold text-lg">Trade History</h2>
+              {sortedTrades.length > 0 && (
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="text-destructive hover:text-destructive hover:bg-destructive/10 gap-2 h-8"
+                  onClick={handleClearHistory}
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Clear All
+                </Button>
+              )}
             </div>
 
             {sortedTrades.length === 0 ? (
-              <div className="p-8 text-center text-muted-foreground">
-                <p className="mb-2">You haven't placed any bets yet!</p>
-                <p className="text-sm">
-                  Head over to the Markets page to start trading.
-                </p>
+              <div className="p-12 text-center text-muted-foreground/50 italic">
+                No history
               </div>
             ) : (
               <div className="divide-y divide-border">

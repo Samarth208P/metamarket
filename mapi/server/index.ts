@@ -17,6 +17,7 @@ import {
   handleAuthSuccess,
   handleLogout,
   handleGetUser,
+  handleClearHistory,
 } from "./routes/auth.js";
 import User from "./models/User.js";
 import { binanceFeed } from "./services/binanceFeed.js";
@@ -109,6 +110,7 @@ export async function createServer() {
     handleAuthSuccess,
   );
   apiRouter.post("/auth/logout", handleLogout);
+  apiRouter.post("/auth/clear-history", handleClearHistory);
   apiRouter.get("/user", handleGetUser);
 
   // Mount API router

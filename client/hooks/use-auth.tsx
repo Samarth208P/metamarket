@@ -14,6 +14,7 @@ interface AuthContextType {
   isGuestUser: boolean;
   isLoading: boolean;
   guestLogin: () => void;
+  clearHistory: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -117,6 +118,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     );
   };
 
+  const clearHistory = async () => {
+    if (user?.isGuest) {
+      setUser({ ...user, tradeHistory: [] });
+      return;
+    }
+
+    try {
+      const response = await fetch("/mapi/auth/clear-history", {
+        method: "POST",
+        credentials: "include",
+      });
+      if (response.ok) {
+        const data = await response.json();
+        if (data.user) {
+          setUser(data.user);
+        } else {
+          await refreshUser();
+        }
+      }
+    } catch (error) {
+      console.error("Failed to clear history:", error);
+    }
+  };
+
   const value = {
     user,
     login,
@@ -129,6 +154,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     isAuthenticated: !!user,
     isGuestUser: !!user?.isGuest,
     isLoading,
+    clearHistory,
     guestLogin: () => {
       setUser({
         id: "guest_" + Math.random().toString(36).substr(2, 9),
