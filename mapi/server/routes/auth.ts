@@ -6,6 +6,11 @@ import User from "../models/User.js";
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
+const FRONTEND_URL =
+  process.env.FRONTEND_URL ||
+  (process.env.NODE_ENV === "production"
+    ? "https://metamarket.live"
+    : "http://localhost:8080");
 const ADMIN_EMAILS = new Set([
   "samarth_p@mt.iitr.ac.in",
   "yash1@mt.iitr.ac.in",
@@ -26,9 +31,7 @@ export function initializePassport() {
           clientSecret: GOOGLE_CLIENT_SECRET,
           callbackURL:
             process.env.GOOGLE_CALLBACK_URL ||
-            (process.env.NODE_ENV === "production"
-              ? "https://metamarket.live/mapi/auth/google/callback"
-              : "http://localhost:8080/mapi/auth/google/callback"),
+            `${FRONTEND_URL}/mapi/auth/google/callback`,
           proxy: true,
         },
         async (_accessToken, _refreshToken, profile, done) => {
@@ -84,7 +87,7 @@ export const handleGoogleAuth: RequestHandler = (req, res, next) => {
 export const handleGoogleCallback: RequestHandler = (req, res, next) => {
   passport.authenticate("google", { session: false }, (err, user) => {
     if (err || !user) {
-      return res.redirect("/login?error=auth_failed");
+      return res.redirect(`${FRONTEND_URL}/login?error=auth_failed`);
     }
 
     // Set a signed cookie with the userId (stateless auth)
@@ -96,12 +99,12 @@ export const handleGoogleCallback: RequestHandler = (req, res, next) => {
       sameSite: "lax",
     });
 
-    res.redirect("/");
+    res.redirect(FRONTEND_URL);
   })(req, res, next);
 };
 
 export const handleAuthSuccess: RequestHandler = (req, res) => {
-  res.redirect("/");
+  res.redirect(FRONTEND_URL);
 };
 
 export const handleLogout: RequestHandler = (req, res) => {
