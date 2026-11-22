@@ -20,6 +20,23 @@ import {
 import { useAuth } from "@/hooks/use-auth";
 
 export default function BinaryMarket() {
+  if (import.meta.env.DEV || import.meta.env.MODE === "preview") {
+    return (
+      <Layout>
+        <main className="mx-auto w-full max-w-7xl px-4 py-8">
+          <h1 className="text-2xl font-bold">BTC markets</h1>
+          <p className="mt-2 text-muted-foreground">
+            Live BTC markets are disabled in this environment.
+          </p>
+        </main>
+      </Layout>
+    );
+  }
+
+  return <LiveBinaryMarket />;
+}
+
+function LiveBinaryMarket() {
   const { price, isConnected, priceHistory } = useBinanceFeed();
   const { user, refreshUser } = useAuth();
 

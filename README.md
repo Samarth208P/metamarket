@@ -12,7 +12,7 @@ MetaMarket is a full-stack prediction market platform built for IIT Roorkee. It 
 
 ## Overview
 
-MetaMarket combines a React frontend with an Express API and shared market logic in TypeScript. In local development, the API is mounted directly into the Vite dev server. In production, the same server is deployed through Netlify Functions.
+MetaMarket combines a React frontend with an Express API and shared market logic in TypeScript. Vite serves the local API, the Netlify development preview packages its own function, and the production frontend proxies API requests to Render.
 
 At a product level, MetaMarket is built around a simple idea: market prices act as continuously updated probabilities, giving users a live view of collective conviction on future events.
 
@@ -94,20 +94,9 @@ Where:
 pnpm install
 ```
 
-### Environment Variables
+### Local environment
 
-Create a `.env` file in the project root using `.env.example` as the starting point.
-
-| Variable                | Required    | Purpose                                                                                                         |
-| ----------------------- | ----------- | --------------------------------------------------------------------------------------------------------------- |
-| `MONGODB_URI`           | Yes         | MongoDB connection string. Local development will fail without it because the API connects during Vite startup. |
-| `SESSION_SECRET`        | Yes         | Secret used to sign the auth cookie.                                                                            |
-| `GOOGLE_CLIENT_ID`      | Recommended | Google OAuth client ID for IITR sign-in.                                                                        |
-| `GOOGLE_CLIENT_SECRET`  | Recommended | Google OAuth client secret.                                                                                     |
-| `GOOGLE_CALLBACK_URL`   | Recommended | OAuth callback URL. For local development, use `http://localhost:8080/mapi/auth/google/callback`.               |
-| `CLOUDINARY_CLOUD_NAME` | Optional    | Required for admin image uploads.                                                                               |
-| `CLOUDINARY_API_KEY`    | Optional    | Required for admin image uploads.                                                                               |
-| `CLOUDINARY_API_SECRET` | Optional    | Required for admin image uploads.                                                                               |
+Start MongoDB locally. The default URI is `mongodb://127.0.0.1:27017/metamarket_local`. To customize it or test integrations, copy `.env.local.example` to `.env.local` and use the `LOCAL_*` variables. Sign-in uses a separate Google OAuth client and callback at `http://localhost:8080/mapi/auth/google/callback`. Use a separate Cloudinary account for local uploads. Generic production credentials in `.env` do not configure the local API.
 
 ### Run the App
 
@@ -122,8 +111,9 @@ During development:
 - Vite serves the frontend
 - The Express API is mounted at `/mapi`
 - Uploads are served from `/uploads`
+- Live BTC routes, price feeds, and settlement are disabled
 
-No separate API process is needed for local work.
+No separate API process is needed for local work. `pnpm start:api` is the production Render entrypoint and starts the BTC worker.
 
 ## Available Scripts
 
@@ -143,14 +133,15 @@ No separate API process is needed for local work.
 
 ## Deployment
 
-MetaMarket is configured for Netlify deployment.
+| Environment | Trigger | API and data |
+| --- | --- | --- |
+| Local | Save changes while `pnpm dev` runs | Express on your machine and `metamarket_local` on loopback MongoDB |
+| Development | Push a commit to the GitHub `develop` branch | Netlify branch deploy and preview function backed by `metamarket_preview` |
+| Production | Push or merge an approved release to `main` | `metamarket.live` and the live API on Render |
 
-- Build command: `npm run build`
-- Publish directory: `dist`
-- Functions directory: `functions`
-- API redirect: `/mapi/* -> /.netlify/functions/index`
+After Netlify enables branch deploys for `develop`, each push updates [the development site](https://develop--mytamarket.netlify.app). Netlify builds the frontend and preview API from the same commit. The preview function reads only `PREVIEW_*` settings, and only the production build for `main` emits the Render API rewrite. Local saves appear immediately in Vite and stay on your machine until you push.
 
-The production serverless function initializes the database connection and boots the Express app before handling API traffic.
+Set `PREVIEW_MONGODB_URI` and `PREVIEW_SESSION_SECRET` for the **branch-deploy** context, scoped to Functions where available. Use a separate MongoDB cluster and a database user limited to `metamarket_preview`. Until those are set, `/mapi/ping` identifies the preview and data endpoints return `503`. For preview sign-in, use `PREVIEW_GOOGLE_CLIENT_ID` and `PREVIEW_GOOGLE_CLIENT_SECRET` with callback `https://develop--mytamarket.netlify.app/mapi/auth/google/callback`. Uploads use `PREVIEW_CLOUDINARY_CLOUD_NAME`, `PREVIEW_CLOUDINARY_API_KEY`, and `PREVIEW_CLOUDINARY_API_SECRET` from a separate account. The preview contains no BTC scheduler or scheduled Netlify function.
 
 ## Repository Notes
 

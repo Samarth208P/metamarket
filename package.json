@@ -5,6 +5,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:preview": "vite build --mode preview && node scripts/write-netlify-routes.mjs preview",
+    "build:production": "vite build && node scripts/write-netlify-routes.mjs production",
     "test": "vitest --run",
     "format.fix": "prettier --write .",
     "typecheck": "tsc",

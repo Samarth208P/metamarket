@@ -77,7 +77,7 @@ function startGlobalFeed() {
 }
 
 // Start the feed immediately when the module is loaded
-if (typeof window !== "undefined") {
+if (import.meta.env.PROD && import.meta.env.MODE !== "preview" && typeof window !== "undefined") {
   startGlobalFeed();
 }
 

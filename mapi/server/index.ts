@@ -23,7 +23,7 @@ import User from "./models/User.js";
 import { binanceFeed } from "./services/binanceFeed.js";
 import { startBinaryScheduler } from "./services/binaryScheduler.js";
 
-export async function createServer() {
+export async function createServer({ enableBinaryMarkets = true } = {}) {
   const app = express();
 
   // Important for Vercel behind proxy
@@ -97,7 +97,13 @@ export async function createServer() {
   apiRouter.use("/", marketRoutes);
 
   // Binary market routes
-  apiRouter.use("/", binaryMarketRoutes);
+  if (enableBinaryMarkets) {
+    apiRouter.use("/", binaryMarketRoutes);
+  } else {
+    apiRouter.use("/binary-markets", (_req, res) => {
+      res.status(503).json({ error: "The live BTC market is disabled in this environment." });
+    });
+  }
 
   // Admin routes
   apiRouter.use("/", adminRoutes);
@@ -117,12 +123,14 @@ export async function createServer() {
   app.use("/mapi", apiRouter);
 
   // Start Binance feed and binary market scheduler
-  try {
-    binanceFeed.start();
-    startBinaryScheduler();
-    console.log("[Server] Binance feed and binary scheduler started");
-  } catch (err) {
-    console.error("[Server] Failed to start binary market services:", err);
+  if (enableBinaryMarkets) {
+    try {
+      binanceFeed.start();
+      startBinaryScheduler();
+      console.log("[Server] Binance feed and binary scheduler started");
+    } catch (err) {
+      console.error("[Server] Failed to start binary market services:", err);
+    }
   }
 
   return app;

@@ -37,6 +37,7 @@
     "client/**/*",
     "shared/**/*",
     "mapi/**/*",
+    "netlify/preview-functions/**/*",
     "vite.config.ts",
     "vite.config.server.ts"
   ],

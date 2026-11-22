@@ -4,7 +4,7 @@ import mongoose from "mongoose";
 const MONGODB_URI =
   process.env.MONGODB_URI || "mongodb://localhost:27017/metamarket";
 
-export async function connectDB() {
+export async function connectDB(options?: mongoose.ConnectOptions) {
   if (mongoose.connection.readyState >= 1) {
     return;
   }
@@ -17,7 +17,7 @@ export async function connectDB() {
     if (!uri) throw new Error("Missing MONGODB_URI");
 
     console.log(`[DB] Attempting connection...`);
-    await mongoose.connect(uri);
+    await mongoose.connect(uri, options);
     console.log("[DB] Connection successful");
   } catch (error) {
     console.error("[DB] Connection failed:", error);

@@ -1,21 +1,18 @@
+"$schema" = "https://open-api.netlify.com/netlify.schema.json"
+
 [build]
-  command = "npm run build"
+  command = "npm run build:preview"
   publish = "dist"
 
 [functions]
-  directory = "functions"
+  directory = "netlify/preview-functions"
   node_bundler = "esbuild"
 
-[[redirects]]
-  from = "/mapi/*"
-  to = "https://metamarket-backend.onrender.com/mapi/:splat"
-  status = 200
-  force = true
+[context.production]
+  command = "npm run build:production"
 
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
+[context.production.functions]
+  directory = "functions"
 
 [build.environment]
   NODE_VERSION = "22"
