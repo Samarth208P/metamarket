@@ -1,6 +1,7 @@
-import mongoose from "mongoose";
+import { newId, query } from "../database.ts";
 
-export interface IComment extends mongoose.Document {
+interface CommentRow {
+  _id: string;
   marketId: string;
   userId: string;
   userName: string;
@@ -8,17 +9,28 @@ export interface IComment extends mongoose.Document {
   createdAt: Date;
 }
 
-const CommentSchema = new mongoose.Schema<IComment>(
-  {
-    marketId: { type: String, required: true, index: true },
-    userId: { type: String, required: true },
-    userName: { type: String, required: true },
-    content: { type: String, required: true },
-  },
-  { timestamps: true },
-);
+const commentColumns = `id as "_id", market_id as "marketId", user_id as "userId",
+  user_name as "userName", content, created_at as "createdAt"`;
 
-const Comment =
-  (mongoose.models.Comment as mongoose.Model<IComment>) ||
-  mongoose.model<IComment>("Comment", CommentSchema);
+const Comment = {
+  async list(marketId: string) {
+    const result = await query<CommentRow>(
+      `select ${commentColumns} from metamarket.comments
+       where market_id = $1 order by created_at desc`,
+      [marketId],
+    );
+    return result.rows;
+  },
+
+  async create(comment: Omit<CommentRow, "_id" | "createdAt">) {
+    const { marketId, userId, userName, content } = comment;
+    const result = await query<CommentRow>(
+      `insert into metamarket.comments (id, market_id, user_id, user_name, content)
+       values ($1, $2, $3, $4, $5) returning ${commentColumns}`,
+      [newId(), marketId, userId, userName, content],
+    );
+    return result.rows[0];
+  },
+};
+
 export default Comment;

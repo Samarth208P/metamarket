@@ -1,20 +1,34 @@
 import "dotenv/config";
+import { randomBytes } from "node:crypto";
 import passport from "passport";
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
-import { RequestHandler } from "express";
-import User from "../models/User.js";
+import type { RequestHandler } from "express";
+import { USERNAME_PATTERN } from "../../../shared/api.ts";
+import User, { needsOnboarding, serializeUser } from "../models/User.ts";
+import { asyncRoute } from "./asyncRoute.ts";
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
-const FRONTEND_URL =
+export const FRONTEND_URL = (
   process.env.FRONTEND_URL ||
   (process.env.NODE_ENV === "production"
     ? "https://metamarket.live"
-    : "http://localhost:8080");
-const ADMIN_EMAILS = new Set([
+    : "http://localhost:8080")
+).replace(/\/$/, "");
+const GMAIL_ADMIN_EMAIL = "samarth208p@gmail.com";
+const WORKSPACE_ADMIN_EMAILS = new Set([
   "samarth_p@mt.iitr.ac.in",
   "yash1@mt.iitr.ac.in",
 ]);
+const cookieOptions = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: "lax" as const,
+};
+const oauthStateCookie = {
+  ...cookieOptions,
+  path: "/mapi/auth/google/callback",
+};
 
 // ── Passport Initialization ─────────────────────────────────────
 export function initializePassport() {
@@ -36,29 +50,25 @@ export function initializePassport() {
         },
         async (_accessToken, _refreshToken, profile, done) => {
           try {
-            const email = profile.emails?.[0]?.value;
-            if (
-              !email ||
-              (!email.endsWith("@iitr.ac.in") &&
-                !email.endsWith("@mt.iitr.ac.in"))
-            ) {
-              return done(null, false, { message: "Only IITR emails allowed" });
+            const verifiedEmail = profile.emails?.find(
+              (email) => email.verified === true,
+            );
+            const email = verifiedEmail?.value.trim().toLowerCase();
+            if (!email || !profile.id) {
+              return done(null, false, {
+                message: "A verified Google email is required",
+              });
             }
 
-            const enrollmentNumber = email.split("@")[0];
-            const isAdmin = ADMIN_EMAILS.has(email);
-
-            const user = await User.findOneAndUpdate(
-              { googleId: profile.id },
-              {
-                googleId: profile.id,
-                email,
-                name: profile.displayName || enrollmentNumber,
-                enrollmentNumber,
-                isAdmin,
-              },
-              { new: true, upsert: true, setDefaultsOnInsert: true },
-            );
+            const user = await User.signIn({
+              googleId: profile.id,
+              email,
+              name: profile.displayName || email.split("@")[0],
+              isAdmin:
+                email === GMAIL_ADMIN_EMAIL ||
+                (WORKSPACE_ADMIN_EMAILS.has(email) &&
+                  Boolean(profile._json.hd)),
+            });
 
             return done(null, user);
           } catch (error) {
@@ -75,76 +85,143 @@ export function initializePassport() {
 
 // Auth handlers
 export const handleGoogleAuth: RequestHandler = (req, res, next) => {
-  if (!process.env.GOOGLE_CLIENT_ID) {
+  if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
     return res.status(500).json({ error: "Auth not configured on server" });
   }
+  const state = randomBytes(32).toString("base64url");
+  res.cookie("oauthState", state, {
+    ...oauthStateCookie,
+    signed: true,
+    maxAge: 10 * 60 * 1000,
+  });
   passport.authenticate("google", {
-    scope: ["profile", "email"],
+    scope: ["openid", "profile", "email"],
+    prompt: "select_account",
     session: false,
+    state,
   })(req, res, next);
 };
 
 export const handleGoogleCallback: RequestHandler = (req, res, next) => {
+  const state = req.signedCookies?.oauthState;
+  res.clearCookie("oauthState", oauthStateCookie);
+  if (!state || state !== req.query.state) {
+    return res.redirect(`${FRONTEND_URL}/login?error=auth_failed`);
+  }
+
   passport.authenticate("google", { session: false }, (err, user) => {
     if (err || !user) {
       return res.redirect(`${FRONTEND_URL}/login?error=auth_failed`);
     }
 
     // Set a signed cookie with the userId (stateless auth)
-    res.cookie("userId", user.id || user._id, {
+    res.cookie("userId", user.id, {
+      ...cookieOptions,
       signed: true,
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
       maxAge: 14 * 24 * 60 * 60 * 1000, // 14 days
-      sameSite: "lax",
     });
 
-    res.redirect(FRONTEND_URL);
+    res.redirect(
+      needsOnboarding(user) ? `${FRONTEND_URL}/login` : FRONTEND_URL,
+    );
   })(req, res, next);
 };
 
-export const handleAuthSuccess: RequestHandler = (req, res) => {
-  res.redirect(FRONTEND_URL);
+export const requireAccount: RequestHandler = (req, res, next) => {
+  res.set("Cache-Control", "private, no-store");
+  if (!req.user) return res.status(401).json({ error: "Not authenticated" });
+  next();
 };
 
-export const handleLogout: RequestHandler = (req, res) => {
-  res.clearCookie("userId");
+export const requireOnboardingComplete: RequestHandler = (req, res, next) => {
+  if (needsOnboarding(req.user)) {
+    return res.status(403).json({
+      code: "ONBOARDING_REQUIRED",
+      error: "Choose a username and accept the play terms to continue.",
+    });
+  }
+  next();
+};
+
+export const handleLogout: RequestHandler = (_req, res) => {
+  res.clearCookie("userId", cookieOptions);
   res.json({ success: true });
 };
 
-export const handleClearHistory: RequestHandler = async (req, res) => {
-  try {
-    const userId = (req as any).signedCookies?.userId;
-    if (!userId) {
-      return res.status(401).json({ error: "Not authenticated" });
-    }
-
-    const user = await User.findByIdAndUpdate(
-      userId,
-      { $set: { tradeHistory: [] } },
-      { new: true }
-    );
-
-    if (!user) {
-      return res.status(404).json({ error: "User not found" });
-    }
-
-    res.json({ success: true, user });
-  } catch (error) {
-    console.error("Clear history error:", error);
-    res.status(500).json({ error: "Internal server error" });
-  }
+export const handleGetUser: RequestHandler = (req, res) => {
+  res.json(serializeUser(req.user));
 };
 
-export const handleGetUser: RequestHandler = async (req, res) => {
-  try {
-    const userId = (req as any).signedCookies?.userId;
-    if (userId) {
-      const user = await User.findById(userId);
-      if (user) return res.json(user);
-    }
-    res.status(401).json({ error: "Not authenticated" });
-  } catch (error) {
-    res.status(500).json({ error: "Internal server error" });
+function isUsernameTaken(error: unknown) {
+  const violation = error as { code?: string; constraint?: string } | null;
+  return (
+    violation?.code === "23505" &&
+    violation.constraint === "accounts_username_unique"
+  );
+}
+
+export const handleOnboarding = asyncRoute(async (req, res) => {
+  const { username: proposedUsername, virtualFunds, playOnly } = req.body ?? {};
+  const username =
+    typeof proposedUsername === "string" ? proposedUsername.trim() : "";
+  if (
+    !USERNAME_PATTERN.test(username) ||
+    virtualFunds !== true ||
+    playOnly !== true
+  ) {
+    return res.status(400).json({
+      error:
+        "Enter a username with 3–24 letters, numbers, or underscores and accept both play terms.",
+    });
   }
-};
+  const account = req.user;
+  if (!needsOnboarding(account)) return res.json(serializeUser(account));
+
+  try {
+    const user = await User.completeOnboarding(account.id, username);
+    if (!user) return res.status(401).json({ error: "Not authenticated" });
+    return res.json(serializeUser(user));
+  } catch (error) {
+    if (isUsernameTaken(error)) {
+      return res
+        .status(409)
+        .json({ error: "That username is taken. Choose another." });
+    }
+    throw error;
+  }
+});
+
+export const handleUpdateUsername = asyncRoute(async (req, res) => {
+  const proposedUsername = req.body?.username;
+  const username =
+    typeof proposedUsername === "string" ? proposedUsername.trim() : "";
+  if (!USERNAME_PATTERN.test(username)) {
+    return res.status(400).json({
+      error: "Enter a username with 3–24 letters, numbers, or underscores.",
+    });
+  }
+
+  try {
+    const user = await User.updateUsername(req.user.id, username);
+    if (!user) return res.status(401).json({ error: "Not authenticated" });
+    return res.json({ username: user.username });
+  } catch (error) {
+    if (isUsernameTaken(error)) {
+      return res
+        .status(409)
+        .json({ error: "That username is taken. Choose another." });
+    }
+    throw error;
+  }
+});
+
+export const handleAcknowledgeStarterGift = asyncRoute(async (req, res) => {
+  await User.acknowledgeGift(req.user.id);
+  res.sendStatus(204);
+});
+
+export const handleClearHistory = asyncRoute(async (req, res) => {
+  const user = await User.clearHistory(req.user.id);
+  if (!user) return res.status(401).json({ error: "Not authenticated" });
+  res.json({ success: true, user: serializeUser(user) });
+});

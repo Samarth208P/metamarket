@@ -1,0 +1,12 @@
+{
+  "imports": {
+    "cookie-parser": "npm:cookie-parser@1.4.7",
+    "cors": "npm:cors@2.8.5",
+    "dotenv/config": "npm:dotenv@17.2.1/config",
+    "express": "npm:express@4.22.1",
+    "multer": "npm:multer@2.1.1",
+    "passport": "npm:passport@0.7.0",
+    "passport-google-oauth20": "npm:passport-google-oauth20@2.0.0",
+    "pg": "npm:pg@8.23.1"
+  }
+}

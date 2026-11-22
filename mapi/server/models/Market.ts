@@ -1,4 +1,4 @@
-import mongoose from "mongoose";
+import { newId, query } from "../database.ts";
 
 export type MarketStatus =
   | "active"
@@ -15,7 +15,8 @@ export interface PriceHistoryPoint {
   timestamp: Date;
 }
 
-export interface IMarket extends mongoose.Document {
+export interface IMarket {
+  id: string;
   title: string;
   description: string;
   category: string;
@@ -55,92 +56,6 @@ export interface IMarket extends mongoose.Document {
   updatedAt: Date;
 }
 
-const PriceHistorySchema = new mongoose.Schema<PriceHistoryPoint>(
-  {
-    yesPrice: { type: Number, required: true },
-    noPrice: { type: Number, required: true },
-    allPrices: { type: [Number] },
-    prices: {
-      type: [
-        {
-          optionId: { type: String, required: true },
-          price: { type: Number, required: true },
-          _id: false,
-        },
-      ],
-    },
-    note: { type: String, required: true },
-    timestamp: { type: Date, default: Date.now },
-  },
-  { _id: false },
-);
-
-const MarketSchema = new mongoose.Schema<IMarket>(
-  {
-    title: { type: String, required: true },
-    description: { type: String, required: true },
-    category: { type: String, default: "General" },
-    marketType: {
-      type: String,
-      enum: ["binary", "versus", "multi"],
-      default: "binary",
-    },
-    ammType: { type: String, enum: ["legacy", "lmsr"], default: "lmsr" },
-    optionA: { type: String },
-    optionB: { type: String },
-    shortA: { type: String },
-    shortB: { type: String },
-    logoUrl: { type: String },
-    options: [
-      {
-        id: { type: String, required: true },
-        name: { type: String, required: true },
-        shortName: { type: String },
-        imageUrl: { type: String },
-        shares: { type: Number, default: 1000 },
-        _id: false,
-      },
-    ],
-    teams: [
-      {
-        name: { type: String },
-        imageUrl: { type: String },
-        yesPool: { type: Number, default: 1000 },
-        noPool: { type: Number, default: 1000 },
-        _id: false,
-      },
-    ],
-    creatorId: { type: String },
-    status: {
-      type: String,
-      enum: ["active", "resolved_yes", "resolved_no", "resolved_option"],
-      default: "active",
-    },
-    yesPool: { type: Number, default: 1000 },
-    noPool: { type: Number, default: 1000 },
-    volume: { type: Number, default: 0 },
-    priceHistory: { type: [PriceHistorySchema], default: [] },
-    resolvedOutcome: { type: String, enum: ["yes", "no"], default: null },
-    resolvedOptionId: { type: String, default: null },
-    initialB: { type: Number, default: 1000 },
-    minB: { type: Number, default: 250 },
-    isDynamic: { type: Boolean, default: false },
-    endDate: { type: Date },
-  },
-  {
-    timestamps: true,
-    toJSON: {
-      virtuals: true,
-      versionKey: false,
-      transform(_doc, ret) {
-        const record = ret as any;
-        record.id = record._id?.toString();
-        delete record._id;
-      },
-    },
-  },
-);
-
 export function calculateYesPrice(yesPool: number, noPool: number): number {
   const total = yesPool + noPool;
   if (total <= 0) return 50;
@@ -153,7 +68,85 @@ export function calculateNoPrice(yesPool: number, noPool: number): number {
   return Math.min(100, Math.max(0, (yesPool / total) * 100));
 }
 
-const Market =
-  (mongoose.models.Market as mongoose.Model<IMarket>) ||
-  mongoose.model<IMarket>("Market", MarketSchema);
+type MarketRow = {
+  id: string;
+  status: MarketStatus;
+  state: Omit<IMarket, "id" | "status" | "createdAt" | "updatedAt">;
+  created_at: Date;
+  updated_at: Date;
+};
+
+function hydrate(row: MarketRow): IMarket {
+  return {
+    ...row.state,
+    id: row.id,
+    status: row.status,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function newMarket(input: Partial<IMarket>): IMarket {
+  return {
+    id: newId(),
+    title: "",
+    description: "",
+    category: "General",
+    marketType: "binary",
+    ammType: "lmsr",
+    options: [],
+    teams: [],
+    status: "active",
+    yesPool: 1000,
+    noPool: 1000,
+    volume: 0,
+    priceHistory: [],
+    initialB: 1000,
+    minB: 250,
+    isDynamic: false,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    ...input,
+  };
+}
+
+const Market = {
+  async findById(id: string, lock = false) {
+    const result = await query<MarketRow>(
+      `select * from metamarket.markets where id = $1 ${lock ? "for update" : ""}`,
+      [id],
+    );
+    return result.rows[0] ? hydrate(result.rows[0]) : null;
+  },
+
+  async list(status?: MarketStatus) {
+    const result = await query<MarketRow>(
+      `select * from metamarket.markets
+       where $1::text is null or status = $1 order by status, created_at desc`,
+      [status ?? null],
+    );
+    return result.rows.map(hydrate);
+  },
+
+  async create(input: Partial<IMarket>) {
+    const { id, status, createdAt, updatedAt, ...state } = newMarket(input);
+    const result = await query<MarketRow>(
+      `insert into metamarket.markets (id, status, state, created_at, updated_at)
+       values ($1, $2, $3, $4, $5) returning *`,
+      [id, status, JSON.stringify(state), createdAt, updatedAt],
+    );
+    return hydrate(result.rows[0]);
+  },
+
+  async save(market: IMarket) {
+    const { id, status, createdAt, updatedAt, ...state } = market;
+    const result = await query(
+      `update metamarket.markets set status = $2, state = $3, updated_at = now()
+       where id = $1 returning updated_at`,
+      [id, status, JSON.stringify(state)],
+    );
+    market.updatedAt = result.rows[0].updated_at;
+  },
+};
+
 export default Market;

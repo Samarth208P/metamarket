@@ -4,14 +4,10 @@ import { useAuth } from "@/hooks/use-auth";
 
 interface ProtectedRouteProps {
   children: ReactNode;
-  allowGuest?: boolean;
 }
 
-export function ProtectedRoute({
-  children,
-  allowGuest = true,
-}: ProtectedRouteProps) {
-  const { isAuthenticated, isGuestUser, isLoading } = useAuth();
+export function ProtectedRoute({ children }: ProtectedRouteProps) {
+  const { user, isLoading } = useAuth();
 
   if (isLoading) {
     return (
@@ -21,12 +17,8 @@ export function ProtectedRoute({
     );
   }
 
-  if (!isAuthenticated) {
+  if (!user || user.needsOnboarding) {
     return <Navigate to="/login" replace />;
-  }
-
-  if (!allowGuest && isGuestUser) {
-    return <Navigate to="/" replace />;
   }
 
   return <>{children}</>;

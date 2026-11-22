@@ -32,7 +32,7 @@ export function BinaryTradePanel({
   isFrozen,
   serverProbability,
 }: BinaryTradePanelProps) {
-  const { user, updateBalance, refreshUser } = useAuth();
+  const { user, updateUser } = useAuth();
   const { toast } = useToast();
   const [tradeType, setTradeType] = useState<"buy" | "sell">("buy");
   const [amount, setAmount] = useState<string>("");
@@ -102,7 +102,7 @@ export function BinaryTradePanel({
 
   // ── Trade handler ──────────────────────────────────────────────
   const handleTrade = useCallback(async () => {
-    if (!market || !user || user.isGuest || isTrading) return;
+    if (!market || !user || isTrading) return;
     if (numericAmount < 1) {
       toast({ title: "Minimum bet is ₹1", variant: "destructive" });
       return;
@@ -124,7 +124,7 @@ export function BinaryTradePanel({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Trade failed");
 
-      updateBalance(data.userBalance);
+      updateUser(data.user);
       toast({
         title: `${selectedSide === "up" ? "🟢 UP" : "🔴 DOWN"} position opened!`,
         description: `₹${numericAmount} at ${formatPaise(
@@ -133,7 +133,6 @@ export function BinaryTradePanel({
       });
       setAmount("");
       setIsConfirming(false);
-      refreshUser();
     } catch (err: any) {
       toast({
         title: "Trade failed",
@@ -152,14 +151,13 @@ export function BinaryTradePanel({
     pDown,
     isTrading,
     toast,
-    updateBalance,
-    refreshUser,
+    updateUser,
   ]);
 
   // ── Sell handler ───────────────────────────────────────────────
   const handleSell = useCallback(
     async (ratio: number = 1) => {
-      if (!market || !user || user.isGuest || isTrading) return;
+      if (!market || !user || isTrading) return;
       if (currentHolding.positions.length === 0) {
         toast({ title: "No position to sell", variant: "destructive" });
         return;
@@ -176,7 +174,7 @@ export function BinaryTradePanel({
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Sell failed");
 
-        updateBalance(data.userBalance);
+        updateUser(data.user);
         toast({
           title:
             ratio >= 1
@@ -186,7 +184,6 @@ export function BinaryTradePanel({
         });
         setIsConfirming(false);
         setIsSellConfirming(false);
-        refreshUser();
       } catch (err: any) {
         toast({
           title: "Sell failed",
@@ -204,8 +201,7 @@ export function BinaryTradePanel({
       selectedSide,
       currentHolding,
       toast,
-      updateBalance,
-      refreshUser,
+      updateUser,
     ],
   );
 

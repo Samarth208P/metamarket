@@ -24,7 +24,7 @@ export default function BinaryMarket() {
   const { user, refreshUser } = useAuth();
 
   // Fetch the active market from the backend
-  const { data: activeData, refetch: refetchActive } = useQuery({
+  const { data: activeData, isError: activeMarketError } = useQuery({
     queryKey: ["binary-market-active"],
     queryFn: async () => {
       const res = await fetch("/mapi/binary-markets/active", {
@@ -62,7 +62,7 @@ export default function BinaryMarket() {
 
   // Periodic user balance refresh (every 10 seconds)
   useEffect(() => {
-    if (!user || user.isGuest) return;
+    if (!user) return;
     const interval = setInterval(() => {
       refreshUser();
     }, 10000);
@@ -96,6 +96,19 @@ export default function BinaryMarket() {
       refreshUser();
     }
   }, [marketHistoryLength, refreshUser]);
+
+  if (activeMarketError && !activeData) {
+    return (
+      <Layout>
+        <main className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+          <h1 className="text-2xl font-bold">BTC markets</h1>
+          <p className="mt-2 text-muted-foreground" role="status">
+            Live BTC markets are temporarily unavailable.
+          </p>
+        </main>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>

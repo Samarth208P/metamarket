@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { Search, Menu, X, User, LogOut, Settings } from "lucide-react";
+import { Search, Menu, X, User, LogOut, Settings, Gift } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,9 +21,15 @@ interface LayoutProps {
 export function Layout({ children }: LayoutProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const { user, logout, isGuestUser } = useAuth();
+  const { user, logout } = useAuth();
+  const { toast } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
+
+  const signOut = () =>
+    logout().catch(() => {
+      toast({ title: "Sign-out failed. Try again.", variant: "destructive" });
+    });
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -90,26 +97,25 @@ export function Layout({ children }: LayoutProps) {
           <div className="hidden md:flex items-center gap-6 ml-auto pl-6 border-l border-border/50">
             {user ? (
               <>
-                {!isGuestUser && (
-                  <div className="flex items-center gap-4 mr-2">
-                    <Link
-                      to="/portfolio"
-                      className="flex flex-col items-center group transition-opacity hover:opacity-80"
-                    >
-                      <span className="text-[10px] uppercase font-bold text-muted-foreground leading-none">
-                        Portfolio
-                      </span>
-                      <span className="text-sm font-bold text-yes">
-                        ₹{user.balance.toLocaleString()}
-                      </span>
-                    </Link>
-                  </div>
-                )}
+                <div className="flex items-center gap-4 mr-2">
+                  <Link
+                    to="/portfolio"
+                    className="flex flex-col items-center group transition-opacity hover:opacity-80"
+                  >
+                    <span className="text-[10px] uppercase font-bold text-muted-foreground leading-none">
+                      Portfolio
+                    </span>
+                    <span className="text-sm font-bold text-yes">
+                      ₹{user.balance.toLocaleString()}
+                    </span>
+                  </Link>
+                </div>
 
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button
                       variant="ghost"
+                      aria-label="Account menu"
                       className="h-8 w-8 p-0 rounded-full bg-muted border border-border"
                     >
                       <User className="w-4 h-4 text-muted-foreground" />
@@ -117,20 +123,22 @@ export function Layout({ children }: LayoutProps) {
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-48">
                     <div className="px-2 py-1.5 text-xs text-muted-foreground truncate">
-                      {isGuestUser ? "Guest Mode" : user.email}
+                      <span className="block truncate font-semibold text-foreground">
+                        {user.username}
+                      </span>
+                      <span className="block truncate">{user.email}</span>
                     </div>
                     <DropdownMenuSeparator />
-                    {!isGuestUser && (
-                      <DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link to="/settings">
                         <Settings className="w-4 h-4 mr-2" /> Settings
-                      </DropdownMenuItem>
-                    )}
+                      </Link>
+                    </DropdownMenuItem>
                     <DropdownMenuItem
-                      onClick={() => logout()}
+                      onClick={signOut}
                       className="text-destructive"
                     >
-                      <LogOut className="w-4 h-4 mr-2" />{" "}
-                      {isGuestUser ? "Exit Guest Mode" : "Sign Out"}
+                      <LogOut className="w-4 h-4 mr-2" /> Sign Out
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -162,7 +170,7 @@ export function Layout({ children }: LayoutProps) {
         {/* Mobile Navigation */}
         {mobileMenuOpen && (
           <nav className="md:hidden border-t border-border bg-background px-4 py-4 flex flex-col gap-4">
-            {user && !isGuestUser && (
+            {user && (
               <Link
                 to="/portfolio"
                 onClick={() => setMobileMenuOpen(false)}
@@ -186,12 +194,21 @@ export function Layout({ children }: LayoutProps) {
                   {link.label}
                 </Link>
               ))}
+              {user && (
+                <Link
+                  to="/settings"
+                  className="flex items-center text-sm font-semibold text-muted-foreground hover:text-foreground py-2"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  <Settings className="w-4 h-4 mr-2" /> Settings
+                </Link>
+              )}
             </div>
 
             {user ? (
               <Button
                 variant="outline"
-                onClick={() => logout()}
+                onClick={signOut}
                 className="w-full justify-start text-destructive mt-2"
               >
                 <LogOut className="w-4 h-4 mr-2" /> Sign Out
@@ -205,7 +222,57 @@ export function Layout({ children }: LayoutProps) {
         )}
       </header>
 
-      <main className="flex-1">{children}</main>
+      <main className="flex-1">
+        {user?.starterGift && (
+          <StarterGift key={user.id} amount={user.starterGift.amount} />
+        )}
+        {children}
+      </main>
+    </div>
+  );
+}
+
+function StarterGift({ amount }: { amount: number }) {
+  const { acknowledgeStarterGift } = useAuth();
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState("");
+
+  async function dismiss() {
+    setPending(true);
+    setError("");
+    try {
+      await acknowledgeStarterGift();
+    } catch {
+      setError("Could not dismiss the gift. Try again.");
+      setPending(false);
+    }
+  }
+
+  return (
+    <div className="container px-4 pt-4">
+      <div className="flex items-center gap-3 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2.5 sm:px-4">
+        <Gift className="h-5 w-5 shrink-0 text-primary" aria-hidden="true" />
+        <div className="flex-1">
+          <p role="status" className="text-sm font-medium">
+            Starter gift: ₹{amount.toLocaleString("en-IN")} in play money added
+            to your balance.
+          </p>
+          {error && (
+            <p role="alert" className="text-xs text-destructive">
+              {error}
+            </p>
+          )}
+        </div>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          disabled={pending}
+          onClick={dismiss}
+        >
+          Dismiss
+        </Button>
+      </div>
     </div>
   );
 }

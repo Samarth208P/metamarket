@@ -35,9 +35,11 @@ export interface User {
   id: string;
   email: string;
   name: string;
-  enrollmentNumber?: string;
+  username: string | null;
+  termsAcceptedAt: string | null;
+  needsOnboarding: boolean;
+  starterGift: { amount: number } | null;
   isAdmin: boolean;
-  isGuest?: boolean;
   balance: number;
   tradeHistory?: TradeHistoryEntry[];
   positions?: Position[];
@@ -128,7 +130,6 @@ export interface Market {
 export interface LeaderboardUser {
   id: string;
   name: string;
-  enrollmentNumber: string;
   balance: number;
   holdingsValue: number;
   totalNetWorth: number;
@@ -166,4 +167,19 @@ export interface AuthSuccessResponse {
 
 export interface AuthErrorResponse {
   error: string;
+}
+
+export const USERNAME_PATTERN = /^[a-zA-Z0-9_]{3,24}$/;
+
+export const PLAY_TERMS = {
+  virtualFunds:
+    "I understand MetaMarket uses simulated funds with no cash value or withdrawals.",
+  playOnly:
+    "I agree to use MetaMarket for simulated trading and entertainment only.",
+};
+
+export interface OnboardingRequest {
+  username: string;
+  virtualFunds: boolean;
+  playOnly: boolean;
 }

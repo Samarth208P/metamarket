@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { LmsrBetModal } from "./LmsrBetModal";
-import { Bookmark, Lock } from "lucide-react";
+import { Bookmark } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import type { Market, PriceHistoryPoint } from "@shared/api";
@@ -29,7 +29,7 @@ export function MarketCard({
   const [selectedOptionId, setSelectedOptionId] = useState<string | undefined>(
     undefined,
   );
-  const { bookmarks, toggleBookmark, isGuestUser } = useAuth();
+  const { bookmarks, toggleBookmark } = useAuth();
   const { toast } = useToast();
 
   const isBookmarked = bookmarks?.includes(id);
@@ -83,19 +83,17 @@ export function MarketCard({
               </div>
             )}
           </div>
-          {!isGuestUser && (
-            <button
-              onClick={handleBookmarkToggle}
-              className="p-1 rounded-full hover:bg-muted transition-colors text-muted-foreground"
-            >
-              <Bookmark
-                className={cn(
-                  "w-4 h-4",
-                  isBookmarked && "fill-current text-primary",
-                )}
-              />
-            </button>
-          )}
+          <button
+            onClick={handleBookmarkToggle}
+            className="p-1 rounded-full hover:bg-muted transition-colors text-muted-foreground"
+          >
+            <Bookmark
+              className={cn(
+                "w-4 h-4",
+                isBookmarked && "fill-current text-primary",
+              )}
+            />
+          </button>
         </div>
 
         <h3 className="font-semibold text-foreground leading-snug text-base mb-4 line-clamp-3">
@@ -103,12 +101,6 @@ export function MarketCard({
         </h3>
 
         <div className="mt-auto space-y-3">
-          {isGuestUser && (
-            <div className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/30 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-muted-foreground">
-              <Lock className="h-3 w-3" />
-              View Only
-            </div>
-          )}
           {marketType === "multi" && primaryOptions.length > 0 ? (
             <div className="space-y-1.5 max-h-[160px] overflow-y-auto">
               {primaryOptions.map((option) => (
@@ -121,21 +113,10 @@ export function MarketCard({
                   </span>
                   <div className="flex items-center gap-1.5 shrink-0">
                     <button
-                      onClick={(e) => {
-                        if (isGuestUser) {
-                          e.stopPropagation();
-                          return;
-                        }
-                        handleOpenOptionModal(e, option.id);
-                      }}
-                      className={cn(
-                        "px-2.5 py-1 text-xs font-bold rounded-md transition-colors",
-                        isGuestUser
-                          ? "bg-muted text-muted-foreground cursor-not-allowed"
-                          : "bg-yes/10 hover:bg-yes/20 text-yes",
-                      )}
+                      onClick={(e) => handleOpenOptionModal(e, option.id)}
+                      className="px-2.5 py-1 text-xs font-bold rounded-md transition-colors bg-yes/10 hover:bg-yes/20 text-yes"
                     >
-                      {isGuestUser ? "Locked" : `${option.price.toFixed(0)}p`}
+                      {option.price.toFixed(0)}p
                     </button>
                   </div>
                 </div>
@@ -146,31 +127,20 @@ export function MarketCard({
               {primaryOptions.map((option, idx) => (
                 <button
                   key={option.id}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (isGuestUser) {
-                      return;
-                    }
-                    setSelectedOptionId(option.id);
-                    setShowBetModal(true);
-                  }}
+                  onClick={(e) => handleOpenOptionModal(e, option.id)}
                   className={cn(
                     "flex items-center justify-between p-2.5 rounded-lg transition-all group/btn",
-                    isGuestUser && "cursor-not-allowed opacity-70",
                     idx === 0
                       ? "bg-yes/20 hover:bg-yes text-yes hover:text-white border border-yes/40"
                       : "bg-no/20 hover:bg-no text-no hover:text-white border border-no/40",
                   )}
                 >
                   <span className="text-sm font-black uppercase tracking-wider">
-                    {isGuestUser
-                      ? `${option.shortName || option.name} Locked`
-                      : option.shortName || option.name}
+                    {option.shortName || option.name}
                   </span>
                   <span
                     className={cn(
-                      "text-sm font-black",
-                      !isGuestUser && "group-hover/btn:text-white",
+                      "text-sm font-black group-hover/btn:text-white",
                       idx === 0 ? "text-yes" : "text-no",
                     )}
                   >

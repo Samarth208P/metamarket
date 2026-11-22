@@ -4,7 +4,6 @@ import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Link } from "react-router-dom";
 
 interface Comment {
   id: string;
@@ -22,7 +21,7 @@ export function CommentsSection({ marketId, isLive }: CommentsSectionProps) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { user, isGuestUser } = useAuth();
+  const { user } = useAuth();
   const { toast } = useToast();
 
   useEffect(() => {
@@ -43,7 +42,7 @@ export function CommentsSection({ marketId, isLive }: CommentsSectionProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || isGuestUser) {
+    if (!user) {
       toast({ title: "Please log in to comment", variant: "destructive" });
       return;
     }
@@ -84,7 +83,7 @@ export function CommentsSection({ marketId, isLive }: CommentsSectionProps) {
         </h3>
       </div>
 
-      {isLive && user && !isGuestUser && (
+      {isLive && user && (
         <form onSubmit={handleSubmit} className="flex gap-2">
           <Input
             placeholder="What's your take?"
@@ -101,19 +100,6 @@ export function CommentsSection({ marketId, isLive }: CommentsSectionProps) {
             <Send className="w-4 h-4" />
           </Button>
         </form>
-      )}
-
-      {isLive && isGuestUser && (
-        <div className="rounded-xl border border-border bg-muted/20 p-4 text-sm text-muted-foreground">
-          Guest mode is view-only.{" "}
-          <Link
-            to="/login"
-            className="font-semibold text-primary hover:opacity-80"
-          >
-            Log in
-          </Link>{" "}
-          to join the discussion.
-        </div>
       )}
 
       <div className="space-y-4 max-h-[400px] overflow-y-auto no-scrollbar">

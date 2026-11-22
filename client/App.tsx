@@ -2,10 +2,15 @@ import "./global.css";
 
 import { Toaster } from "@/components/ui/toaster";
 import { createRoot } from "react-dom/client";
-import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import {
+  BrowserRouter,
+  Link,
+  Routes,
+  Route,
+  useLocation,
+} from "react-router-dom";
 import { AuthProvider } from "@/hooks/use-auth";
 import { AdminProtectedRoute } from "@/components/AdminProtectedRoute";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
@@ -14,13 +19,50 @@ import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
 import Portfolio from "./pages/Portfolio";
 import Leaderboard from "./pages/Leaderboard";
-import MarketDetail from "./pages/MarketDetail";
 import Admin from "./pages/Admin";
-import BinaryMarket from "./pages/BinaryMarket";
+import Settings from "./pages/Settings";
+import { Layout } from "@/components/Layout";
+import { MarketErrorBoundary } from "@/components/MarketErrorBoundary";
 
-import { useEffect } from "react";
+import { lazy, Suspense, useEffect, type ReactNode } from "react";
+
+const MarketDetail = lazy(() => import("./pages/MarketDetail"));
+const BinaryMarket = lazy(() => import("./pages/BinaryMarket"));
 
 const queryClient = new QueryClient();
+
+function MarketRoute({ children }: { children: ReactNode }) {
+  const { pathname } = useLocation();
+
+  return (
+    <MarketErrorBoundary
+      key={pathname}
+      market={pathname}
+      fallback={
+        <Layout>
+          <main className="container px-4 py-8">
+            <p className="mb-3" role="alert">
+              This market is temporarily unavailable.
+            </p>
+            <Link to="/" className="text-primary">
+              Back to markets
+            </Link>
+          </main>
+        </Layout>
+      }
+    >
+      <Suspense
+        fallback={
+          <p className="p-8" role="status">
+            Loading market…
+          </p>
+        }
+      >
+        {children}
+      </Suspense>
+    </MarketErrorBoundary>
+  );
+}
 
 function App() {
   useEffect(() => {
@@ -33,7 +75,6 @@ function App() {
       <AuthProvider>
         <TooltipProvider>
           <Toaster />
-          <Sonner />
           <BrowserRouter>
             <Routes>
               <Route path="/login" element={<Login />} />
@@ -48,8 +89,16 @@ function App() {
               <Route
                 path="/portfolio"
                 element={
-                  <ProtectedRoute allowGuest={false}>
+                  <ProtectedRoute>
                     <Portfolio />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/settings"
+                element={
+                  <ProtectedRoute>
+                    <Settings />
                   </ProtectedRoute>
                 }
               />
@@ -65,7 +114,9 @@ function App() {
                 path="/market/:id"
                 element={
                   <ProtectedRoute>
-                    <MarketDetail />
+                    <MarketRoute>
+                      <MarketDetail />
+                    </MarketRoute>
                   </ProtectedRoute>
                 }
               />
@@ -81,12 +132,21 @@ function App() {
                 path="/btc"
                 element={
                   <ProtectedRoute>
-                    <BinaryMarket />
+                    <MarketRoute>
+                      <BinaryMarket />
+                    </MarketRoute>
                   </ProtectedRoute>
                 }
               />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-              <Route path="*" element={<NotFound />} />
+              <Route
+                path="*"
+                element={
+                  <ProtectedRoute>
+                    <NotFound />
+                  </ProtectedRoute>
+                }
+              />
             </Routes>
           </BrowserRouter>
         </TooltipProvider>

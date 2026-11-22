@@ -1,30 +1,54 @@
 import "dotenv/config";
-import express from "express";
+import express, { type ErrorRequestHandler } from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import passport from "passport";
-import mongoose from "mongoose";
-import path from "path";
-import { initializePassport } from "./routes/auth.js";
-export { connectDB } from "./database.js";
+import path from "node:path";
+import { connectDB, isRecordId, withAccount } from "./database.ts";
+export { connectDB };
 
-import marketRoutes from "./routes/markets.js";
-import binaryMarketRoutes from "./routes/binaryMarkets.js";
-import adminRoutes from "./routes/admin.js";
+import marketRoutes from "./routes/markets.ts";
+import adminRoutes from "./routes/admin.ts";
 import {
+  FRONTEND_URL,
+  initializePassport,
   handleGoogleAuth,
   handleGoogleCallback,
-  handleAuthSuccess,
   handleLogout,
   handleGetUser,
+  handleOnboarding,
+  handleUpdateUsername,
+  handleAcknowledgeStarterGift,
   handleClearHistory,
-} from "./routes/auth.js";
-import User from "./models/User.js";
-import { binanceFeed } from "./services/binanceFeed.js";
-import { startBinaryScheduler } from "./services/binaryScheduler.js";
+  requireAccount,
+  requireOnboardingComplete,
+} from "./routes/auth.ts";
+import User from "./models/User.ts";
+import { ApiError, asyncRoute } from "./routes/asyncRoute.ts";
 
-export async function createServer() {
+const handleApiError: ErrorRequestHandler = (error, req, res, next) => {
+  if (res.headersSent) return next(error);
+  if (error instanceof ApiError)
+    return res.status(error.status).json(error.body);
+  console.error(`[API] ${req.method} ${req.path} failed:`, error);
+  res.status(500).json({ error: "Unable to complete this request." });
+};
+
+export async function createServer({
+  enableBinaryMarkets = true,
+  edge = false,
+  onShutdown,
+}: {
+  enableBinaryMarkets?: boolean;
+  edge?: boolean;
+  onShutdown?: (stop: () => void) => void;
+} = {}) {
   const app = express();
+  app.locals.edge = edge;
+  const sessionSecret = process.env.SESSION_SECRET;
+  if (!sessionSecret) {
+    throw new Error("SESSION_SECRET is required");
+  }
 
   // Important for Vercel behind proxy
   app.set("trust proxy", 1);
@@ -32,7 +56,7 @@ export async function createServer() {
   // Middleware
   app.use(
     cors({
-      origin: true, // Allow all origins since using proxy
+      origin: new URL(FRONTEND_URL).origin,
       credentials: true,
     }),
   );
@@ -40,34 +64,24 @@ export async function createServer() {
   app.use(express.urlencoded({ extended: true }));
 
   // Serve uploaded images statically (Legacy support)
-  const uploadsPath = path.resolve(process.cwd(), "public", "uploads");
-  app.use("/uploads", express.static(uploadsPath));
+  if (!edge) {
+    const uploadsPath = path.resolve(process.cwd(), "public", "uploads");
+    app.use("/uploads", express.static(uploadsPath));
+  }
 
   // Cookie parsing (stateless auth)
-  app.use(cookieParser(process.env.SESSION_SECRET || "metamarket-secret-key"));
+  app.use(cookieParser(sessionSecret));
 
   // Initialize Passport
   initializePassport();
   app.use(passport.initialize());
 
-  // Middleware to populate req.user from signed cookie (stateless auth)
-  app.use(async (req, _res, next) => {
-    const userId = (req as any).signedCookies?.userId;
-    if (userId && mongoose.isValidObjectId(userId)) {
-      try {
-        const user = await User.findById(userId);
-        if (user) {
-          (req as any).user = user;
-        }
-      } catch (err) {
-        console.error("Auth middleware error:", err);
-      }
-    }
-    next();
-  });
-
   // API Router
   const apiRouter = express.Router();
+  apiRouter.use((_req, res, next) => {
+    res.set("Cache-Control", "no-store");
+    next();
+  });
 
   // Basic API routes
   apiRouter.get("/ping", (_req, res) => {
@@ -77,53 +91,84 @@ export async function createServer() {
 
   apiRouter.get("/health", async (_req, res) => {
     try {
-      const dbState = mongoose.connection.readyState;
-      const isConnected = dbState === 1;
+      await connectDB();
       res.json({
         status: "ok",
-        database: isConnected ? "connected" : "disconnected",
+        database: "connected",
         timestamp: new Date().toISOString(),
       });
-    } catch (error) {
-      res.status(500).json({
-        status: "error",
-        database: "error",
-        error: error.message,
-      });
+    } catch {
+      res.status(503).json({ status: "error", database: "disconnected" });
     }
   });
 
-  // Market routes
+  apiRouter.get("/auth/google", handleGoogleAuth);
+  apiRouter.get("/auth/google/callback", handleGoogleCallback);
+  apiRouter.post("/auth/logout", handleLogout);
+
+  apiRouter.use(
+    asyncRoute(async (req, _res, next) => {
+      const userId = req.signedCookies?.userId;
+      if (!isRecordId(userId)) return next();
+      await withAccount(userId, async () => {
+        req.user = await User.findById(userId);
+        next();
+      });
+    }),
+    requireAccount,
+  );
+
+  apiRouter.get("/user", handleGetUser);
+  apiRouter.post("/user/onboarding", handleOnboarding);
+
+  apiRouter.use(requireOnboardingComplete);
+  apiRouter.patch("/user/username", handleUpdateUsername);
+  apiRouter.post(
+    "/user/starter-gift/acknowledge",
+    handleAcknowledgeStarterGift,
+  );
+  apiRouter.post("/auth/clear-history", handleClearHistory);
   apiRouter.use("/", marketRoutes);
 
-  // Binary market routes
-  apiRouter.use("/", binaryMarketRoutes);
+  apiRouter.use(
+    "/binary-markets",
+    await loadBinaryMarketRoutes(enableBinaryMarkets, edge, onShutdown),
+  );
 
-  // Admin routes
   apiRouter.use("/", adminRoutes);
 
-  // Auth routes
-  apiRouter.get("/auth/google", handleGoogleAuth);
-  apiRouter.get(
-    "/auth/google/callback",
-    handleGoogleCallback,
-    handleAuthSuccess,
-  );
-  apiRouter.post("/auth/logout", handleLogout);
-  apiRouter.post("/auth/clear-history", handleClearHistory);
-  apiRouter.get("/user", handleGetUser);
-
-  // Mount API router
+  apiRouter.use((_req, res) => res.status(404).json({ error: "Not found" }));
+  apiRouter.use(handleApiError);
   app.use("/mapi", apiRouter);
 
-  // Start Binance feed and binary market scheduler
-  try {
-    binanceFeed.start();
-    startBinaryScheduler();
-    console.log("[Server] Binance feed and binary scheduler started");
-  } catch (err) {
-    console.error("[Server] Failed to start binary market services:", err);
+  return app;
+}
+
+async function loadBinaryMarketRoutes(
+  enabled: boolean,
+  edge: boolean,
+  onShutdown?: (stop: () => void) => void,
+) {
+  if (enabled) {
+    try {
+      const { default: routes, startBinaryMarketServices } = await import(
+        "./routes/binaryMarkets.ts"
+      );
+      if (!edge) {
+        const stop = startBinaryMarketServices();
+        onShutdown?.(stop);
+      }
+      return routes;
+    } catch (err) {
+      console.error("[BTC] Failed to initialize live market:", err);
+    }
   }
 
-  return app;
+  return express.Router().use((_req, res) => {
+    res.status(503).json({
+      error: enabled
+        ? "Live BTC markets are temporarily unavailable."
+        : "Live BTC markets are disabled on this server.",
+    });
+  });
 }

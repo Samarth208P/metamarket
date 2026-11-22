@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/Layout";
 import { MarketCard } from "@/components/MarketCard";
+import { MarketErrorBoundary } from "@/components/MarketErrorBoundary";
 import { Market } from "@shared/api";
 import { Search, Activity, CheckCircle2, Bookmark } from "lucide-react";
 import { useLocation, useNavigate, Link } from "react-router-dom";
@@ -40,7 +41,7 @@ export default function Index() {
 
   const [markets, setMarkets] = useState<Market[]>([]);
 
-  const { user, refreshUser, bookmarks, isGuestUser } = useAuth();
+  const { user, refreshUser, bookmarks } = useAuth();
 
   useEffect(() => {
     if (data) {
@@ -70,6 +71,24 @@ export default function Index() {
     );
   };
 
+  const renderMarket = (market: Market) => (
+    <MarketErrorBoundary
+      key={market.id}
+      market={market.id}
+      resetKey={market}
+      fallback={
+        <div className="rounded-xl border border-border bg-card p-4">
+          <h3 className="font-semibold">{market.title}</h3>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Market temporarily unavailable.
+          </p>
+        </div>
+      }
+    >
+      <MarketCard {...market} onTrade={handleTrade} />
+    </MarketErrorBoundary>
+  );
+
   return (
     <Layout>
       <section className="container mx-auto px-4 pt-2 pb-8 md:pt-4 max-w-[1400px]">
@@ -93,7 +112,7 @@ export default function Index() {
             )}
           </button>
 
-          {user && !isGuestUser && (
+          {user && (
             <button
               onClick={() => {
                 setShowBookmarksOnly(true);
@@ -219,13 +238,7 @@ export default function Index() {
                   </span>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                  {liveMarkets.map((market) => (
-                    <MarketCard
-                      key={market.id}
-                      {...market}
-                      onTrade={handleTrade}
-                    />
-                  ))}
+                  {liveMarkets.map(renderMarket)}
                 </div>
               </div>
             )}
@@ -243,13 +256,7 @@ export default function Index() {
                   </span>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 opacity-75 grayscale-[0.5]">
-                  {resolvedMarkets.map((market) => (
-                    <MarketCard
-                      key={market.id}
-                      {...market}
-                      onTrade={handleTrade}
-                    />
-                  ))}
+                  {resolvedMarkets.map(renderMarket)}
                 </div>
               </div>
             )}

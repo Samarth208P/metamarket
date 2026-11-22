@@ -1,23 +1,30 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
-import { User } from "@shared/api";
+import type { AuthErrorResponse, OnboardingRequest, User } from "@shared/api";
 
 interface AuthContextType {
   user: User | null;
   login: () => void;
   logout: () => Promise<void>;
-  updateBalance: (newBalance: number) => void;
   updateUser: (userData: User) => void;
   refreshUser: () => Promise<void>;
   toggleBookmark: (marketId: string) => void;
   bookmarks: string[];
-  isAuthenticated: boolean;
-  isGuestUser: boolean;
   isLoading: boolean;
-  guestLogin: () => void;
+  completeOnboarding: (data: OnboardingRequest) => Promise<void>;
+  updateUsername: (username: string) => Promise<void>;
+  acknowledgeStarterGift: () => Promise<void>;
   clearHistory: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+async function requireSuccess(response: Response) {
+  if (response.ok) return;
+  const data: AuthErrorResponse | undefined = await response
+    .json()
+    .catch(() => undefined);
+  throw new Error(data?.error || "Unable to complete this request. Try again.");
+}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -43,13 +50,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const checkAuthStatus = async () => {
-    const minWait = new Promise((resolve) => setTimeout(resolve, 3000));
     try {
-      const authPromise = fetch("/mapi/user", {
+      const response = await fetch("/mapi/user", {
         credentials: "include",
       });
-
-      const [response] = await Promise.all([authPromise, minWait]);
 
       if (response.ok) {
         const userData = await response.json();
@@ -68,45 +72,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = async () => {
-    if (user?.isGuest) {
-      setUser(null);
-      return;
-    }
-
-    try {
+    await requireSuccess(
       await fetch("/mapi/auth/logout", {
         method: "POST",
         credentials: "include",
-      });
-      setUser(null);
-    } catch (error) {
-      console.error("Logout failed:", error);
-    }
+      }),
+    );
+    setUser(null);
   };
 
   const updateUser = (userData: User) => {
-    setUser(userData);
+    setUser((current) => {
+      if (current?.id !== userData.id) return current;
+      return {
+        ...userData,
+        starterGift: current.starterGift && userData.starterGift,
+      };
+    });
   };
 
   const refreshUser = async () => {
-    if (user?.isGuest) {
-      return;
-    }
-
     try {
       const response = await fetch("/mapi/user", { credentials: "include" });
       if (response.ok) {
         const userData = await response.json();
-        setUser(userData);
+        updateUser(userData);
+      } else if (response.status === 401) {
+        setUser((current) => (current?.id === user?.id ? null : current));
       }
     } catch (error) {
       console.error("Manual user refresh failed:", error);
-    }
-  };
-
-  const updateBalance = (newBalance: number) => {
-    if (user) {
-      setUser({ ...user, balance: newBalance });
     }
   };
 
@@ -119,11 +114,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const clearHistory = async () => {
-    if (user?.isGuest) {
-      setUser({ ...user, tradeHistory: [] });
-      return;
-    }
-
     try {
       const response = await fetch("/mapi/auth/clear-history", {
         method: "POST",
@@ -132,7 +122,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (response.ok) {
         const data = await response.json();
         if (data.user) {
-          setUser(data.user);
+          updateUser(data.user);
         } else {
           await refreshUser();
         }
@@ -142,32 +132,61 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const completeOnboarding = async (data: OnboardingRequest) => {
+    const response = await fetch("/mapi/user/onboarding", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+    await requireSuccess(response);
+    const account: User = await response.json();
+    setUser((current) => (current?.id === account.id ? account : current));
+  };
+
+  const acknowledgeStarterGift = async () => {
+    await requireSuccess(
+      await fetch("/mapi/user/starter-gift/acknowledge", {
+        method: "POST",
+        credentials: "include",
+      }),
+    );
+    setUser((current) =>
+      current?.id === user?.id && current
+        ? { ...current, starterGift: null }
+        : current,
+    );
+  };
+
+  const updateUsername = async (username: string) => {
+    const response = await fetch("/mapi/user/username", {
+      method: "PATCH",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username }),
+    });
+    await requireSuccess(response);
+    const profile: { username: string } = await response.json();
+    setUser((current) =>
+      current && current.id === user?.id
+        ? { ...current, username: profile.username }
+        : current,
+    );
+  };
+
   const value = {
     user,
     login,
     logout,
-    updateBalance,
     updateUser,
     refreshUser,
     toggleBookmark,
     bookmarks,
-    isAuthenticated: !!user,
-    isGuestUser: !!user?.isGuest,
     isLoading,
     clearHistory,
-    guestLogin: () => {
-      setUser({
-        id: "guest_" + Math.random().toString(36).substr(2, 9),
-        googleId: "guest",
-        name: "Guest User",
-        email: "guest@metamarket.live",
-        isAdmin: false,
-        isGuest: true,
-        balance: 0,
-        tradeHistory: [],
-        positions: [],
-      } as any);
-    },
+    completeOnboarding,
+    updateUsername,
+    acknowledgeStarterGift,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

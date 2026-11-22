@@ -80,7 +80,7 @@ export default function Leaderboard() {
             </div>
 
             <h1 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
-              IITR Leaderboard
+              Leaderboard
             </h1>
             <p className="text-lg text-muted-foreground mb-8">
               Top performers in MetaMarket prediction trading
@@ -129,9 +129,6 @@ export default function Leaderboard() {
                             <h3 className="text-lg font-bold text-foreground">
                               {user.name}
                             </h3>
-                            <p className="text-sm font-medium text-muted-foreground">
-                              {user.enrollmentNumber}
-                            </p>
                           </div>
                         </div>
 

@@ -24,8 +24,10 @@ dist-ssr
 *.sw?
 
 .config/
-.env.netlify
 .env
+.env.*
+!.env.development.example
+!.env.production.example
 
 package-lock.json
 yarn.lock

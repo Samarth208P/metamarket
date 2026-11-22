@@ -1,0 +1,6 @@
+{
+  "imports": {
+    "dotenv/config": "npm:dotenv@17.2.1/config",
+    "pg": "npm:pg@8.23.1"
+  }
+}

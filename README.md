@@ -5,14 +5,14 @@
 </p>
 
 <p align="center">
-  <strong>Prediction markets for IIT Roorkee, powered by LMSR pricing, quote-based execution, and a modern full-stack architecture.</strong>
+  <strong>Play-money prediction markets with LMSR pricing and quote-based trading.</strong>
 </p>
 
-MetaMarket is a full-stack prediction market platform built for IIT Roorkee. It lets users explore and trade on future outcomes across binary, head-to-head, and multi-outcome markets, while giving admins the tooling to create markets, monitor solvency, upload assets, and resolve results.
+MetaMarket started at IIT Roorkee and is open to anyone with a Google account. It lets users explore and trade on future outcomes across binary, head-to-head, and multi-outcome markets, while giving admins the tools to create markets, monitor solvency, upload assets, and resolve results.
 
 ## Overview
 
-MetaMarket combines a React frontend with an Express API and shared market logic in TypeScript. In local development, the API is mounted directly into the Vite dev server. In production, the same server is deployed through Netlify Functions.
+MetaMarket combines a React frontend with an Express API and shared market logic in TypeScript. In local development, Vite mounts the API as middleware. In production, Netlify serves the frontend and forwards `/mapi/*` requests to the `mapi` Supabase Edge Function.
 
 At a product level, MetaMarket is built around a simple idea: market prices act as continuously updated probabilities, giving users a live view of collective conviction on future events.
 
@@ -21,7 +21,7 @@ At a product level, MetaMarket is built around a simple idea: market prices act 
 - LMSR-based pricing engine for binary, versus, and multi-option markets
 - Quote-based trading flow with expiring quotes and trade history tracking
 - Dynamic liquidity support through configurable `b`, `minB`, and time-decay settings
-- Google OAuth restricted to IIT Roorkee domains, with guest browsing support
+- Google sign-in for verified Google accounts, with required username setup and play terms
 - Portfolio, leaderboard, bookmarks, and market comments
 - Admin dashboard for market creation, image uploads, resolution, and solvency controls
 - Shared API types and pricing utilities used by both client and server
@@ -64,19 +64,31 @@ Where:
 
 ## Architecture
 
+Read [MetaMarket architecture](ARCHITECTURE.md) for the development and production setup, Google sign-in flow, database policies, and deployment status.
+
 - `client/`: React application, route screens, UI components, and auth hooks
 - `mapi/server/`: Express server, database models, auth handlers, and market routes
-- `functions/`: Netlify serverless entrypoint for production deployment
+- `supabase/functions/`: Edge Functions for the Express API and BTC scheduler
 - `shared/`: Shared TypeScript types and LMSR market logic
 - `public/`: Static assets, icons, and web manifest files
+
+The React app calls `/mapi` to load markets, comments, the leaderboard, and the signed-in user. For LMSR trades, the client requests a quote, then submits that quote to execute the trade. Express validates the trade and records the result in Postgres. Admins create and resolve those markets through the admin dashboard.
+
+Supabase Cron invokes the `btc-cycle` Edge Function every ten seconds. It uses closed Binance candles to open and settle five-minute rounds, backfills one-second price history, and credits winners in a Postgres transaction. The local Vite API runs its own worker. The BTC page streams Binance chart ticks and polls the API for odds, positions, and results.
+
+### Market isolation
+
+Each regular market has its own ID, options, prices, positions, and result. Yes/no, head-to-head, and multi-outcome markets share the LMSR engine. The BTC market uses its own routes, pricing engine, and round data. The frontend loads the BTC and regular detail pages separately. If a card or detail page fails to render, the rest of the app stays available. The catalog logs and skips unreadable records, and a BTC initialization failure returns `503` for BTC routes while the regular API keeps serving requests.
+
+The scheduler locks each expired round while it settles the round and credits the winning wallets. Overlapping scheduler runs skip rounds that have already settled.
 
 ## Tech Stack
 
 - Frontend: React 18, Vite, Tailwind CSS, Radix UI, Framer Motion, TanStack Query
-- Backend: Express, Passport Google OAuth, Mongoose, Multer, Cloudinary
-- Shared logic: TypeScript, Zod, Vitest
-- Deployment: Netlify Functions
-- Data store: MongoDB
+- Backend: Express, Passport Google OAuth, node-postgres, Multer
+- Shared logic: TypeScript, Vitest
+- Deployment: Netlify frontend, Supabase Edge Functions and Cron
+- Data and media: Supabase Postgres and Storage
 
 ## Getting Started
 
@@ -84,9 +96,8 @@ Where:
 
 - Node.js 22 or later
 - pnpm 10 or later
-- A MongoDB connection string
-- Google OAuth credentials for the full sign-in flow, if you want to test IITR login locally
-- Cloudinary credentials if you want admin image uploads
+- Docker running locally for Supabase Postgres and Storage
+- Google OAuth credentials for testing the full sign-in flow locally
 
 ### Installation
 
@@ -96,22 +107,24 @@ pnpm install
 
 ### Environment Variables
 
-Create a `.env` file in the project root using `.env.example` as the starting point.
+Copy `.env.development.example` to `.env` for local development. Use `.env.production.example` as the template for Supabase Edge Function Secrets.
 
-| Variable                | Required    | Purpose                                                                                                         |
-| ----------------------- | ----------- | --------------------------------------------------------------------------------------------------------------- |
-| `MONGODB_URI`           | Yes         | MongoDB connection string. Local development will fail without it because the API connects during Vite startup. |
-| `SESSION_SECRET`        | Yes         | Secret used to sign the auth cookie.                                                                            |
-| `GOOGLE_CLIENT_ID`      | Recommended | Google OAuth client ID for IITR sign-in.                                                                        |
-| `GOOGLE_CLIENT_SECRET`  | Recommended | Google OAuth client secret.                                                                                     |
-| `GOOGLE_CALLBACK_URL`   | Recommended | OAuth callback URL. For local development, use `http://localhost:8080/mapi/auth/google/callback`.               |
-| `CLOUDINARY_CLOUD_NAME` | Optional    | Required for admin image uploads.                                                                               |
-| `CLOUDINARY_API_KEY`    | Optional    | Required for admin image uploads.                                                                               |
-| `CLOUDINARY_API_SECRET` | Optional    | Required for admin image uploads.                                                                               |
+| Variable                                       | Required    | Purpose                                                                                                  |
+| ---------------------------------------------- | ----------- | -------------------------------------------------------------------------------------------------------- |
+| `SUPABASE_DEV_DATABASE_URL`                    | Local       | Dedicated runtime role on the local Supabase CLI database. Copy the value in `.env.development.example`. |
+| `METAMARKET_DATABASE_URL`                      | Production  | Supavisor transaction pooler URI for `metamarket_backend` with `sslmode=verify-full`.                    |
+| `SESSION_SECRET`                               | Yes         | Secret used to sign the auth cookie.                                                                     |
+| `GOOGLE_CLIENT_ID`                             | Recommended | Google OAuth client ID for Google sign-in.                                                               |
+| `GOOGLE_CLIENT_SECRET`                         | Recommended | Google OAuth client secret.                                                                              |
+| `GOOGLE_CALLBACK_URL`                          | Recommended | OAuth callback URL. For local development, use `http://localhost:8080/mapi/auth/google/callback`.        |
+| `SUPABASE_DEV_URL`, `SUPABASE_DEV_STORAGE_KEY` | Local       | Storage URL and service key. `pnpm db:start` writes them to `.env`.                                      |
+| `METAMARKET_STORAGE_KEY`                       | Production  | Server-side Storage key for admin image uploads. Supabase supplies `SUPABASE_URL`.                       |
+| `METAMARKET_CRON_TOKEN`                        | Production  | Matches the `metamarket_cron_token` entry in Supabase Vault.                                             |
 
 ### Run the App
 
 ```bash
+pnpm db:start
 pnpm dev
 ```
 
@@ -120,44 +133,57 @@ The application starts on `http://localhost:8080`.
 During development:
 
 - Vite serves the frontend
-- The Express API is mounted at `/mapi`
-- Uploads are served from `/uploads`
+- The local Express API is mounted at `/mapi` and uses the Docker database on port 54322
+- Market artwork uploaded via `/mapi/upload` is served by local Supabase Storage on port 54321
+- `/btc` uses the local BTC worker and writes rounds and payouts to the Docker database.
 
-No separate API process is needed for local work.
+Use `pnpm dev` for local work. `pnpm start:api` runs the standalone API. Both require `SESSION_SECRET` and a reachable database.
 
 ## Available Scripts
 
-| Command           | Description                                                     |
-| ----------------- | --------------------------------------------------------------- |
-| `pnpm dev`        | Start the Vite development server with the embedded Express API |
-| `pnpm build`      | Build the production frontend bundle                            |
-| `pnpm test`       | Run Vitest test suites                                          |
-| `pnpm typecheck`  | Run TypeScript type-checking                                    |
-| `pnpm format.fix` | Format the repository with Prettier                             |
+| Command           | Description                                                                         |
+| ----------------- | ----------------------------------------------------------------------------------- |
+| `pnpm dev`        | Start the Vite development server with the embedded Express API                     |
+| `pnpm build`      | Build the production frontend bundle                                                |
+| `pnpm test`       | Run Vitest test suites                                                              |
+| `pnpm test:db`    | Test the API against local Supabase Postgres and Storage, then remove test fixtures |
+| `pnpm typecheck`  | Run TypeScript type-checking                                                        |
+| `pnpm format.fix` | Format the repository with Prettier                                                 |
 
 ## Authentication and Access
 
-- Google sign-in is restricted to `@iitr.ac.in` and `@mt.iitr.ac.in` email domains
-- Guest mode is available for browsing, but trading is disabled
-- Admin access is controlled by an allowlist in `mapi/server/routes/auth.ts`
+- Any verified Google account can sign in, including personal Gmail accounts.
+- Market, portfolio, leaderboard, and admin access require a unique username and acceptance of both play terms. Existing accounts complete these steps on their next visit if needed.
+- New accounts receive ₹1,000 in simulated funds once. The starter gift notice remains visible until dismissed. Signing in again in the same environment preserves the account’s balance and trade history.
+- `GET /mapi/user` returns the signed-in account, including setup status, balance, positions, history, and any unread starter gift. `POST /mapi/user/onboarding` saves the username and terms, and `POST /mapi/user/starter-gift/acknowledge` dismisses the notice.
+- Game API requests return `401` without an account and `403` with `ONBOARDING_REQUIRED` until setup is complete.
+- Account Settings lets signed-in players change their public username. The Google account email is displayed for reference.
+- Admin access is stored on the account. Initial access is granted to verified `samarth208p@gmail.com` and the allowlisted Google Workspace accounts. A migration grants access if the Gmail account already exists.
+
+## Supabase environments
+
+Development uses Docker for Postgres and Storage. `pnpm db:start` applies the migrations and writes the local connection settings to `.env`. The API accepts only loopback database and Storage addresses in development.
+
+Production uses the linked Supabase project. Review `pnpm exec supabase db push --remote --dry-run` before applying database migrations there. The hosted API uses the dedicated `metamarket_backend` role. It connects through Supavisor with `sslmode=verify-full`.
+
+Express continues to authenticate through Google and sets the verified account ID for each player database transaction. RLS limits players to their own account and BTC trades and gates market data on profile completion. The server uses a separate database role for wallet, trade, settlement, and admin operations. The application schema grants no access to the Supabase Data API roles.
+
+The `market-images` bucket serves market artwork at public URLs. Express verifies admin access before uploading JPEG, PNG, or WebP files up to 5 MiB. Storage policies prevent direct writes by browser roles. The hosted Storage key is stored in Supabase Edge Function Secrets.
 
 ## Deployment
 
-MetaMarket is configured for Netlify deployment.
+A push to GitHub `main` triggers the Netlify frontend build. Netlify serves `dist` and proxies `/mapi/*` to the project's `mapi` Edge Function. When Edge Function code changes, deploy it from the same revision with `pnpm exec supabase functions deploy mapi btc-cycle` before pushing the frontend.
 
-- Build command: `npm run build`
-- Publish directory: `dist`
-- Functions directory: `functions`
-- API redirect: `/mapi/* -> /.netlify/functions/index`
+For public Google sign-in, set the OAuth project audience to **External** and publish the app to **In production**. In **Google Auth Platform → Clients**, register the exact callback URI used by `GOOGLE_CALLBACK_URL`. For the main site, use `https://metamarket.live/mapi/auth/google/callback` and set `FRONTEND_URL` to `https://metamarket.live`. Configure a persistent `SESSION_SECRET` on the API host. [Google OAuth audience settings](https://support.google.com/cloud/answer/15549945?hl=en) · [Google redirect URI configuration](https://developers.google.com/identity/protocols/oauth2/web-server#creatingcred)
 
-The production serverless function initializes the database connection and boots the Express app before handling API traffic.
+The `metamarket-btc-cycle` Cron job reads `metamarket_edge_url` and `metamarket_cron_token` from Vault. The Edge Function checks the token before it runs the cycle.
 
 ## Repository Notes
 
 - Shared domain contracts live in `shared/api.ts`
 - LMSR pricing and quoting logic lives in `shared/lmsr.ts`
 - Core market routes are implemented in `mapi/server/routes/markets.ts`
-- The Netlify entrypoint is `functions/index.ts`
+- The live BTC worker is `mapi/server/services/binaryScheduler.ts`
 
 ## License
 

@@ -2,8 +2,6 @@ import "dotenv/config";
 import { defineConfig, Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "node:path";
-import "dotenv/config";
-import { createServer } from "./mapi/server";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
@@ -12,13 +10,23 @@ export default defineConfig(({ mode }) => ({
     port: 8080,
     fs: {
       allow: ["."],
-      deny: [".env", ".env.*", "*.{crt,pem}", "**/.git/**", "mapi/server/**"],
+      deny: [
+        ".env",
+        ".env.*",
+        "*.{crt,pem}",
+        "**/.git/**",
+        "mapi/server/**",
+        "supabase/**",
+      ],
     },
   },
   build: {
     outDir: "dist",
   },
-  plugins: [react(), expressPlugin()],
+  plugins: [
+    react(),
+    ...(["test", "db"].includes(mode) ? [] : [expressPlugin()]),
+  ],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./client"),
@@ -32,22 +40,18 @@ function expressPlugin(): Plugin {
     name: "express-plugin",
     apply: "serve", // Only apply during development (serve mode)
     async configureServer(server) {
-      // Connect to DB and initialize the Express app
-      try {
-        const { connectDB } = await import("./mapi/server/database");
-        await connectDB();
-        const app = await createServer();
-        // Add Express app as middleware to Vite dev server, but only for API/Uploads
-        server.middlewares.use((req: any, res: any, next: any) => {
-          if (req.url?.startsWith("/mapi") || req.url?.startsWith("/uploads")) {
-            app(req, res, next);
-          } else {
-            next();
-          }
-        });
-      } catch (error) {
-        console.error("Failed to initialize server:", error);
-      }
+      const { connectDB, createServer } = await import("./mapi/server");
+      await connectDB();
+      const app = await createServer({
+        onShutdown: (stop) => server.httpServer?.once("close", stop),
+      });
+      server.middlewares.use((req, res, next) => {
+        if (/^\/(mapi|uploads)(?:[/?]|$)/i.test(req.url ?? "")) {
+          app(req, res);
+        } else {
+          next();
+        }
+      });
     },
   };
 }

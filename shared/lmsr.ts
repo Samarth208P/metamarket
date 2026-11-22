@@ -1,4 +1,4 @@
-import type { MarketOption, QuoteResponse } from "./api";
+import type { MarketOption, QuoteResponse } from "./api.ts";
 
 export const SELL_FEE_RATE = 0.05;
 export const QUOTE_TTL_MS = 15000;

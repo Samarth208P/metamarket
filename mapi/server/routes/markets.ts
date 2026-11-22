@@ -1,13 +1,16 @@
 import "dotenv/config";
-import { Router } from "express";
-import { isValidObjectId } from "mongoose";
+import { Router, type RequestHandler } from "express";
+import { isRecordId, withSystem } from "../database.ts";
 import multer from "multer";
-import User from "../models/User.js";
-import Market, { calculateYesPrice } from "../models/Market.js";
-import Treasury from "../models/Treasury.js";
-import Comment from "../models/Comment.js";
-import { v2 as cloudinary } from "cloudinary";
-import { CloudinaryStorage } from "multer-storage-cloudinary";
+import User, { serializeUser } from "../models/User.ts";
+import Market, { calculateYesPrice } from "../models/Market.ts";
+import Treasury from "../models/Treasury.ts";
+import Comment from "../models/Comment.ts";
+import { ApiError, asyncRoute, transactionRoute } from "./asyncRoute.ts";
+import {
+  MAX_MARKET_IMAGE_BYTES,
+  uploadMarketImage,
+} from "../services/marketImages.ts";
 import {
   QUOTE_TTL_MS,
   calculateCurrentB,
@@ -16,25 +19,27 @@ import {
   quoteBuy,
   quoteSell,
   type LmsrState,
-} from "../../../shared/lmsr.js";
+} from "../../../shared/lmsr.ts";
 
 const router = Router();
 
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_MARKET_IMAGE_BYTES + 1, files: 1, fields: 0 },
+}).single("image");
 
-const storage = new CloudinaryStorage({
-  cloudinary,
-  params: {
-    folder: "metamarket",
-    allowed_formats: ["jpg", "png", "jpeg", "webp"],
-  } as any,
-});
-
-const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 } });
+const parseImageUpload: RequestHandler = (req, res, next) => {
+  upload(req, res, (error) => {
+    if (error?.code === "LIMIT_FILE_SIZE") {
+      return next(
+        new ApiError(413, { error: "Images must be 5 MB or smaller." }),
+      );
+    }
+    if (error)
+      return next(new ApiError(400, { error: "Send one image file." }));
+    next();
+  });
+};
 
 function ensureAuthenticated(req, res, next) {
   if (req.user) return next();
@@ -151,27 +156,7 @@ function getCurrentPrices(doc: any) {
   };
 }
 
-function serializeUser(doc: any) {
-  return {
-    id: doc.id,
-    email: doc.email,
-    name: doc.name,
-    enrollmentNumber: doc.enrollmentNumber,
-    isAdmin: doc.isAdmin,
-    balance: doc.balance,
-    tradeHistory: (doc.tradeHistory || []).map((entry: any) => ({
-      ...entry,
-      timestamp:
-        entry.timestamp instanceof Date
-          ? entry.timestamp.toISOString()
-          : new Date(entry.timestamp).toISOString(),
-    })),
-    positions: doc.positions || [],
-  };
-}
-
-function serializeMarket(doc: any) {
-  ensureLmsrMarketState(doc);
+function serializeMarketOptions(doc: any) {
   const isResolved = doc.status !== "active";
   const { currentB, prices } = getCurrentPrices(doc);
 
@@ -193,8 +178,18 @@ function serializeMarket(doc: any) {
     };
   });
 
+  return { currentB, options };
+}
+
+function serializeMarket(doc: any) {
+  if (typeof doc.title !== "string" || typeof doc.category !== "string") {
+    throw new Error("Market title or category is invalid");
+  }
+
+  const { currentB, options } = serializeMarketOptions(doc);
+
   return {
-    id: doc._id?.toString(),
+    id: doc.id,
     title: doc.title,
     description: doc.description,
     category: doc.category,
@@ -256,11 +251,7 @@ function ensureUserPositions(
   const getMarket = (id: string) => {
     if (marketContext instanceof Map)
       return marketContext.get(id) || marketContext.get(id.toString());
-    if (
-      marketContext &&
-      (marketContext.id === id || marketContext._id?.toString() === id)
-    )
-      return marketContext;
+    if (marketContext && marketContext.id === id) return marketContext;
     return undefined;
   };
 
@@ -313,8 +304,6 @@ function ensureUserPositions(
   }
 
   user.holdings = remainingHoldings;
-  user.markModified("positions");
-  user.markModified("holdings");
 }
 
 function getOrCreatePosition(
@@ -333,17 +322,10 @@ function getOrCreatePosition(
   return position;
 }
 
-async function getTreasury() {
-  let treasury = await Treasury.findOne();
-  if (!treasury)
-    treasury = await Treasury.create({ realReserves: 0, solvencyThreshold: 1 });
-  return treasury;
-}
-
 async function getSolvencyOverview() {
-  const treasury = await getTreasury();
-  const users = await User.find();
-  const markets = await Market.find({ status: "active" });
+  const treasury = await Treasury.get();
+  const users = await User.listPortfolios();
+  const markets = await Market.list("active");
   let totalPotentialPayouts = 0;
 
   markets.forEach((market) => {
@@ -382,186 +364,214 @@ async function getSolvencyOverview() {
   };
 }
 
-router.get("/markets", async (_req, res) => {
-  const markets = await Market.find().sort({ status: 1, createdAt: -1 });
-  res.json(markets.map((market) => serializeMarket(market)));
-});
+router.get(
+  "/markets",
+  asyncRoute(async (_req, res) => {
+    const markets = await Market.list();
+    const catalog: ReturnType<typeof serializeMarket>[] = [];
+
+    for (const market of markets) {
+      try {
+        catalog.push(serializeMarket(market));
+      } catch (error) {
+        console.error(`[Markets] Could not list market ${market.id}:`, error);
+      }
+    }
+
+    res.json(catalog);
+  }),
+);
 
 router.get(
   "/admin/solvency",
   ensureAuthenticated,
   ensureAdmin,
-  async (_req, res) => {
+  asyncRoute(async (_req, res) => {
     const { overview } = await getSolvencyOverview();
     return res.json(overview);
-  },
+  }),
 );
 
 router.put(
   "/admin/solvency",
   ensureAuthenticated,
   ensureAdmin,
-  async (req, res) => {
-    const treasury = await getTreasury();
+  asyncRoute(async (req, res) => {
     const { realReserves, threshold } = req.body;
-
-    if (typeof realReserves === "number" && !Number.isNaN(realReserves))
-      treasury.realReserves = realReserves;
-    if (
-      typeof threshold === "number" &&
-      !Number.isNaN(threshold) &&
-      threshold > 0
-    )
-      treasury.solvencyThreshold = threshold;
-
-    await treasury.save();
+    await Treasury.update({
+      realReserves:
+        typeof realReserves === "number" && Number.isFinite(realReserves)
+          ? realReserves
+          : undefined,
+      solvencyThreshold:
+        typeof threshold === "number" &&
+        Number.isFinite(threshold) &&
+        threshold > 0
+          ? threshold
+          : undefined,
+    });
     const { overview } = await getSolvencyOverview();
     return res.json(overview);
-  },
+  }),
 );
 
 router.post(
   "/upload",
   ensureAuthenticated,
   ensureAdmin,
-  upload.single("image"),
-  (req, res) => {
+  parseImageUpload,
+  asyncRoute(async (req, res) => {
     if (!req.file) return res.status(400).json({ error: "No file uploaded" });
-    return res.json({ url: (req.file as any).path });
-  },
+    return res.json({ url: await uploadMarketImage(req.file.buffer) });
+  }),
 );
 
-router.get("/markets/:id", async (req, res) => {
-  const market = await Market.findById(req.params.id);
-  if (!market) return res.status(404).json({ error: "Market not found" });
-  return res.json(serializeMarket(market));
-});
+router.get(
+  "/markets/:id",
+  asyncRoute(async (req, res) => {
+    if (!isRecordId(req.params.id)) {
+      return res.status(404).json({ error: "Market not found" });
+    }
+    const market = await Market.findById(req.params.id);
+    if (!market) return res.status(404).json({ error: "Market not found" });
+    return res.json(serializeMarket(market));
+  }),
+);
 
-router.post("/markets", ensureAuthenticated, ensureAdmin, async (req, res) => {
-  const {
-    title,
-    description,
-    category,
-    endDate,
-    marketType,
-    optionA,
-    optionB,
-    shortA,
-    shortB,
-    logoUrl,
-    teams,
-    initialB,
-    minB,
-    isDynamic,
-    initialLiquidity,
-  } = req.body;
-  if (!title || !description || !category)
-    return res
-      .status(400)
-      .json({ error: "Title, description, and category are required" });
+router.post(
+  "/markets",
+  ensureAuthenticated,
+  ensureAdmin,
+  asyncRoute(async (req, res) => {
+    const {
+      title,
+      description,
+      category,
+      endDate,
+      marketType,
+      optionA,
+      optionB,
+      shortA,
+      shortB,
+      logoUrl,
+      teams,
+      initialB,
+      minB,
+      isDynamic,
+      initialLiquidity,
+    } = req.body;
+    if (!title || !description || !category)
+      return res
+        .status(400)
+        .json({ error: "Title, description, and category are required" });
 
-  const { overview } = await getSolvencyOverview();
-  if (overview.isBelowThreshold) {
-    return res.status(400).json({
-      error:
-        "Solvency guard active. Add reserves or lower platform liability before creating new markets.",
-    });
-  }
+    const { overview } = await getSolvencyOverview();
+    if (overview.isBelowThreshold) {
+      return res.status(400).json({
+        error:
+          "Solvency guard active. Add reserves or lower platform liability before creating new markets.",
+      });
+    }
 
-  const baseB = Math.max(
-    10,
-    Number(initialB) || Number(initialLiquidity) || 1000,
-  );
-  const floorB = Math.max(1, Number(minB) || Math.round(baseB * 0.25));
-  const nextMarketType = marketType || "binary";
-  const options =
-    nextMarketType === "multi"
-      ? (Array.isArray(teams) ? teams : []).map((team: any, index: number) => ({
-          id: makeOptionId(index),
-          name: team.name,
-          shortName: team.name,
-          imageUrl: team.imageUrl,
-          shares: baseB * 10,
-        }))
-      : [
-          {
-            id: "yes",
-            name:
-              nextMarketType === "versus"
-                ? optionA || shortA || "Option A"
-                : "Yes",
-            shortName: shortA || optionA || "Yes",
-            shares: baseB * 10,
-          },
-          {
-            id: "no",
-            name:
-              nextMarketType === "versus"
-                ? optionB || shortB || "Option B"
-                : "No",
-            shortName: shortB || optionB || "No",
-            shares: baseB * 10,
-          },
-        ];
-
-  const market = await Market.create({
-    title,
-    description,
-    category,
-    marketType: nextMarketType,
-    ammType: "lmsr",
-    optionA,
-    optionB,
-    shortA,
-    shortB,
-    logoUrl,
-    creatorId: (req.user as any)?.id || (req.user as any)?._id,
-    options,
-    teams:
+    const baseB = Math.max(
+      10,
+      Number(initialB) || Number(initialLiquidity) || 1000,
+    );
+    const floorB = Math.max(1, Number(minB) || Math.round(baseB * 0.25));
+    const nextMarketType = marketType || "binary";
+    const options =
       nextMarketType === "multi"
-        ? (teams || []).map((team: any) => ({
-            name: team.name,
-            imageUrl: team.imageUrl,
-            yesPool: baseB,
-            noPool: baseB,
-          }))
-        : undefined,
-    endDate: endDate ? new Date(endDate) : undefined,
-    initialB: baseB,
-    minB: floorB,
-    isDynamic: Boolean(isDynamic),
-    yesPool: baseB,
-    noPool: baseB,
-    priceHistory: [
-      {
-        yesPrice: nextMarketType === "multi" ? 0 : 50,
-        noPrice: nextMarketType === "multi" ? 0 : 50,
-        allPrices:
-          nextMarketType === "multi"
-            ? options.map(() =>
-                Number((100 / Math.max(options.length, 1)).toFixed(2)),
-              )
-            : undefined,
-        prices: options.map((option: any) => ({
-          optionId: option.id,
-          price: Number((100 / Math.max(options.length, 1)).toFixed(2)),
-        })),
-        note: `Market opened with base liquidity parameter ${baseB}`,
-        timestamp: new Date(),
-      },
-    ],
-  });
+        ? (Array.isArray(teams) ? teams : []).map(
+            (team: any, index: number) => ({
+              id: makeOptionId(index),
+              name: team.name,
+              shortName: team.name,
+              imageUrl: team.imageUrl,
+              shares: baseB * 10,
+            }),
+          )
+        : [
+            {
+              id: "yes",
+              name:
+                nextMarketType === "versus"
+                  ? optionA || shortA || "Option A"
+                  : "Yes",
+              shortName: shortA || optionA || "Yes",
+              shares: baseB * 10,
+            },
+            {
+              id: "no",
+              name:
+                nextMarketType === "versus"
+                  ? optionB || shortB || "Option B"
+                  : "No",
+              shortName: shortB || optionB || "No",
+              shares: baseB * 10,
+            },
+          ];
 
-  return res.status(201).json(serializeMarket(market));
-});
+    const market = await withSystem(() =>
+      Market.create({
+        title,
+        description,
+        category,
+        marketType: nextMarketType,
+        ammType: "lmsr",
+        optionA,
+        optionB,
+        shortA,
+        shortB,
+        logoUrl,
+        creatorId: req.user.id,
+        options,
+        teams:
+          nextMarketType === "multi"
+            ? (teams || []).map((team: any) => ({
+                name: team.name,
+                imageUrl: team.imageUrl,
+                yesPool: baseB,
+                noPool: baseB,
+              }))
+            : undefined,
+        endDate: endDate ? new Date(endDate) : undefined,
+        initialB: baseB,
+        minB: floorB,
+        isDynamic: Boolean(isDynamic),
+        yesPool: baseB,
+        noPool: baseB,
+        priceHistory: [
+          {
+            yesPrice: nextMarketType === "multi" ? 0 : 50,
+            noPrice: nextMarketType === "multi" ? 0 : 50,
+            allPrices:
+              nextMarketType === "multi"
+                ? options.map(() =>
+                    Number((100 / Math.max(options.length, 1)).toFixed(2)),
+                  )
+                : undefined,
+            prices: options.map((option: any) => ({
+              optionId: option.id,
+              price: Number((100 / Math.max(options.length, 1)).toFixed(2)),
+            })),
+            note: `Market opened with base liquidity parameter ${baseB}`,
+            timestamp: new Date(),
+          },
+        ],
+      }),
+    );
+
+    return res.status(201).json(serializeMarket(market));
+  }),
+);
 
 router.put(
   "/markets/:id",
   ensureAuthenticated,
   ensureAdmin,
-  async (req, res) => {
-    const market = await Market.findById(req.params.id);
-    if (!market) return res.status(404).json({ error: "Market not found" });
+  transactionRoute(async (req) => {
+    const market = await Market.findById(req.params.id, true);
+    if (!market) throw new ApiError(404, { error: "Market not found" });
 
     const {
       title,
@@ -583,280 +593,290 @@ router.put(
     if (typeof minB === "number" && minB > 0) market.minB = minB;
     if (typeof isDynamic === "boolean") market.isDynamic = isDynamic;
 
-    await market.save();
-    return res.json(serializeMarket(market));
-  },
+    await Market.save(market);
+    return serializeMarket(market);
+  }),
 );
 
-router.post("/markets/:id/quote", ensureAuthenticated, async (req, res) => {
-  const { optionId, type, amount, tolerance } = req.body;
-  const numericAmount = Number(amount);
-  if (!type || !["buy", "sell"].includes(type))
-    return res.status(400).json({ error: "Invalid quote type" });
-  if (Number.isNaN(numericAmount) || numericAmount <= 0)
-    return res.status(400).json({ error: "Amount must be a positive number" });
+router.post(
+  "/markets/:id/quote",
+  ensureAuthenticated,
+  asyncRoute(async (req, res) => {
+    const { optionId, type, amount, tolerance } = req.body;
+    const numericAmount = Number(amount);
+    if (!type || !["buy", "sell"].includes(type))
+      return res.status(400).json({ error: "Invalid quote type" });
+    if (!Number.isFinite(numericAmount) || numericAmount <= 0)
+      return res
+        .status(400)
+        .json({ error: "Amount must be a positive number" });
 
-  const market = await Market.findById(req.params.id);
-  if (!market) return res.status(404).json({ error: "Market not found" });
-  ensureLmsrMarketState(market);
+    const market = await Market.findById(req.params.id);
+    if (!market) return res.status(404).json({ error: "Market not found" });
+    ensureLmsrMarketState(market);
 
-  const option = market.options.find((entry: any) => entry.id === optionId);
-  if (!option) return res.status(400).json({ error: "Invalid option" });
+    const option = market.options.find((entry: any) => entry.id === optionId);
+    if (!option) return res.status(400).json({ error: "Invalid option" });
 
-  const currentB = calculateCurrentB({
-    initialB: market.initialB,
-    isDynamic: market.isDynamic,
-    minB: market.minB,
-    createdAt: market.createdAt,
-    endDate: market.endDate,
-  });
-  const state = toLmsrState(market);
+    const currentB = calculateCurrentB({
+      initialB: market.initialB,
+      isDynamic: market.isDynamic,
+      minB: market.minB,
+      createdAt: market.createdAt,
+      endDate: market.endDate,
+    });
+    const state = toLmsrState(market);
 
-  if (type === "buy") {
-    const result = quoteBuy(state, currentB, optionId, numericAmount);
+    if (type === "buy") {
+      const result = quoteBuy(state, currentB, optionId, numericAmount);
+      return res.json(
+        createQuote({
+          marketId: market.id,
+          type: "buy",
+          option: { ...option, price: result.currentPrice * 100 },
+          amount: numericAmount,
+          expectedShares: result.shares,
+          averagePrice: result.averagePrice,
+          currentPrice: result.currentPrice * 100,
+          currentB,
+          tolerance,
+        }),
+      );
+    }
+
+    const result = quoteSell(state, currentB, optionId, numericAmount);
     return res.json(
       createQuote({
         marketId: market.id,
-        type: "buy",
+        type: "sell",
         option: { ...option, price: result.currentPrice * 100 },
         amount: numericAmount,
-        expectedShares: result.shares,
+        expectedShares: numericAmount,
+        grossPayout: result.grossPayout,
+        netPayout: result.netPayout,
+        fee: result.fee,
         averagePrice: result.averagePrice,
         currentPrice: result.currentPrice * 100,
         currentB,
         tolerance,
       }),
     );
-  }
+  }),
+);
 
-  const result = quoteSell(state, currentB, optionId, numericAmount);
-  return res.json(
-    createQuote({
-      marketId: market.id,
-      type: "sell",
-      option: { ...option, price: result.currentPrice * 100 },
-      amount: numericAmount,
-      expectedShares: numericAmount,
-      grossPayout: result.grossPayout,
-      netPayout: result.netPayout,
-      fee: result.fee,
-      averagePrice: result.averagePrice,
-      currentPrice: result.currentPrice * 100,
-      currentB,
-      tolerance,
-    }),
-  );
-});
+router.post(
+  "/markets/:id/trade",
+  ensureAuthenticated,
+  transactionRoute(async (req) => {
+    const {
+      optionId,
+      outcome,
+      type,
+      amount,
+      expectedShares,
+      slippageTolerance,
+      quotedAt,
+    } = req.body;
+    const nextOptionId = optionId || outcome;
+    const numericAmount = Number(amount);
 
-router.post("/markets/:id/trade", ensureAuthenticated, async (req, res) => {
-  const {
-    optionId,
-    outcome,
-    type,
-    amount,
-    expectedShares,
-    slippageTolerance,
-    quotedAt,
-  } = req.body;
-  const nextOptionId = optionId || outcome;
-  const numericAmount = Number(amount);
+    if (!nextOptionId) throw new ApiError(400, { error: "Option is required" });
+    if (!type || !["buy", "sell"].includes(type))
+      throw new ApiError(400, { error: "Invalid trade type" });
+    if (!Number.isFinite(numericAmount) || numericAmount <= 0)
+      throw new ApiError(400, { error: "Amount must be a positive number" });
 
-  if (!nextOptionId)
-    return res.status(400).json({ error: "Option is required" });
-  if (!type || !["buy", "sell"].includes(type))
-    return res.status(400).json({ error: "Invalid trade type" });
-  if (Number.isNaN(numericAmount) || numericAmount <= 0)
-    return res.status(400).json({ error: "Amount must be a positive number" });
+    const market = await Market.findById(req.params.id, true);
+    if (!market) throw new ApiError(404, { error: "Market not found" });
+    ensureLmsrMarketState(market);
+    if (market.status !== "active")
+      throw new ApiError(400, { error: "Cannot trade a resolved market" });
+    if (market.endDate && new Date(market.endDate) < new Date())
+      throw new ApiError(400, { error: "Market has closed for trading" });
 
-  const market = await Market.findById(req.params.id);
-  if (!market) return res.status(404).json({ error: "Market not found" });
-  ensureLmsrMarketState(market);
-  if (market.status !== "active")
-    return res.status(400).json({ error: "Cannot trade a resolved market" });
-  if (market.endDate && new Date(market.endDate) < new Date())
-    return res.status(400).json({ error: "Market has closed for trading" });
+    const option = market.options.find(
+      (entry: any) => entry.id === nextOptionId,
+    );
+    if (!option) throw new ApiError(400, { error: "Invalid option" });
 
-  const option = market.options.find((entry: any) => entry.id === nextOptionId);
-  if (!option) return res.status(400).json({ error: "Invalid option" });
+    const user = await User.findById(req.user.id, true);
+    if (!user) throw new ApiError(401, { error: "User not found" });
+    ensureUserPositions(user, market);
 
-  const user = await User.findById(
-    (req.user as any)?.id || (req.user as any)?._id,
-  );
-  if (!user) return res.status(401).json({ error: "User not found" });
-  ensureUserPositions(user, market);
+    if (!quotedAt || Date.now() - new Date(quotedAt).getTime() > QUOTE_TTL_MS) {
+      throw new ApiError(409, {
+        error: "Quote expired. Please refresh the quote and try again.",
+      });
+    }
 
-  if (!quotedAt || Date.now() - new Date(quotedAt).getTime() > QUOTE_TTL_MS) {
-    return res.status(409).json({
-      error: "Quote expired. Please refresh the quote and try again.",
+    const currentB = calculateCurrentB({
+      initialB: market.initialB,
+      isDynamic: market.isDynamic,
+      minB: market.minB,
+      createdAt: market.createdAt,
+      endDate: market.endDate,
     });
-  }
+    const state = toLmsrState(market);
+    const tolerance = Math.max(
+      0,
+      Math.min(0.25, Number(slippageTolerance) || 0.02),
+    );
 
-  const currentB = calculateCurrentB({
-    initialB: market.initialB,
-    isDynamic: market.isDynamic,
-    minB: market.minB,
-    createdAt: market.createdAt,
-    endDate: market.endDate,
-  });
-  const state = toLmsrState(market);
-  const tolerance = Math.max(
-    0,
-    Math.min(0.25, Number(slippageTolerance) || 0.02),
-  );
+    let shares = 0;
+    let fee = 0;
+    let cashDelta = 0;
+    let averagePrice = 0;
+    let quoteResponse: any;
 
-  let shares = 0;
-  let fee = 0;
-  let cashDelta = 0;
-  let averagePrice = 0;
-  let quoteResponse: any;
+    if (type === "buy") {
+      if (numericAmount > user.balance)
+        throw new ApiError(400, { error: "Insufficient balance" });
+      const result = quoteBuy(state, currentB, nextOptionId, numericAmount);
+      const minAcceptedShares = Number(expectedShares) * (1 - tolerance);
+      if (result.shares + 1e-6 < minAcceptedShares) {
+        quoteResponse = createQuote({
+          marketId: market.id,
+          type: "buy",
+          option: { ...option, price: result.currentPrice * 100 },
+          amount: numericAmount,
+          expectedShares: result.shares,
+          averagePrice: result.averagePrice,
+          currentPrice: result.currentPrice * 100,
+          currentB,
+          tolerance,
+        });
+        throw new ApiError(409, {
+          error:
+            "Price moved before execution. Please review the updated quote.",
+          quote: quoteResponse,
+        });
+      }
 
-  if (type === "buy") {
-    if (numericAmount > user.balance)
-      return res.status(400).json({ error: "Insufficient balance" });
-    const result = quoteBuy(state, currentB, nextOptionId, numericAmount);
-    const minAcceptedShares = Number(expectedShares) * (1 - tolerance);
-    if (result.shares + 1e-6 < minAcceptedShares) {
+      shares = result.shares;
+      averagePrice = result.averagePrice;
+      cashDelta = -numericAmount;
+      option.shares += shares;
+      getOrCreatePosition(user, market.id, nextOptionId, option.name).shares +=
+        shares;
+      user.balance += cashDelta;
       quoteResponse = createQuote({
         marketId: market.id,
         type: "buy",
         option: { ...option, price: result.currentPrice * 100 },
         amount: numericAmount,
-        expectedShares: result.shares,
-        averagePrice: result.averagePrice,
+        expectedShares: shares,
+        averagePrice,
         currentPrice: result.currentPrice * 100,
         currentB,
         tolerance,
       });
-      return res.status(409).json({
-        error: "Price moved before execution. Please review the updated quote.",
-        quote: quoteResponse,
+    } else {
+      const position = getOrCreatePosition(
+        user,
+        market.id,
+        nextOptionId,
+        option.name,
+      );
+      if (numericAmount > position.shares + 1e-6)
+        throw new ApiError(400, {
+          error: `Not enough shares to sell. You have ${position.shares.toFixed(2)} shares.`,
+        });
+
+      const result = quoteSell(state, currentB, nextOptionId, numericAmount);
+      shares = numericAmount;
+      fee = result.fee;
+      averagePrice = result.averagePrice;
+      cashDelta = result.netPayout;
+      option.shares = Math.max(0, option.shares - numericAmount);
+      position.shares = Math.max(0, position.shares - numericAmount);
+      user.balance += cashDelta;
+      quoteResponse = createQuote({
+        marketId: market.id,
+        type: "sell",
+        option: { ...option, price: result.currentPrice * 100 },
+        amount: numericAmount,
+        expectedShares: shares,
+        grossPayout: result.grossPayout,
+        netPayout: result.netPayout,
+        fee,
+        averagePrice,
+        currentPrice: result.currentPrice * 100,
+        currentB,
+        tolerance,
       });
     }
 
-    shares = result.shares;
-    averagePrice = result.averagePrice;
-    cashDelta = -numericAmount;
-    option.shares += shares;
-    getOrCreatePosition(user, market.id, nextOptionId, option.name).shares +=
-      shares;
-    user.balance += cashDelta;
-    quoteResponse = createQuote({
-      marketId: market.id,
-      type: "buy",
-      option: { ...option, price: result.currentPrice * 100 },
-      amount: numericAmount,
-      expectedShares: shares,
-      averagePrice,
-      currentPrice: result.currentPrice * 100,
-      currentB,
-      tolerance,
-    });
-  } else {
-    const position = getOrCreatePosition(
-      user,
-      market.id,
-      nextOptionId,
-      option.name,
+    user.positions = (user.positions || []).filter(
+      (position: any) => position.shares > 1e-6,
     );
-    if (numericAmount > position.shares + 1e-6)
-      return res.status(400).json({
-        error: `Not enough shares to sell. You have ${position.shares.toFixed(2)} shares.`,
-      });
 
-    const result = quoteSell(state, currentB, nextOptionId, numericAmount);
-    shares = numericAmount;
-    fee = result.fee;
-    averagePrice = result.averagePrice;
-    cashDelta = result.netPayout;
-    option.shares = Math.max(0, option.shares - numericAmount);
-    position.shares = Math.max(0, position.shares - numericAmount);
-    user.balance += cashDelta;
-    quoteResponse = createQuote({
-      marketId: market.id,
-      type: "sell",
-      option: { ...option, price: result.currentPrice * 100 },
-      amount: numericAmount,
-      expectedShares: shares,
-      grossPayout: result.grossPayout,
-      netPayout: result.netPayout,
-      fee,
-      averagePrice,
-      currentPrice: result.currentPrice * 100,
-      currentB,
-      tolerance,
+    market.volume += Math.abs(cashDelta);
+
+    const nextPrices = getOptionPrices(toLmsrState(market), currentB);
+    market.priceHistory.push({
+      yesPrice: market.marketType === "multi" ? 0 : (nextPrices.yes || 0) * 100,
+      noPrice: market.marketType === "multi" ? 0 : (nextPrices.no || 0) * 100,
+      allPrices:
+        market.marketType === "multi"
+          ? market.options.map((entry: any) =>
+              Number(((nextPrices[entry.id] || 0) * 100).toFixed(2)),
+            )
+          : undefined,
+      prices: market.options.map((entry: any) => ({
+        optionId: entry.id,
+        price: Number(((nextPrices[entry.id] || 0) * 100).toFixed(2)),
+      })),
+      note: `${type === "buy" ? "Bought" : "Sold"} ${option.name}`,
+      timestamp: new Date(),
     });
-  }
 
-  market.markModified("options");
-  user.positions = (user.positions || []).filter(
-    (position: any) => position.shares > 1e-6,
-  );
-  user.markModified("positions");
-  market.volume += Math.abs(cashDelta);
-
-  const nextPrices = getOptionPrices(toLmsrState(market), currentB);
-  market.priceHistory.push({
-    yesPrice: market.marketType === "multi" ? 0 : (nextPrices.yes || 0) * 100,
-    noPrice: market.marketType === "multi" ? 0 : (nextPrices.no || 0) * 100,
-    allPrices:
-      market.marketType === "multi"
-        ? market.options.map((entry: any) =>
-            Number(((nextPrices[entry.id] || 0) * 100).toFixed(2)),
-          )
-        : undefined,
-    prices: market.options.map((entry: any) => ({
-      optionId: entry.id,
-      price: Number(((nextPrices[entry.id] || 0) * 100).toFixed(2)),
-    })),
-    note: `${type === "buy" ? "Bought" : "Sold"} ${option.name}`,
-    timestamp: new Date(),
-  });
-
-  if (!user.tradeHistory) user.tradeHistory = [];
-  user.tradeHistory.push({
-    marketId: market.id,
-    marketTitle: market.title,
-    tradeType: type,
-    optionId: nextOptionId,
-    optionName: option.name,
-    amount: numericAmount,
-    shares: type === "buy" ? shares : -shares,
-    averagePrice,
-    fee,
-    cashDelta,
-    timestamp: new Date(),
-  });
-
-  await Promise.all([market.save(), user.save()]);
-
-  return res.json({
-    market: serializeMarket(market),
-    user: serializeUser(user),
-    trade: {
-      type,
+    if (!user.tradeHistory) user.tradeHistory = [];
+    user.tradeHistory.push({
+      marketId: market.id,
+      marketTitle: market.title,
+      tradeType: type,
       optionId: nextOptionId,
       optionName: option.name,
       amount: numericAmount,
-      shares,
+      shares: type === "buy" ? shares : -shares,
+      averagePrice,
       fee,
       cashDelta,
-      averagePrice,
-    },
-    quote: quoteResponse,
-  });
-});
+      timestamp: new Date(),
+    });
+
+    await Market.save(market);
+    await User.savePortfolio(user);
+
+    return {
+      market: serializeMarket(market),
+      user: serializeUser(user),
+      trade: {
+        type,
+        optionId: nextOptionId,
+        optionName: option.name,
+        amount: numericAmount,
+        shares,
+        fee,
+        cashDelta,
+        averagePrice,
+      },
+      quote: quoteResponse,
+    };
+  }),
+);
 
 router.post(
   "/markets/:id/resolve",
   ensureAuthenticated,
   ensureAdmin,
-  async (req, res) => {
+  transactionRoute(async (req) => {
     const { outcome, optionId, teamIndex } = req.body;
-    const market = await Market.findById(req.params.id);
-    if (!market) return res.status(404).json({ error: "Market not found" });
+    const market = await Market.findById(req.params.id, true);
+    if (!market) throw new ApiError(404, { error: "Market not found" });
     ensureLmsrMarketState(market);
     if (market.status !== "active")
-      return res.status(400).json({ error: "Market is already resolved" });
+      throw new ApiError(400, { error: "Market is already resolved" });
 
     const resolvedOptionId =
       optionId ||
@@ -867,7 +887,7 @@ router.post(
       (option: any) => option.id === resolvedOptionId,
     );
     if (!winningOption)
-      return res.status(400).json({ error: "Winning option not found" });
+      throw new ApiError(400, { error: "Winning option not found" });
 
     market.status =
       market.marketType === "multi"
@@ -895,141 +915,144 @@ router.post(
       note: `Market resolved as ${winningOption.name}`,
       timestamp: new Date(),
     });
-    await market.save();
+    await Market.save(market);
 
-    const users = await User.find({
-      $or: [
-        { "positions.marketId": market.id },
-        { "holdings.marketId": market.id },
-      ],
+    const users = await User.listPortfolios({
+      marketId: market.id,
+      lock: true,
     });
-    await Promise.all(
-      users.map(async (user) => {
-        ensureUserPositions(user, market);
-        const winningPosition = (user.positions || []).find(
-          (position: any) =>
-            position.marketId === market.id &&
-            position.optionId === resolvedOptionId,
-        );
-        const payout = winningPosition?.shares || 0;
-        if (!user.tradeHistory) user.tradeHistory = [];
-        user.tradeHistory.push({
-          marketId: market.id,
-          marketTitle: market.title,
-          tradeType: "payout",
-          optionId: resolvedOptionId,
-          optionName: winningOption.name,
-          amount: payout,
-          shares: payout,
-          averagePrice: payout > 0 ? 1 : 0,
-          fee: 0,
-          cashDelta: payout,
-          timestamp: new Date(),
-        });
-        user.balance += payout;
-        user.positions = (user.positions || []).filter(
-          (position: any) => position.marketId !== market.id,
-        );
-        user.markModified("positions");
-        await user.save();
+    for (const user of users) {
+      ensureUserPositions(user, market);
+      const winningPosition = (user.positions || []).find(
+        (position: any) =>
+          position.marketId === market.id &&
+          position.optionId === resolvedOptionId,
+      );
+      const payout = winningPosition?.shares || 0;
+      if (!user.tradeHistory) user.tradeHistory = [];
+      user.tradeHistory.push({
+        marketId: market.id,
+        marketTitle: market.title,
+        tradeType: "payout",
+        optionId: resolvedOptionId,
+        optionName: winningOption.name,
+        amount: payout,
+        shares: payout,
+        averagePrice: payout > 0 ? 1 : 0,
+        fee: 0,
+        cashDelta: payout,
+        timestamp: new Date(),
+      });
+      user.balance += payout;
+      user.positions = (user.positions || []).filter(
+        (position: any) => position.marketId !== market.id,
+      );
+
+      await User.savePortfolio(user);
+    }
+
+    return serializeMarket(market);
+  }),
+);
+
+router.get(
+  "/leaderboard",
+  asyncRoute(async (_req, res) => {
+    const markets = await Market.list();
+    const priceMap = new Map<string, number>();
+    const marketMap = new Map();
+    markets.forEach((market) => {
+      marketMap.set(market.id, market);
+      const { options } = serializeMarketOptions(market);
+      options.forEach((option) =>
+        priceMap.set(`${market.id}_${option.id}`, option.price / 100),
+      );
+    });
+
+    const allUsers = await User.listPortfolios({ ranked: true });
+    const usersWithNetWorth = allUsers.map((user) => {
+      ensureUserPositions(user, marketMap);
+      let holdingsValue = 0;
+      (user.positions || []).forEach((position: any) => {
+        holdingsValue +=
+          position.shares *
+          (priceMap.get(`${position.marketId}_${position.optionId}`) || 0);
+      });
+      return {
+        user,
+        holdingsValue,
+        totalNetWorth: user.balance + holdingsValue,
+      };
+    });
+
+    usersWithNetWorth.sort((a, b) => b.totalNetWorth - a.totalNetWorth);
+    const top20 = usersWithNetWorth.slice(0, 20);
+    const now = new Date();
+    const ONE_HOUR = 60 * 60 * 1000;
+
+    const leaderboard = await Promise.all(
+      top20.map(async (entry, index) => {
+        const currentRank = index + 1;
+        let rankTrend = 0;
+        if (entry.user.lastRank) rankTrend = entry.user.lastRank - currentRank;
+        if (
+          !entry.user.lastRankUpdate ||
+          now.getTime() - entry.user.lastRankUpdate.getTime() > ONE_HOUR
+        ) {
+          await User.saveRank(entry.user.id, currentRank, now);
+        }
+
+        return {
+          id: entry.user.id,
+          name: entry.user.username,
+          balance: Math.round(entry.user.balance),
+          holdingsValue: Math.round(entry.holdingsValue),
+          totalNetWorth: Math.round(entry.totalNetWorth),
+          rank: currentRank,
+          rankTrend,
+        };
       }),
     );
 
-    return res.json(serializeMarket(market));
-  },
+    return res.json(leaderboard);
+  }),
 );
 
-router.get("/leaderboard", async (_req, res) => {
-  const markets = await Market.find();
-  const priceMap = new Map<string, number>();
-  const marketMap = new Map();
-  markets.forEach((market) => {
-    marketMap.set(market.id || market._id?.toString(), market);
-    const serialized = serializeMarket(market);
-    serialized.options.forEach((option) =>
-      priceMap.set(`${serialized.id}_${option.id}`, option.price / 100),
-    );
-  });
+router.get(
+  "/markets/:id/comments",
+  asyncRoute(async (req, res) => {
+    const comments = await Comment.list(req.params.id);
+    res.json(comments);
+  }),
+);
 
-  const allUsers = await User.find();
-  const usersWithNetWorth = allUsers.map((user) => {
-    ensureUserPositions(user, marketMap);
-    let holdingsValue = 0;
-    (user.positions || []).forEach((position: any) => {
-      holdingsValue +=
-        position.shares *
-        (priceMap.get(`${position.marketId}_${position.optionId}`) || 0);
+router.post(
+  "/markets/:id/comments",
+  ensureAuthenticated,
+  asyncRoute(async (req, res) => {
+    const { content } = req.body;
+    if (typeof content !== "string" || content.trim().length === 0)
+      return res.status(400).json({ error: "Comment content is required" });
+
+    const market = await Market.findById(req.params.id);
+    if (!market) return res.status(404).json({ error: "Market not found" });
+    if (market.status !== "active")
+      return res
+        .status(400)
+        .json({ error: "Cannot comment on a resolved market" });
+
+    const user = req.user;
+    if (!user) return res.status(401).json({ error: "User not found" });
+
+    const comment = await Comment.create({
+      marketId: req.params.id,
+      userId: user.id,
+      userName: user.username,
+      content: content.trim(),
     });
-    return { user, holdingsValue, totalNetWorth: user.balance + holdingsValue };
-  });
 
-  usersWithNetWorth.sort((a, b) => b.totalNetWorth - a.totalNetWorth);
-  const top20 = usersWithNetWorth.slice(0, 20);
-  const now = new Date();
-  const ONE_HOUR = 60 * 60 * 1000;
-
-  const leaderboard = await Promise.all(
-    top20.map(async (entry, index) => {
-      const currentRank = index + 1;
-      let rankTrend = 0;
-      if (entry.user.lastRank) rankTrend = entry.user.lastRank - currentRank;
-      if (
-        !entry.user.lastRankUpdate ||
-        now.getTime() - entry.user.lastRankUpdate.getTime() > ONE_HOUR
-      ) {
-        entry.user.lastRank = currentRank;
-        entry.user.lastRankUpdate = now;
-        await entry.user.save();
-      }
-
-      return {
-        id: entry.user.id,
-        name: entry.user.name,
-        enrollmentNumber: entry.user.enrollmentNumber,
-        balance: Math.round(entry.user.balance),
-        holdingsValue: Math.round(entry.holdingsValue),
-        totalNetWorth: Math.round(entry.totalNetWorth),
-        rank: currentRank,
-        rankTrend,
-      };
-    }),
-  );
-
-  return res.json(leaderboard);
-});
-
-router.get("/markets/:id/comments", async (req, res) => {
-  const comments = await Comment.find({ marketId: req.params.id }).sort({
-    createdAt: -1,
-  });
-  res.json(comments);
-});
-
-router.post("/markets/:id/comments", ensureAuthenticated, async (req, res) => {
-  const { content } = req.body;
-  if (!content || content.trim().length === 0)
-    return res.status(400).json({ error: "Comment content is required" });
-
-  const market = await Market.findById(req.params.id);
-  if (!market) return res.status(404).json({ error: "Market not found" });
-  if (market.status !== "active")
-    return res
-      .status(400)
-      .json({ error: "Cannot comment on a resolved market" });
-
-  const user = await User.findById(
-    (req.user as any)?.id || (req.user as any)?._id,
-  );
-  if (!user) return res.status(401).json({ error: "User not found" });
-
-  const comment = await Comment.create({
-    marketId: req.params.id,
-    userId: user.id,
-    userName: user.name,
-    content: content.trim(),
-  });
-
-  return res.status(201).json(comment);
-});
+    return res.status(201).json(comment);
+  }),
+);
 
 export default router;

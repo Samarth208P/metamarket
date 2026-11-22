@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect } from "react";
 
 const BINANCE_WS_URL = "wss://data-stream.binance.vision:9443/ws/btcusdt@aggTrade";
 const MAX_HISTORY = 1000;
@@ -76,11 +76,6 @@ function startGlobalFeed() {
   }
 }
 
-// Start the feed immediately when the module is loaded
-if (typeof window !== "undefined") {
-  startGlobalFeed();
-}
-
 export function useBinanceFeed() {
   const [data, setData] = useState({
     price: globalPrice,
@@ -100,9 +95,20 @@ export function useBinanceFeed() {
     observers.add(observer);
     // Sync immediately
     observer({ price: globalPrice, isConnected: globalIsConnected, history: globalPriceHistory });
+    startGlobalFeed();
 
     return () => {
       observers.delete(observer);
+      if (observers.size > 0) return;
+
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+      globalIsConnected = false;
+      if (ws) {
+        ws.onopen = ws.onmessage = ws.onerror = ws.onclose = null;
+        ws.close();
+        ws = null;
+      }
     };
   }, []);
 

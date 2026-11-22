@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { createServer, connectDB } from "./index.js";
+import { createServer, connectDB } from "./index.ts";
 
 const PORT = process.env.PORT || 10000;
 

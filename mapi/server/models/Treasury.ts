@@ -1,33 +1,30 @@
-import mongoose from "mongoose";
+import { query, withSystem } from "../database.ts";
 
-export interface ITreasury extends mongoose.Document {
+interface TreasuryValues {
   realReserves: number;
   solvencyThreshold: number;
-  updatedAt: Date;
-  createdAt: Date;
 }
 
-const TreasurySchema = new mongoose.Schema<ITreasury>(
-  {
-    realReserves: { type: Number, default: 0 },
-    solvencyThreshold: { type: Number, default: 1 },
+const Treasury = {
+  async get() {
+    const result = await withSystem(() =>
+      query<TreasuryValues>(
+        `select real_reserves as "realReserves", solvency_threshold as "solvencyThreshold"
+       from metamarket.treasury where singleton`,
+      ),
+    );
+    return result.rows[0];
   },
-  {
-    timestamps: true,
-    toJSON: {
-      virtuals: true,
-      versionKey: false,
-      transform(_doc, ret) {
-        const record = ret as any;
-        record.id = record._id?.toString();
-        delete record._id;
-      },
-    },
-  },
-);
 
-const Treasury =
-  (mongoose.models.Treasury as mongoose.Model<ITreasury>) ||
-  mongoose.model<ITreasury>("Treasury", TreasurySchema);
+  async update(values: Partial<TreasuryValues>) {
+    await withSystem(() =>
+      query(
+        `update metamarket.treasury set real_reserves = coalesce($1, real_reserves),
+       solvency_threshold = coalesce($2, solvency_threshold) where singleton`,
+        [values.realReserves ?? null, values.solvencyThreshold ?? null],
+      ),
+    );
+  },
+};
 
 export default Treasury;

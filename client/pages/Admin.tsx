@@ -85,9 +85,11 @@ async function uploadImage(file: File): Promise<string> {
     credentials: "include",
     body: formData,
   });
-  if (!res.ok) throw new Error("Upload failed");
-  const json = await res.json();
-  return json.url as string;
+  const json = await res.json().catch(() => null);
+  if (!res.ok || typeof json?.url !== "string") {
+    throw new Error(json?.error || "Image upload failed.");
+  }
+  return json.url;
 }
 
 function AdminManagement() {
@@ -175,7 +177,7 @@ function AdminManagement() {
         <div className="flex gap-3">
           <div className="flex-1">
             <Input
-              placeholder="user@iitr.ac.in"
+              placeholder="player@example.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               onKeyDown={(e) =>
@@ -809,7 +811,7 @@ export default function Admin() {
                     <input
                       ref={multiLogoRef}
                       type="file"
-                      accept="image/*"
+                      accept="image/jpeg,image/png,image/webp"
                       className="hidden"
                       onChange={(e) => {
                         const f = e.target.files?.[0];
@@ -904,7 +906,7 @@ export default function Admin() {
                             </div>
                             <input
                               type="file"
-                              accept="image/*"
+                              accept="image/jpeg,image/png,image/webp"
                               className="hidden"
                               onChange={(e) => {
                                 const f = e.target.files?.[0];

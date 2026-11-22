@@ -5,9 +5,10 @@
  * the latest price to the scheduler and settlement engine.
  */
 
-import { EventEmitter } from "events";
+import { EventEmitter } from "node:events";
 
-const BINANCE_WS_URL = "wss://data-stream.binance.vision:9443/ws/btcusdt@aggTrade";
+const BINANCE_WS_URL =
+  "wss://data-stream.binance.vision:9443/ws/btcusdt@aggTrade";
 const RECONNECT_DELAY_MS = 3000;
 const MAX_RECENT_PRICES = 30; // ~30 seconds of data for ROC
 
@@ -41,6 +42,11 @@ class BinanceFeedManager extends EventEmitter {
       this.reconnectTimer = null;
     }
     if (this.ws) {
+      this.ws.onopen =
+        this.ws.onmessage =
+        this.ws.onerror =
+        this.ws.onclose =
+          null;
       this.ws.close();
       this.ws = null;
     }
@@ -128,6 +134,7 @@ export async function fetchBinancePriceRest(): Promise<number> {
   try {
     const response = await fetch(
       "https://data-api.binance.vision/api/v3/ticker/price?symbol=BTCUSDT",
+      { signal: AbortSignal.timeout(5000) },
     );
     const data = await response.json();
     const price = parseFloat(data.price);
@@ -149,6 +156,7 @@ export async function fetchBinanceRecentPricesRest(): Promise<number[]> {
   try {
     const response = await fetch(
       "https://data-api.binance.vision/api/v3/trades?symbol=BTCUSDT&limit=20",
+      { signal: AbortSignal.timeout(5000) },
     );
     const data = await response.json();
     if (Array.isArray(data)) {
@@ -176,9 +184,10 @@ export async function fetchBinancePriceAtTime(
     const startTime = Math.floor((timestampMs - 1) / 60000) * 60000;
     const response = await fetch(
       `https://data-api.binance.vision/api/v3/klines?symbol=BTCUSDT&interval=1m&startTime=${startTime}&limit=1`,
+      { signal: AbortSignal.timeout(5000) },
     );
     const data = await response.json();
-    if (Array.isArray(data) && data.length > 0) {
+    if (response.ok && Array.isArray(data) && data[0]?.[0] === startTime) {
       // kline[4] is the close price
       const closePrice = parseFloat(data[0][4]);
       if (!isNaN(closePrice) && closePrice > 0) {
@@ -190,4 +199,40 @@ export async function fetchBinancePriceAtTime(
     console.error("[BinanceFeed] Historical fetch failed:", err);
     return 0;
   }
+}
+
+export async function fetchBinanceSecondPrices(
+  startTime: number,
+  endTime: number,
+) {
+  if (endTime <= startTime) return [];
+
+  const response = await fetch(
+    `https://data-api.binance.vision/api/v3/klines?symbol=BTCUSDT&interval=1s&startTime=${startTime}&endTime=${endTime - 1}&limit=300`,
+    { signal: AbortSignal.timeout(5000) },
+  );
+  if (!response.ok) {
+    await response.body?.cancel();
+    throw new Error(`Binance second candles returned ${response.status}`);
+  }
+
+  const candles: unknown = await response.json();
+  if (!Array.isArray(candles))
+    throw new Error("Invalid Binance candle response");
+
+  return candles.map((candle, index) => {
+    const openTime = startTime + index * 1000;
+    const timestamp = openTime + 1000;
+    const price = Number(candle?.[4]);
+    if (
+      candle?.[0] !== openTime ||
+      candle?.[6] !== timestamp - 1 ||
+      timestamp > endTime ||
+      !Number.isFinite(price) ||
+      price <= 0
+    ) {
+      throw new Error("Missing or invalid Binance second candle");
+    }
+    return { price, timestamp: new Date(timestamp) };
+  });
 }
