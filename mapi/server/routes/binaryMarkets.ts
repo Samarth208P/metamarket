@@ -8,7 +8,7 @@ import { Router } from "express";
 import BinaryMarket, { type IBinaryMarket } from "../models/BinaryMarket.ts";
 import User, { needsOnboarding, serializeUser } from "../models/User.ts";
 import {
-  binanceFeed,
+  binanceFeeds,
   fetchBinancePriceRest,
   fetchBinanceRecentPricesRest,
 } from "../services/binanceFeed.ts";
@@ -27,21 +27,36 @@ import {
   formatPaise,
   type PricePoint,
 } from "../../../shared/binaryPrice.ts";
+import {
+  BINARY_ASSET_PAIRS,
+  BINARY_ASSETS,
+  DEFAULT_BINARY_ASSET,
+  isBinaryAssetPair,
+  type BinaryAssetPair,
+} from "../../../shared/binaryAssets.ts";
 
 const router = Router();
 
 export function startBinaryMarketServices() {
-  binanceFeed.start();
+  const feeds = BINARY_ASSET_PAIRS.map((pair) => binanceFeeds[pair]);
   try {
+    feeds.forEach((feed) => feed.start());
     startBinaryScheduler();
   } catch (error) {
-    binanceFeed.stop();
+    feeds.forEach((feed) => feed.stop());
     throw error;
   }
   return () => {
     stopBinaryScheduler();
-    binanceFeed.stop();
+    feeds.forEach((feed) => feed.stop());
   };
+}
+
+function readAssetPair(value: unknown): BinaryAssetPair {
+  if (value === undefined) return DEFAULT_BINARY_ASSET;
+  if (!isBinaryAssetPair(value))
+    throw new ApiError(400, { error: "Unsupported asset pair" });
+  return value;
 }
 
 function ensureAuthenticated(req: any, res: any, next: any) {
@@ -90,17 +105,19 @@ function serializeBinaryMarket(doc: IBinaryMarket, viewerId: string) {
  * Debug endpoint for scheduler health.
  */
 router.get(
-  "/health",
+  ["/health", "/:pair/health"],
   asyncRoute(async (req, res) => {
+    const assetPair = readAssetPair(req.params.pair);
+    const feed = binanceFeeds[assetPair];
     const status: any = {
-      currentMarketId: getCurrentMarketId(),
-      binanceConnected: binanceFeed.getIsConnected(),
-      binancePrice: binanceFeed.getLatestPrice(),
+      currentMarketId: getCurrentMarketId(assetPair),
+      binanceConnected: feed.getIsConnected(),
+      binancePrice: feed.getLatestPrice(),
       timestamp: new Date().toISOString(),
     };
 
     // Add info about active market if possible
-    const active = await BinaryMarket.findActive();
+    const active = await BinaryMarket.findActive(undefined, assetPair);
     if (active) {
       status.currentMarketId ??= active.id;
       status.activeMarket = {
@@ -123,91 +140,96 @@ router.get(
  * GET /binary-markets/active
  * Returns the current active market + live pricing data.
  */
-router.get("/active", async (req, res) => {
-  try {
-    const marketId = getCurrentMarketId();
-    let market = marketId ? await BinaryMarket.findById(marketId) : null;
+router.get(
+  ["/active", "/:pair/active"],
+  asyncRoute(async (req, res) => {
+    const assetPair = readAssetPair(req.params.pair);
+    const feed = binanceFeeds[assetPair];
+    try {
+      const marketId = getCurrentMarketId(assetPair);
+      let market = marketId ? await BinaryMarket.findById(marketId) : null;
 
-    // Only use the cached market if it's still active
-    if (market && market.status !== "active") {
-      market = null;
-    }
+      // Only use the cached market if it's still active
+      if (market && market.status !== "active") {
+        market = null;
+      }
 
-    // Fallback: find the most recent active market
-    if (!market) {
-      market = await BinaryMarket.findActive();
-    }
+      // Fallback: find the most recent active market
+      if (!market) {
+        market = await BinaryMarket.findActive(undefined, assetPair);
+      }
 
-    if (!market) {
-      if (!req.app.locals.edge) void ensureActiveMarket();
+      if (!market) {
+        if (!req.app.locals.edge) void ensureActiveMarket(assetPair);
+
+        return res.json({
+          market: null,
+          livePrice: feed.getLatestPrice(),
+          isConnected: feed.getIsConnected(),
+          message: "No active market. Next cycle starting soon...",
+        });
+      }
+
+      const currentPrice =
+        feed.getLatestPrice() || (await fetchBinancePriceRest(assetPair));
+
+      const now = Date.now();
+      const endTimeMs = new Date(market.endTime).getTime();
+      const timeRemainingMs = Math.max(0, endTimeMs - now);
+
+      // Stale check: If market ended more than 5 minutes ago, ignore it in this route
+      if (
+        req.app.locals.edge ? endTimeMs <= now : endTimeMs < now - 5 * 60 * 1000
+      ) {
+        if (!req.app.locals.edge) void ensureActiveMarket(assetPair);
+        return res.json({
+          market: null,
+          livePrice: currentPrice,
+          isConnected: req.app.locals.edge
+            ? currentPrice > 0
+            : feed.getIsConnected(),
+          message: "Waiting for new cycle to start...",
+        });
+      }
+
+      // Reactive self-healing: If market is expired but still marked 'active', trigger check
+      if (!req.app.locals.edge && timeRemainingMs <= 0) {
+        void ensureActiveMarket(assetPair);
+      }
+
+      const feedPrices = feed.getRecentPrices();
+      const recentPrices = feedPrices.length
+        ? feedPrices
+        : await fetchBinanceRecentPricesRest(assetPair);
+
+      const { probability, activeVolatility, momentumBias } =
+        calculateLiveProbability({
+          currentPrice,
+          targetPrice: market.targetPrice,
+          timeRemainingMs,
+          recentPrices,
+        });
 
       return res.json({
-        market: null,
-        livePrice: binanceFeed.getLatestPrice(),
-        isConnected: binanceFeed.getIsConnected(),
-        message: "No active market. Next cycle starting soon...",
-      });
-    }
-
-    const currentPrice =
-      binanceFeed.getLatestPrice() || (await fetchBinancePriceRest());
-
-    const now = Date.now();
-    const endTimeMs = new Date(market.endTime).getTime();
-    const timeRemainingMs = Math.max(0, endTimeMs - now);
-
-    // Stale check: If market ended more than 5 minutes ago, ignore it in this route
-    if (
-      req.app.locals.edge ? endTimeMs <= now : endTimeMs < now - 5 * 60 * 1000
-    ) {
-      if (!req.app.locals.edge) void ensureActiveMarket();
-      return res.json({
-        market: null,
+        market: serializeBinaryMarket(market, req.user.id),
         livePrice: currentPrice,
         isConnected: req.app.locals.edge
           ? currentPrice > 0
-          : binanceFeed.getIsConnected(),
-        message: "Waiting for new cycle to start...",
-      });
-    }
-
-    // Reactive self-healing: If market is expired but still marked 'active', trigger check
-    if (!req.app.locals.edge && timeRemainingMs <= 0) {
-      void ensureActiveMarket();
-    }
-
-    const feedPrices = binanceFeed.getRecentPrices();
-    const recentPrices = feedPrices.length
-      ? feedPrices
-      : await fetchBinanceRecentPricesRest();
-
-    const { probability, activeVolatility, momentumBias } =
-      calculateLiveProbability({
-        currentPrice,
-        targetPrice: market.targetPrice,
+          : feed.getIsConnected(),
+        probability: {
+          up: probability,
+          down: 1 - probability,
+        },
+        activeVolatility,
+        momentumBias,
         timeRemainingMs,
-        recentPrices,
       });
-
-    return res.json({
-      market: serializeBinaryMarket(market, req.user.id),
-      livePrice: currentPrice,
-      isConnected: req.app.locals.edge
-        ? currentPrice > 0
-        : binanceFeed.getIsConnected(),
-      probability: {
-        up: probability,
-        down: 1 - probability,
-      },
-      activeVolatility,
-      momentumBias,
-      timeRemainingMs,
-    });
-  } catch (err) {
-    console.error("[BinaryRoutes] Error fetching active market:", err);
-    return res.status(500).json({ error: "Internal server error" });
-  }
-});
+    } catch (err) {
+      console.error("[BinaryRoutes] Error fetching active market:", err);
+      return res.status(500).json({ error: "Internal server error" });
+    }
+  }),
+);
 
 /**
  * GET /binary-markets/cron
@@ -215,45 +237,53 @@ router.get("/active", async (req, res) => {
  * Attach this endpoint to an external cron job (e.g., cron-job.org) firing every 1 minute.
  * Automatically checks and settles expired markets and spawns the next target.
  */
-router.get("/cron", async (req, res) => {
-  if (req.app.locals.edge) return res.status(404).json({ error: "Not found" });
-  try {
-    await ensureActiveMarket();
-    return res.json({ message: "Cron cycle executed successfully" });
-  } catch (err) {
-    console.error("[BinaryRoutes] Cron error:", err);
-    return res.status(500).json({ error: "Cron cycle failed" });
-  }
-});
+router.get(
+  ["/cron", "/:pair/cron"],
+  asyncRoute(async (req, res) => {
+    if (req.app.locals.edge)
+      return res.status(404).json({ error: "Not found" });
+    const assetPair = readAssetPair(req.params.pair);
+    try {
+      await ensureActiveMarket(assetPair);
+      return res.json({ message: "Cron cycle executed successfully" });
+    } catch (err) {
+      console.error("[BinaryRoutes] Cron error:", err);
+      return res.status(500).json({ error: "Cron cycle failed" });
+    }
+  }),
+);
 
 /**
  * GET /binary-markets/history
  * Returns recent settled markets.
  */
-router.get("/history", async (req, res) => {
-  try {
-    const markets = await BinaryMarket.listHistory();
+router.get(
+  ["/history", "/:pair/history"],
+  asyncRoute(async (req, res) => {
+    const markets = await BinaryMarket.listHistory(
+      readAssetPair(req.params.pair),
+    );
     return res.json(
       markets.map((market) => serializeBinaryMarket(market, req.user.id)),
     );
-  } catch (err) {
-    return res.status(500).json({ error: "Internal server error" });
-  }
-});
+  }),
+);
 
 /**
  * GET /binary-markets/:id
  * Get a specific binary market by ID.
  */
 router.get(
-  "/price-history",
-  asyncRoute(async (_req, res) => {
+  ["/price-history", "/:pair/price-history"],
+  asyncRoute(async (req, res) => {
+    const assetPair = readAssetPair(req.params.pair);
     const now = Date.now();
     // Keep enough leading points to fill the chart while newer candles are saved.
     const from = now - MARKET_DURATION_MS - 60_000;
     const snapshots = await BinaryMarket.listPriceSnapshots(
       new Date(from),
       new Date(now),
+      assetPair,
     );
     const points = new Map<number, PricePoint>();
     for (const snapshot of snapshots) {
@@ -281,19 +311,23 @@ router.get("/:id", async (req, res) => {
   }
 });
 
-async function loadTradePrices() {
+async function loadTradePrices(marketId: string) {
+  const market = await BinaryMarket.findById(marketId);
+  if (!market) throw new ApiError(404, { error: "Market not found" });
+  const assetPair = readAssetPair(market.assetPair);
+  const feed = binanceFeeds[assetPair];
   const currentPrice =
-    binanceFeed.getLatestPrice() || (await fetchBinancePriceRest());
+    feed.getLatestPrice() || (await fetchBinancePriceRest(assetPair));
   if (!Number.isFinite(currentPrice) || currentPrice <= 0) {
     throw new ApiError(503, {
       error: "The live price is temporarily unavailable",
     });
   }
-  const feedPrices = binanceFeed.getRecentPrices();
+  const feedPrices = feed.getRecentPrices();
   const recentPrices = feedPrices.length
     ? feedPrices
-    : await fetchBinanceRecentPricesRest();
-  return { currentPrice, recentPrices };
+    : await fetchBinanceRecentPricesRest(assetPair);
+  return { currentPrice, recentPrices, assetPair };
 }
 
 /**
@@ -317,7 +351,7 @@ router.post(
       throw new ApiError(400, { error: "Amount must be at least ₹1" });
     }
 
-    const prices = await loadTradePrices();
+    const prices = await loadTradePrices(req.params.id);
     const payload = await withSystem(async () => {
       const market = await BinaryMarket.findById(req.params.id, true);
       if (!market) throw new ApiError(404, { error: "Market not found" });
@@ -370,7 +404,7 @@ router.post(
       if (!user.tradeHistory) user.tradeHistory = [];
       user.tradeHistory.push({
         marketId: market.id,
-        marketTitle: `BTC ${side.toUpperCase()} @ ${formatPaise(entryProbability)} (Tgt: $${market.targetPrice.toLocaleString()})`,
+        marketTitle: `${BINARY_ASSETS[prices.assetPair].symbol} ${side.toUpperCase()} @ ${formatPaise(entryProbability)} (Tgt: $${market.targetPrice.toLocaleString()})`,
         tradeType: "buy",
         optionId: side,
         optionName: side === "up" ? "Up" : "Down",
@@ -418,7 +452,7 @@ router.post(
       throw new ApiError(400, { error: "Side must be 'up' or 'down'" });
     }
 
-    const prices = await loadTradePrices();
+    const prices = await loadTradePrices(req.params.id);
     const payload = await withSystem(async () => {
       const market = await BinaryMarket.findById(req.params.id, true);
       if (!market) throw new ApiError(404, { error: "Market not found" });
@@ -485,7 +519,7 @@ router.post(
       if (!user.tradeHistory) user.tradeHistory = [];
       user.tradeHistory.push({
         marketId: market.id,
-        marketTitle: `BTC ${side.toUpperCase()} @ ${formatPaise(currentSideProbability)} (Tgt: $${market.targetPrice.toLocaleString()})`,
+        marketTitle: `${BINARY_ASSETS[prices.assetPair].symbol} ${side.toUpperCase()} @ ${formatPaise(currentSideProbability)} (Tgt: $${market.targetPrice.toLocaleString()})`,
         tradeType: "sell",
         optionId: side,
         optionName: side === "up" ? "Up" : "Down",

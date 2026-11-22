@@ -1,14 +1,16 @@
 /**
  * Binance WebSocket Price Feed Manager (Server-side)
  *
- * Connects to the Binance aggTrade stream for BTCUSDT and provides
+ * Connects to a Binance aggTrade stream and provides
  * the latest price to the scheduler and settlement engine.
  */
 
 import { EventEmitter } from "node:events";
+import {
+  DEFAULT_BINARY_ASSET,
+  type BinaryAssetPair,
+} from "../../../shared/binaryAssets.ts";
 
-const BINANCE_WS_URL =
-  "wss://data-stream.binance.vision:9443/ws/btcusdt@aggTrade";
 const RECONNECT_DELAY_MS = 3000;
 const MAX_RECENT_PRICES = 30; // ~30 seconds of data for ROC
 
@@ -25,7 +27,7 @@ class BinanceFeedManager extends EventEmitter {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private shouldReconnect: boolean = true;
 
-  constructor() {
+  constructor(private readonly assetPair: BinaryAssetPair) {
     super();
     this.setMaxListeners(50);
   }
@@ -55,11 +57,15 @@ class BinanceFeedManager extends EventEmitter {
 
   private connect(): void {
     try {
-      this.ws = new WebSocket(BINANCE_WS_URL);
+      this.ws = new WebSocket(
+        `wss://data-stream.binance.vision:9443/ws/${this.assetPair.toLowerCase()}@aggTrade`,
+      );
 
       this.ws.onopen = () => {
         this.isConnected = true;
-        console.log("[BinanceFeed] Connected to Binance aggTrade stream");
+        console.log(
+          `[BinanceFeed] Connected to ${this.assetPair} aggTrade stream`,
+        );
         this.emit("connected");
       };
 
@@ -81,12 +87,12 @@ class BinanceFeedManager extends EventEmitter {
       };
 
       this.ws.onerror = (err) => {
-        console.error("[BinanceFeed] WebSocket error:", err);
+        console.error(`[BinanceFeed] ${this.assetPair} WebSocket error:`, err);
       };
 
       this.ws.onclose = () => {
         this.isConnected = false;
-        console.log("[BinanceFeed] Disconnected from Binance");
+        console.log(`[BinanceFeed] Disconnected from ${this.assetPair} stream`);
         this.emit("disconnected");
         if (this.shouldReconnect) {
           this.scheduleReconnect();
@@ -124,16 +130,20 @@ class BinanceFeedManager extends EventEmitter {
   }
 }
 
-// Singleton instance
-export const binanceFeed = new BinanceFeedManager();
+export const binanceFeeds: Record<BinaryAssetPair, BinanceFeedManager> = {
+  BTCUSDT: new BinanceFeedManager("BTCUSDT"),
+  ETHUSDT: new BinanceFeedManager("ETHUSDT"),
+};
 
 /**
  * Fetch latest price from Binance REST API as a fallback
  */
-export async function fetchBinancePriceRest(): Promise<number> {
+export async function fetchBinancePriceRest(
+  assetPair: BinaryAssetPair = DEFAULT_BINARY_ASSET,
+): Promise<number> {
   try {
     const response = await fetch(
-      "https://data-api.binance.vision/api/v3/ticker/price?symbol=BTCUSDT",
+      `https://data-api.binance.vision/api/v3/ticker/price?symbol=${assetPair}`,
       { signal: AbortSignal.timeout(5000) },
     );
     const data = await response.json();
@@ -152,10 +162,12 @@ export async function fetchBinancePriceRest(): Promise<number> {
  * Fetch recent prices from Binance REST API as a fallback for Serverless
  * Returns an array of the last ~20 recent trade prices.
  */
-export async function fetchBinanceRecentPricesRest(): Promise<number[]> {
+export async function fetchBinanceRecentPricesRest(
+  assetPair: BinaryAssetPair = DEFAULT_BINARY_ASSET,
+): Promise<number[]> {
   try {
     const response = await fetch(
-      "https://data-api.binance.vision/api/v3/trades?symbol=BTCUSDT&limit=20",
+      `https://data-api.binance.vision/api/v3/trades?symbol=${assetPair}&limit=20`,
       { signal: AbortSignal.timeout(5000) },
     );
     const data = await response.json();
@@ -177,13 +189,14 @@ export async function fetchBinanceRecentPricesRest(): Promise<number[]> {
  */
 export async function fetchBinancePriceAtTime(
   timestampMs: number,
+  assetPair: BinaryAssetPair = DEFAULT_BINARY_ASSET,
 ): Promise<number> {
   try {
     // Target the candle that ends AT or JUST BEFORE the timestamp.
     // If market ends at 20:30:00, we want the close of the 20:29:00-20:29:59 candle.
     const startTime = Math.floor((timestampMs - 1) / 60000) * 60000;
     const response = await fetch(
-      `https://data-api.binance.vision/api/v3/klines?symbol=BTCUSDT&interval=1m&startTime=${startTime}&limit=1`,
+      `https://data-api.binance.vision/api/v3/klines?symbol=${assetPair}&interval=1m&startTime=${startTime}&limit=1`,
       { signal: AbortSignal.timeout(5000) },
     );
     const data = await response.json();
@@ -204,11 +217,12 @@ export async function fetchBinancePriceAtTime(
 export async function fetchBinanceSecondPrices(
   startTime: number,
   endTime: number,
+  assetPair: BinaryAssetPair = DEFAULT_BINARY_ASSET,
 ) {
   if (endTime <= startTime) return [];
 
   const response = await fetch(
-    `https://data-api.binance.vision/api/v3/klines?symbol=BTCUSDT&interval=1s&startTime=${startTime}&endTime=${endTime - 1}&limit=300`,
+    `https://data-api.binance.vision/api/v3/klines?symbol=${assetPair}&interval=1s&startTime=${startTime}&endTime=${endTime - 1}&limit=300`,
     { signal: AbortSignal.timeout(5000) },
   );
   if (!response.ok) {

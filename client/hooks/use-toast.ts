@@ -3,7 +3,20 @@ import * as React from "react";
 import type { ToastActionElement, ToastProps } from "@/components/ui/toast";
 
 const TOAST_LIMIT = 1;
-const TOAST_REMOVE_DELAY = 1000000;
+const TOAST_REMOVE_DELAY = 400;
+const NOTIFICATION_LIMIT = 20;
+
+export type NotificationKind = "trade" | "market" | "error" | "info";
+
+interface NotificationEntry {
+  id: string;
+  key?: string;
+  title: string;
+  description?: string;
+  kind: NotificationKind;
+  href?: string;
+  timestamp: number;
+}
 
 type ToasterToast = ToastProps & {
   id: string;
@@ -32,6 +45,7 @@ type Action =
   | {
       type: ActionType["ADD_TOAST"];
       toast: ToasterToast;
+      notification?: NotificationEntry;
     }
   | {
       type: ActionType["UPDATE_TOAST"];
@@ -44,10 +58,14 @@ type Action =
   | {
       type: ActionType["REMOVE_TOAST"];
       toastId?: ToasterToast["id"];
-    };
+    }
+  | { type: "READ_NOTIFICATIONS" }
+  | { type: "RESET_NOTIFICATIONS" };
 
 interface State {
   toasts: ToasterToast[];
+  notifications: NotificationEntry[];
+  unreadCount: number;
 }
 
 const toastTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
@@ -74,7 +92,20 @@ export const reducer = (state: State, action: Action): State => {
       return {
         ...state,
         toasts: [action.toast, ...state.toasts].slice(0, TOAST_LIMIT),
+        ...(action.notification && {
+          notifications: [action.notification, ...state.notifications].slice(
+            0,
+            NOTIFICATION_LIMIT,
+          ),
+          unreadCount: Math.min(state.unreadCount + 1, NOTIFICATION_LIMIT),
+        }),
       };
+
+    case "READ_NOTIFICATIONS":
+      return { ...state, unreadCount: 0 };
+
+    case "RESET_NOTIFICATIONS":
+      return { ...state, toasts: [], notifications: [], unreadCount: 0 };
 
     case "UPDATE_TOAST":
       return {
@@ -125,7 +156,7 @@ export const reducer = (state: State, action: Action): State => {
 
 const listeners: Array<(state: State) => void> = [];
 
-let memoryState: State = { toasts: [] };
+let memoryState: State = { toasts: [], notifications: [], unreadCount: 0 };
 
 function dispatch(action: Action) {
   memoryState = reducer(memoryState, action);
@@ -134,9 +165,18 @@ function dispatch(action: Action) {
   });
 }
 
-type Toast = Omit<ToasterToast, "id">;
+type Toast = Omit<ToasterToast, "id"> & {
+  notificationKind?: NotificationKind;
+  notificationHref?: string;
+  notificationKey?: string;
+};
 
-function toast({ ...props }: Toast) {
+function toast({
+  notificationKind,
+  notificationHref,
+  notificationKey,
+  ...props
+}: Toast) {
   const id = genId();
 
   const update = (props: ToasterToast) =>
@@ -146,8 +186,32 @@ function toast({ ...props }: Toast) {
     });
   const dismiss = () => dispatch({ type: "DISMISS_TOAST", toastId: id });
 
+  if (
+    notificationKey &&
+    memoryState.notifications.some(({ key }) => key === notificationKey)
+  ) {
+    return { id, dismiss, update };
+  }
+
   dispatch({
     type: "ADD_TOAST",
+    notification:
+      typeof props.title === "string"
+        ? {
+            id,
+            key: notificationKey,
+            title: props.title,
+            description:
+              typeof props.description === "string"
+                ? props.description
+                : undefined,
+            kind:
+              notificationKind ??
+              (props.variant === "destructive" ? "error" : "info"),
+            href: notificationHref,
+            timestamp: Date.now(),
+          }
+        : undefined,
     toast: {
       ...props,
       id,
@@ -170,13 +234,14 @@ function useToast() {
 
   React.useEffect(() => {
     listeners.push(setState);
+    setState(memoryState);
     return () => {
       const index = listeners.indexOf(setState);
       if (index > -1) {
         listeners.splice(index, 1);
       }
     };
-  }, [state]);
+  }, []);
 
   return {
     ...state,
@@ -185,4 +250,12 @@ function useToast() {
   };
 }
 
-export { useToast, toast };
+function markNotificationsRead() {
+  if (memoryState.unreadCount) dispatch({ type: "READ_NOTIFICATIONS" });
+}
+
+function resetNotifications() {
+  dispatch({ type: "RESET_NOTIFICATIONS" });
+}
+
+export { useToast, toast, markNotificationsRead, resetNotifications };

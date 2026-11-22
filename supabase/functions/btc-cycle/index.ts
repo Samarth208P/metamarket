@@ -1,6 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import { Buffer } from "node:buffer";
-import { runScheduledBtcCycle } from "../../../mapi/server/services/binaryScheduler.ts";
+import { runScheduledBinaryCycles } from "../../../mapi/server/services/binaryScheduler.ts";
 
 Deno.serve(async (request) => {
   if (request.method !== "POST") {
@@ -21,10 +21,13 @@ Deno.serve(async (request) => {
   }
 
   try {
-    await runScheduledBtcCycle();
+    await runScheduledBinaryCycles();
     return Response.json({ status: "ok" });
   } catch (error) {
-    console.error("[BTC cron] Cycle failed:", error);
-    return Response.json({ error: "BTC cycle failed" }, { status: 503 });
+    console.error("[Binary market cron] Cycle failed:", error);
+    return Response.json(
+      { error: "Binary market cycle failed" },
+      { status: 503 },
+    );
   }
 });

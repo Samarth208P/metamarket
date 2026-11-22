@@ -14,7 +14,7 @@ import type {
 import User from "../models/User.ts";
 import { withSystem } from "../database.ts";
 import {
-  binanceFeed,
+  binanceFeeds,
   fetchBinancePriceAtTime,
   fetchBinancePriceRest,
   fetchBinanceSecondPrices,
@@ -23,34 +23,60 @@ import {
   MARKET_DURATION_MS,
   PRICE_SNAPSHOT_INTERVAL_MS,
 } from "../../../shared/binaryPrice.ts";
+import {
+  BINARY_ASSET_PAIRS,
+  BINARY_ASSETS,
+  DEFAULT_BINARY_ASSET,
+  type BinaryAssetPair,
+} from "../../../shared/binaryAssets.ts";
 
 let startupTimer: ReturnType<typeof setTimeout> | null = null;
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
-let snapshotTimer: ReturnType<typeof setInterval> | null = null;
-let currentMarketId: string | null = null;
 let isRunning = false;
 
-export async function runScheduledBtcCycle() {
+type PairScheduler = {
+  currentMarketId?: string;
+  snapshotTimer?: ReturnType<typeof setInterval>;
+  pending?: Promise<void>;
+};
+
+const pairSchedulers = new Map<BinaryAssetPair, PairScheduler>(
+  BINARY_ASSET_PAIRS.map((pair) => [pair, {}]),
+);
+
+export async function runScheduledBinaryCycles() {
+  const results = await Promise.allSettled(
+    BINARY_ASSET_PAIRS.map((pair) => runScheduledBinaryCycle(pair)),
+  );
+  for (const result of results) {
+    if (result.status === "rejected") throw result.reason;
+  }
+}
+
+export async function runScheduledBinaryCycle(assetPair: BinaryAssetPair) {
   const results = await Promise.allSettled([
-    updateCurrentSlot(),
-    settleScheduledSlots(),
+    updateCurrentSlot(assetPair),
+    settleScheduledSlots(assetPair),
   ]);
   for (const result of results) {
     if (result.status === "rejected") throw result.reason;
   }
 }
 
-async function updateCurrentSlot() {
+async function updateCurrentSlot(assetPair: BinaryAssetPair) {
   const now = Date.now();
   const start = Math.floor(now / MARKET_DURATION_MS) * MARKET_DURATION_MS;
   const endTime = new Date(start + MARKET_DURATION_MS);
-  let market = await withSystem(() => BinaryMarket.findActive(endTime));
+  let market = await withSystem(() =>
+    BinaryMarket.findActive(endTime, assetPair),
+  );
   if (!market) {
-    const targetPrice = await fetchBinancePriceAtTime(start);
-    if (targetPrice <= 0) throw new Error("BTC opening price unavailable");
+    const targetPrice = await fetchBinancePriceAtTime(start, assetPair);
+    if (targetPrice <= 0)
+      throw new Error(`${assetPair} opening price unavailable`);
     const startTime = new Date(start);
     market = await BinaryMarket.openSlot({
-      assetPair: "BTCUSDT",
+      assetPair,
       targetPrice,
       startTime,
       endTime,
@@ -64,13 +90,13 @@ async function updateCurrentSlot() {
   const from = Math.max(start, Math.floor(lastTime / 1000) * 1000);
   // Allow the exchange to publish closed candles before requesting them.
   const through = Math.floor((now - 2000) / 1000) * 1000;
-  const prices = await fetchBinanceSecondPrices(from, through);
+  const prices = await fetchBinanceSecondPrices(from, through, assetPair);
   if (prices.length > 0)
     await BinaryMarket.captureScheduledPrices(market.id, prices);
 }
 
-async function settleScheduledSlots() {
-  const expired = await BinaryMarket.listExpired(3);
+async function settleScheduledSlots(assetPair: BinaryAssetPair) {
+  const expired = await BinaryMarket.listExpired(3, assetPair);
   if (expired.length === 0) return;
 
   let failed = false;
@@ -80,32 +106,44 @@ async function settleScheduledSlots() {
 
     try {
       const start = market.startTime.getTime();
-      const prices = await fetchBinanceSecondPrices(start, end).catch(
-        (error) => {
-          console.warn("[BTC cron] Could not backfill second candles:", error);
-          return [];
-        },
-      );
+      const prices = await fetchBinanceSecondPrices(
+        start,
+        end,
+        assetPair,
+      ).catch((error) => {
+        console.warn(
+          `[${assetPair} cron] Could not backfill second candles:`,
+          error,
+        );
+        return [];
+      });
       const last = prices[prices.length - 1];
       const complete = last?.timestamp.getTime() === end;
       const finalPrice = complete
         ? last.price
-        : await fetchBinancePriceAtTime(end);
-      if (finalPrice <= 0) throw new Error("BTC expiry price unavailable");
+        : await fetchBinancePriceAtTime(end, assetPair);
+      if (finalPrice <= 0)
+        throw new Error(`${assetPair} expiry price unavailable`);
 
       await recordSettlement(
         market.id,
+        assetPair,
         end,
         finalPrice,
         complete ? prices : undefined,
       );
     } catch (error) {
       failed = true;
-      console.error("[BTC cron] Could not settle market", market.id, error);
+      console.error(
+        `[${assetPair} cron] Could not settle market`,
+        market.id,
+        error,
+      );
     }
   }
-  await BinaryMarket.pruneHistory();
-  if (failed) throw new Error("One or more BTC settlements need a retry");
+  await BinaryMarket.pruneHistory(assetPair);
+  if (failed)
+    throw new Error(`One or more ${assetPair} settlements need a retry`);
 }
 
 export function startBinaryScheduler(): void {
@@ -113,24 +151,25 @@ export function startBinaryScheduler(): void {
   isRunning = true;
   console.log("[BinaryScheduler] Starting market cycle scheduler");
 
-  // Start heartbeat to ensure a market always exists
-  if (heartbeatTimer) clearInterval(heartbeatTimer);
-  heartbeatTimer = setInterval(() => {
-    ensureActiveMarket();
-  }, 5000); // Check every 5s for faster settlement
+  function tick() {
+    for (const pair of BINARY_ASSET_PAIRS) void ensureActiveMarket(pair);
+  }
+  heartbeatTimer = setInterval(tick, 5000);
 
   // Also run after a short delay to allow Binance WebSocket to connect
-  startupTimer = setTimeout(ensureActiveMarket, 3000);
+  startupTimer = setTimeout(tick, 3000);
 }
 
 export function stopBinaryScheduler(): void {
   if (startupTimer) clearTimeout(startupTimer);
-  if (snapshotTimer) clearInterval(snapshotTimer);
   if (heartbeatTimer) clearInterval(heartbeatTimer);
   startupTimer = null;
-  snapshotTimer = null;
   heartbeatTimer = null;
-  currentMarketId = null;
+  for (const state of pairSchedulers.values()) {
+    if (state.snapshotTimer) clearInterval(state.snapshotTimer);
+    state.currentMarketId = undefined;
+    state.snapshotTimer = undefined;
+  }
   isRunning = false;
 }
 
@@ -138,7 +177,20 @@ export function stopBinaryScheduler(): void {
  * Ensures an active market exists for the current time slot.
  * This is the primary driver for the scheduler.
  */
-export async function ensureActiveMarket(): Promise<void> {
+export function ensureActiveMarket(
+  assetPair: BinaryAssetPair = DEFAULT_BINARY_ASSET,
+): Promise<void> {
+  const state = pairSchedulers.get(assetPair);
+  state.pending ??= updateLiveSlot(assetPair, state).finally(() => {
+    state.pending = undefined;
+  });
+  return state.pending;
+}
+
+async function updateLiveSlot(
+  assetPair: BinaryAssetPair,
+  state: PairScheduler,
+) {
   const nowMs = Date.now();
   const cycleLengthMs = MARKET_DURATION_MS;
   const endTimeMs =
@@ -149,15 +201,18 @@ export async function ensureActiveMarket(): Promise<void> {
 
   try {
     // 1. First, always try to settle any past markets
-    await settlePreviousMarket();
+    await settlePreviousMarket(assetPair);
 
-    let market = await withSystem(() => BinaryMarket.findActive(endTime));
+    let market = await withSystem(() =>
+      BinaryMarket.findActive(endTime, assetPair),
+    );
+    const feed = binanceFeeds[assetPair];
     if (!market) {
       const price =
-        binanceFeed.getLatestPrice() || (await fetchBinancePriceRest());
+        feed.getLatestPrice() || (await fetchBinancePriceRest(assetPair));
       if (Number.isFinite(price) && price > 0) {
         market = await BinaryMarket.openSlot({
-          assetPair: "BTCUSDT",
+          assetPair,
           targetPrice: price,
           startTime,
           endTime,
@@ -165,37 +220,41 @@ export async function ensureActiveMarket(): Promise<void> {
         });
       }
     }
-    if (market && market.id !== currentMarketId) {
-      currentMarketId = market.id;
-      if (snapshotTimer) clearInterval(snapshotTimer);
-      if (isRunning) {
-        const marketId = market.id;
-        snapshotTimer = setInterval(() => {
-          const price = binanceFeed.getLatestPrice();
-          if (price > 0)
-            void BinaryMarket.capturePrice(marketId, price).catch((error) => {
-              console.error("[BinaryScheduler] Price capture failed:", error);
-            });
-        }, PRICE_SNAPSHOT_INTERVAL_MS);
-      }
+    if (isRunning && market?.id !== state.currentMarketId) {
+      state.currentMarketId = market?.id;
+      if (state.snapshotTimer) clearInterval(state.snapshotTimer);
+      state.snapshotTimer = market
+        ? setInterval(() => {
+            const price = feed.getLatestPrice();
+            if (price > 0)
+              void BinaryMarket.capturePrice(market.id, price).catch(
+                (error) => {
+                  console.error(`[${assetPair}] Price capture failed:`, error);
+                },
+              );
+          }, PRICE_SNAPSHOT_INTERVAL_MS)
+        : undefined;
     }
-    await BinaryMarket.pruneHistory();
+    await BinaryMarket.pruneHistory(assetPair);
   } catch (err) {
-    console.error("[BinaryScheduler] Heartbeat loop error:", err);
+    console.error(`[${assetPair}] Heartbeat loop error:`, err);
   }
 }
 
-async function settlePreviousMarket(): Promise<void> {
-  for (const market of await BinaryMarket.listExpired()) {
+async function settlePreviousMarket(assetPair: BinaryAssetPair): Promise<void> {
+  for (const market of await BinaryMarket.listExpired(undefined, assetPair)) {
     try {
-      await settleMarket(market);
+      await settleMarket(market, assetPair);
     } catch (error) {
-      console.error("Could not settle BTC market", market.id, error);
+      console.error(`Could not settle ${assetPair} market`, market.id, error);
     }
   }
 }
 
-async function settleMarket(candidate: IBinaryMarket): Promise<void> {
+async function settleMarket(
+  candidate: IBinaryMarket,
+  assetPair: BinaryAssetPair,
+): Promise<void> {
   const market = candidate;
   const marketId = market.id;
   const endTimeMs = new Date(market.endTime).getTime();
@@ -212,7 +271,7 @@ async function settleMarket(candidate: IBinaryMarket): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, 2000));
   }
 
-  finalPrice = await fetchBinancePriceAtTime(endTimeMs);
+  finalPrice = await fetchBinancePriceAtTime(endTimeMs, assetPair);
 
   // 2. Fallback to closest snapshot if REST API fails
   if (
@@ -240,7 +299,7 @@ async function settleMarket(candidate: IBinaryMarket): Promise<void> {
 
   // 3. Final fallback to live price if all else fails (dangerous but better than staying stuck)
   if (finalPrice <= 0) {
-    finalPrice = binanceFeed.getLatestPrice();
+    finalPrice = binanceFeeds[assetPair].getLatestPrice();
     if (finalPrice > 0) {
       console.log(
         `[BinaryScheduler] CRITICAL FALLBACK to live price for ${marketId}`,
@@ -255,18 +314,23 @@ async function settleMarket(candidate: IBinaryMarket): Promise<void> {
     return;
   }
 
-  await recordSettlement(marketId, endTimeMs, finalPrice);
+  await recordSettlement(marketId, assetPair, endTimeMs, finalPrice);
 }
 
 async function recordSettlement(
   marketId: string,
+  assetPair: BinaryAssetPair,
   endTimeMs: number,
   finalPrice: number,
   prices?: IBinaryPriceSnapshot[],
 ) {
   await withSystem(async () => {
     const locked = await BinaryMarket.findById(marketId, true);
-    if (!locked || !["active", "settling"].includes(locked.status)) return;
+    if (
+      locked?.assetPair !== assetPair ||
+      !["active", "settling"].includes(locked.status)
+    )
+      return;
     const winningSide = finalPrice >= locked.targetPrice ? "up" : "down";
     const winners = locked.trades
       .filter(
@@ -285,7 +349,7 @@ async function recordSettlement(
       user.balance += payout;
       user.tradeHistory.push({
         marketId,
-        marketTitle: `BTC ${winningSide.toUpperCase()} Payout (Tgt: $${locked.targetPrice.toLocaleString()})`,
+        marketTitle: `${BINARY_ASSETS[assetPair].symbol} ${winningSide.toUpperCase()} Payout (Tgt: $${locked.targetPrice.toLocaleString()})`,
         tradeType: "payout",
         optionId: winningSide,
         optionName: winningSide === "up" ? "Up" : "Down",
@@ -310,6 +374,8 @@ async function recordSettlement(
   });
 }
 
-export function getCurrentMarketId(): string | null {
-  return currentMarketId;
+export function getCurrentMarketId(
+  assetPair: BinaryAssetPair = DEFAULT_BINARY_ASSET,
+): string | null {
+  return pairSchedulers.get(assetPair).currentMarketId ?? null;
 }

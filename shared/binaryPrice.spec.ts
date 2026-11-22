@@ -94,8 +94,8 @@ describe("calculatePotentialPayout", () => {
     expect(calculatePotentialPayout(100, 0.5)).toBe(200);
   });
 
-  it("caps at 2x even for low probability", () => {
-    expect(calculatePotentialPayout(100, 0.1)).toBe(200);
+  it("returns 10x when probability is 0.1", () => {
+    expect(calculatePotentialPayout(100, 0.1)).toBe(1000);
   });
 
   it("returns < 2x for high probability", () => {

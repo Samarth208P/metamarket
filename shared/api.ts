@@ -36,6 +36,7 @@ export interface User {
   email: string;
   name: string;
   username: string | null;
+  avatarUrl: string | null;
   termsAcceptedAt: string | null;
   needsOnboarding: boolean;
   starterGift: { amount: number } | null;
@@ -130,6 +131,7 @@ export interface Market {
 export interface LeaderboardUser {
   id: string;
   name: string;
+  avatarUrl: string | null;
   balance: number;
   holdingsValue: number;
   totalNetWorth: number;
@@ -170,6 +172,7 @@ export interface AuthErrorResponse {
 }
 
 export const USERNAME_PATTERN = /^[a-zA-Z0-9_]{3,24}$/;
+export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
 export const PLAY_TERMS = {
   virtualFunds:

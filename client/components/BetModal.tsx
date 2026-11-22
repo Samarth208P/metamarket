@@ -193,7 +193,9 @@ export function BetModal({
 
       const shareLabel = outcome === "yes" ? teamALabel : teamBLabel;
       toast({
-        title: "Trade Executed",
+        title: isBuying ? "Shares bought" : "Shares sold",
+        notificationKind: "trade",
+        notificationHref: `/market/${market.id}`,
         description: isBuying
           ? `Successfully bought ₹${numAmount.toFixed(2)} worth of ${shareLabel} shares!`
           : `Successfully sold ${numAmount.toFixed(2)} ${shareLabel} shares for ₹${Math.abs(cost).toFixed(2)}!`,

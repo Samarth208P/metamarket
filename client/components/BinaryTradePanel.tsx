@@ -11,9 +11,12 @@ import {
   formatPaise,
 } from "@shared/binaryPrice";
 import type { BinaryMarket as BinaryMarketType } from "@shared/binaryPrice";
+import type { BinaryAsset } from "@shared/binaryAssets";
 import { ArrowUp, ArrowDown, TrendingUp, Loader2 } from "lucide-react";
 
 interface BinaryTradePanelProps {
+  asset: BinaryAsset;
+  initialSide?: "up" | "down";
   market: BinaryMarketType | null;
   currentPrice: number;
   recentPrices: number[];
@@ -25,6 +28,8 @@ interface BinaryTradePanelProps {
 const PRESET_AMOUNTS = [10, 50, 100, 500];
 
 export function BinaryTradePanel({
+  asset,
+  initialSide = "up",
   market,
   currentPrice,
   recentPrices,
@@ -36,7 +41,7 @@ export function BinaryTradePanel({
   const { toast } = useToast();
   const [tradeType, setTradeType] = useState<"buy" | "sell">("buy");
   const [amount, setAmount] = useState<string>("");
-  const [selectedSide, setSelectedSide] = useState<"up" | "down">("up");
+  const [selectedSide, setSelectedSide] = useState(initialSide);
   const [isTrading, setIsTrading] = useState(false);
   const [timeRemainingMs, setTimeRemainingMs] = useState(0);
   const [isConfirming, setIsConfirming] = useState(false);
@@ -55,7 +60,9 @@ export function BinaryTradePanel({
 
   // ── Live probabilities (Computed locally for smooth UI ticks) ────
   const { pUp, pDown } = useMemo(() => {
-    // Fallback to local calculation
+    if (market && (!isConnected || currentPrice <= 0) && serverProbability) {
+      return { pUp: serverProbability.up, pDown: serverProbability.down };
+    }
     if (!market || currentPrice <= 0) {
       return { pUp: 0.5, pDown: 0.5 };
     }
@@ -66,7 +73,14 @@ export function BinaryTradePanel({
       recentPrices,
     });
     return { pUp: result.probability, pDown: 1 - result.probability };
-  }, [market, currentPrice, timeRemainingMs, recentPrices]);
+  }, [
+    market,
+    currentPrice,
+    isConnected,
+    recentPrices,
+    serverProbability,
+    timeRemainingMs,
+  ]);
 
   // ── User positions ─────────────────────────────────────────────
   const userTrades = useMemo(() => {
@@ -126,7 +140,9 @@ export function BinaryTradePanel({
 
       updateUser(data.user);
       toast({
-        title: `${selectedSide === "up" ? "🟢 UP" : "🔴 DOWN"} position opened!`,
+        title: `${asset.symbol} ${selectedSide.toUpperCase()} position opened`,
+        notificationKind: "trade",
+        notificationHref: asset.path,
         description: `₹${numericAmount} at ${formatPaise(
           selectedSide === "up" ? pUp : pDown,
         )}`,
@@ -143,6 +159,7 @@ export function BinaryTradePanel({
       setIsTrading(false);
     }
   }, [
+    asset,
     market,
     user,
     numericAmount,
@@ -176,9 +193,11 @@ export function BinaryTradePanel({
 
         updateUser(data.user);
         toast({
+          notificationKind: "trade",
+          notificationHref: asset.path,
           title:
             ratio >= 1
-              ? "Position closed!"
+              ? `${asset.symbol} position closed`
               : `Sold ${Math.round(ratio * 100)}% of ${selectedSide.toUpperCase()}`,
           description: `You received ₹${data.cashOutValue.toFixed(2)}`,
         });
@@ -195,6 +214,7 @@ export function BinaryTradePanel({
       }
     },
     [
+      asset,
       market,
       user,
       isTrading,
@@ -298,6 +318,7 @@ export function BinaryTradePanel({
         {/* Outcome Selector — Up / Down */}
         <div className="grid grid-cols-2 gap-2">
           <button
+            aria-pressed={selectedSide === "up"}
             onClick={() => setSelectedSide("up")}
             className={cn(
               "flex flex-col items-center py-4 rounded-xl border-2 transition-all",
@@ -317,6 +338,7 @@ export function BinaryTradePanel({
             <span className="text-xl font-black">{formatPaise(pUp)}</span>
           </button>
           <button
+            aria-pressed={selectedSide === "down"}
             onClick={() => setSelectedSide("down")}
             className={cn(
               "flex flex-col items-center py-4 rounded-xl border-2 transition-all",

@@ -1,16 +1,13 @@
 import "dotenv/config";
 import { Router, type RequestHandler } from "express";
 import { isRecordId, withSystem } from "../database.ts";
-import multer from "multer";
 import User, { serializeUser } from "../models/User.ts";
 import Market, { calculateYesPrice } from "../models/Market.ts";
 import Treasury from "../models/Treasury.ts";
 import Comment from "../models/Comment.ts";
 import { ApiError, asyncRoute, transactionRoute } from "./asyncRoute.ts";
-import {
-  MAX_MARKET_IMAGE_BYTES,
-  uploadMarketImage,
-} from "../services/marketImages.ts";
+import { parseImageUpload } from "./imageUpload.ts";
+import { publicImageUrl, uploadImage } from "../services/images.ts";
 import {
   QUOTE_TTL_MS,
   calculateCurrentB,
@@ -22,24 +19,6 @@ import {
 } from "../../../shared/lmsr.ts";
 
 const router = Router();
-
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: MAX_MARKET_IMAGE_BYTES + 1, files: 1, fields: 0 },
-}).single("image");
-
-const parseImageUpload: RequestHandler = (req, res, next) => {
-  upload(req, res, (error) => {
-    if (error?.code === "LIMIT_FILE_SIZE") {
-      return next(
-        new ApiError(413, { error: "Images must be 5 MB or smaller." }),
-      );
-    }
-    if (error)
-      return next(new ApiError(400, { error: "Send one image file." }));
-    next();
-  });
-};
 
 function ensureAuthenticated(req, res, next) {
   if (req.user) return next();
@@ -422,7 +401,8 @@ router.post(
   parseImageUpload,
   asyncRoute(async (req, res) => {
     if (!req.file) return res.status(400).json({ error: "No file uploaded" });
-    return res.json({ url: await uploadMarketImage(req.file.buffer) });
+    const path = await uploadImage("market-images", req.file.buffer);
+    return res.json({ url: publicImageUrl("market-images", path) });
   }),
 );
 
@@ -1005,6 +985,7 @@ router.get(
         return {
           id: entry.user.id,
           name: entry.user.username,
+          avatarUrl: publicImageUrl("profile-images", entry.user.avatarPath),
           balance: Math.round(entry.user.balance),
           holdingsValue: Math.round(entry.holdingsValue),
           totalNetWorth: Math.round(entry.totalNetWorth),

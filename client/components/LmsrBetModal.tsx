@@ -241,7 +241,9 @@ export function LmsrBetModal({
       setQuote(null);
       setIsConfirming(false);
       toast({
-        title: "Trade Executed",
+        title: tradeType === "buy" ? "Shares bought" : "Shares sold",
+        notificationKind: "trade",
+        notificationHref: `/market/${market.id}`,
         description:
           tradeType === "buy"
             ? `Bought ${payload.trade.shares.toFixed(2)} ${selectedOption.name} shares.`

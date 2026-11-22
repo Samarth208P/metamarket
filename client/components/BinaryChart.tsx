@@ -9,8 +9,11 @@ import {
   Tooltip,
 } from "recharts";
 import { MARKET_DURATION_MS, type PricePoint } from "@shared/binaryPrice";
+import type { BinaryAsset } from "@shared/binaryAssets";
+import { cn } from "@/lib/utils";
 
 interface BinaryChartProps {
+  asset: BinaryAsset;
   priceHistory: PricePoint[];
   targetPrice: number;
   currentPrice: number;
@@ -18,6 +21,7 @@ interface BinaryChartProps {
 }
 
 export function BinaryChart({
+  asset,
   priceHistory,
   targetPrice,
   currentPrice,
@@ -68,12 +72,15 @@ export function BinaryChart({
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
             <img
-              src="/bitcoin-logo.svg"
-              className="w-4 h-4 drop-shadow-md"
-              alt="BTC"
+              src={asset.icon}
+              className={cn(
+                "size-4 rounded-full object-contain drop-shadow-md",
+                asset.symbol === "ETH" && "bg-indigo-200 p-0.5",
+              )}
+              alt=""
             />
             <span className="text-sm font-semibold text-zinc-400 tracking-wider uppercase">
-              BTC/USDT
+              {asset.symbol}/USDT
             </span>
             <span
               className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold ${
@@ -218,7 +225,7 @@ export function BinaryChart({
                     minimumFractionDigits: 2,
                     maximumFractionDigits: 2,
                   })}`,
-                  "BTC",
+                  asset.symbol,
                 ]}
               />
               <ReferenceLine

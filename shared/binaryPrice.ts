@@ -2,14 +2,14 @@
  * Binary Price Market — Probability Engine
  *
  * Implements a Modified Black-Scholes model for pricing
- * cash-or-nothing binary call options on BTC price.
+ * cash-or-nothing binary call options on an asset price.
  *
  * P_up = Φ(d2), where d2 = [ln(S/K) - (σ²/2)t] / (σ√t)
  */
 
 // ─── Constants ────────────────────────────────────────────────────────
 export const MARKET_DURATION_MS = 5 * 60 * 1000; // 5 minutes
-export const BTC_OUTCOME_HISTORY_LIMIT = 5;
+export const BINARY_OUTCOME_HISTORY_LIMIT = 5;
 export const DEFAULT_VOLATILITY = 0.04; // Increased from 0.0015 for more realistic (less jumpy) pricing
 export const VIV_JITTER_RANGE = 0.0001;
 export const MOMENTUM_BIAS_CAP = 0.05; // Max 5p shift from momentum
@@ -101,7 +101,7 @@ export function normalCDF(x: number): number {
  * Core d₂ calculation:
  *   d₂ = [ln(S/K) − (σ²/2)·t] / (σ·√t)
  *
- * @param currentPrice  S — live BTC price
+ * @param currentPrice  S — live asset price
  * @param targetPrice   K — "Price to Beat"
  * @param timeRemaining t — fraction (we use seconds / seconds-in-a-day)
  * @param volatility    σ — active volatility (base + jitter)
@@ -135,7 +135,7 @@ export function calculateUpProbability(
   timeRemainingMs: number,
   volatility: number = DEFAULT_VOLATILITY,
 ): number {
-  // Convert ms → fraction of a day for BTC vol scaling
+  // Convert ms → fraction of a day for volatility scaling
   const tDays = Math.max(0, timeRemainingMs) / (24 * 60 * 60 * 1000);
 
   if (tDays <= 0) {
@@ -221,8 +221,8 @@ export function calculateLiveProbability(params: {
 }
 
 /**
- * Calculate expected payout for a binary option trade.
- * Binary option: pays (amount / entryProbability) capped at 2x.
+ * Calculate the payout if a binary option wins by dividing the stake by its
+ * entry probability.
  */
 export function calculatePotentialPayout(
   amount: number,

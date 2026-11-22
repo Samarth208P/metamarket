@@ -1,112 +1,97 @@
-import { useState, useEffect } from "react";
+import { useSyncExternalStore } from "react";
+import { BINARY_ASSET_PAIRS, type BinaryAssetPair } from "@shared/binaryAssets";
 import type { PricePoint } from "@shared/binaryPrice";
 
-const BINANCE_WS_URL = "wss://data-stream.binance.vision:9443/ws/btcusdt@aggTrade";
-const MAX_HISTORY = 1000;
-const RECONNECT_DELAY = 3000;
+const MAX_HISTORY = 1_000;
+const RECONNECT_DELAY = 3_000;
 
-// Global state to persist data across page navigations
-let globalPrice = 0;
-let globalIsConnected = false;
-let globalPriceHistory: PricePoint[] = [];
-let observers: Set<(data: { price: number; isConnected: boolean; history: PricePoint[] }) => void> = new Set();
-let ws: WebSocket | null = null;
-let lastSampleTime = 0;
-let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-
-function notifyObservers() {
-  const data = {
-    price: globalPrice,
-    isConnected: globalIsConnected,
-    history: [...globalPriceHistory]
+function createFeed(assetPair: BinaryAssetPair) {
+  const observers = new Set<() => void>();
+  let socket: WebSocket | null = null;
+  let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+  let snapshot = {
+    price: 0,
+    isConnected: false,
+    priceHistory: [] as PricePoint[],
   };
-  observers.forEach(callback => callback(data));
-}
 
-function startGlobalFeed() {
-  if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
-
-  try {
-    ws = new WebSocket(BINANCE_WS_URL);
-
-    ws.onopen = () => {
-      globalIsConnected = true;
-      notifyObservers();
-    };
-
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        const newPrice = parseFloat(data.p);
-        if (!isNaN(newPrice) && newPrice > 0) {
-          const now = Date.now();
-          if (now - lastSampleTime >= 1000) {
-            globalPrice = newPrice;
-            lastSampleTime = now;
-            globalPriceHistory.push({ price: newPrice, timestamp: now });
-            if (globalPriceHistory.length > MAX_HISTORY) {
-              globalPriceHistory.shift();
-            }
-            notifyObservers();
-          }
-        }
-      } catch (e) {
-        // Ignore parse errors
-      }
-    };
-
-    ws.onclose = () => {
-      globalIsConnected = false;
-      ws = null;
-      notifyObservers();
-      if (reconnectTimer) clearTimeout(reconnectTimer);
-      reconnectTimer = setTimeout(startGlobalFeed, RECONNECT_DELAY);
-    };
-
-    ws.onerror = () => {
-      if (ws) ws.close();
-    };
-  } catch (e) {
-    if (reconnectTimer) clearTimeout(reconnectTimer);
-    reconnectTimer = setTimeout(startGlobalFeed, RECONNECT_DELAY);
+  function publish(update: Partial<typeof snapshot>) {
+    snapshot = { ...snapshot, ...update };
+    observers.forEach((observer) => observer());
   }
+
+  function connect() {
+    if (socket || observers.size === 0) return;
+
+    try {
+      socket = new WebSocket(
+        "wss://data-stream.binance.vision:9443/ws/" +
+          assetPair.toLowerCase() +
+          "@aggTrade",
+      );
+      socket.onopen = () => publish({ isConnected: true });
+      socket.onmessage = ({ data }) => {
+        try {
+          const price = Number(JSON.parse(data).p);
+          const timestamp = Date.now();
+          const last = snapshot.priceHistory[snapshot.priceHistory.length - 1];
+          if (
+            !Number.isFinite(price) ||
+            price <= 0 ||
+            (last && timestamp - last.timestamp < 1000)
+          )
+            return;
+          publish({
+            price,
+            priceHistory: [
+              ...snapshot.priceHistory.slice(1 - MAX_HISTORY),
+              { price, timestamp },
+            ],
+          });
+        } catch {
+          // Ignore malformed exchange messages.
+        }
+      };
+      socket.onerror = () => socket?.close();
+      socket.onclose = () => {
+        socket = null;
+        publish({ isConnected: false });
+        reconnectTimer = setTimeout(connect, RECONNECT_DELAY);
+      };
+    } catch {
+      reconnectTimer = setTimeout(connect, RECONNECT_DELAY);
+    }
+  }
+
+  return {
+    getSnapshot: () => snapshot,
+    subscribe(observer: () => void) {
+      observers.add(observer);
+      if (observers.size === 1) connect();
+      return () => {
+        observers.delete(observer);
+        if (observers.size > 0) return;
+        clearTimeout(reconnectTimer);
+        if (socket) {
+          socket.onopen =
+            socket.onmessage =
+            socket.onerror =
+            socket.onclose =
+              null;
+          socket.close();
+          socket = null;
+        }
+        publish({ isConnected: false });
+      };
+    },
+  };
 }
 
-export function useBinanceFeed() {
-  const [data, setData] = useState({
-    price: globalPrice,
-    isConnected: globalIsConnected,
-    priceHistory: globalPriceHistory
-  });
+const feeds = new Map(
+  BINARY_ASSET_PAIRS.map((pair) => [pair, createFeed(pair)]),
+);
 
-  useEffect(() => {
-    const observer = (newData: { price: number; isConnected: boolean; history: PricePoint[] }) => {
-      setData({
-        price: newData.price,
-        isConnected: newData.isConnected,
-        priceHistory: newData.history
-      });
-    };
-
-    observers.add(observer);
-    // Sync immediately
-    observer({ price: globalPrice, isConnected: globalIsConnected, history: globalPriceHistory });
-    startGlobalFeed();
-
-    return () => {
-      observers.delete(observer);
-      if (observers.size > 0) return;
-
-      if (reconnectTimer) clearTimeout(reconnectTimer);
-      reconnectTimer = null;
-      globalIsConnected = false;
-      if (ws) {
-        ws.onopen = ws.onmessage = ws.onerror = ws.onclose = null;
-        ws.close();
-        ws = null;
-      }
-    };
-  }, []);
-
-  return data;
+export function useBinanceFeed(assetPair: BinaryAssetPair) {
+  const feed = feeds.get(assetPair);
+  return useSyncExternalStore(feed.subscribe, feed.getSnapshot);
 }

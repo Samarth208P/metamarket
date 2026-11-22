@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useSearchParams } from "react-router-dom";
 import { Layout } from "@/components/Layout";
 import { BinaryChart } from "@/components/BinaryChart";
 import { BinaryTradePanel } from "@/components/BinaryTradePanel";
 import { useBinanceFeed } from "@/hooks/use-binance-feed";
 import {
-  BTC_OUTCOME_HISTORY_LIMIT,
+  BINARY_OUTCOME_HISTORY_LIMIT,
   type BinaryMarket as BinaryMarketType,
-  type PricePoint,
 } from "@shared/binaryPrice";
 import {
   Tooltip,
@@ -16,23 +16,37 @@ import {
 } from "@/components/ui/tooltip";
 import { Clock } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
+import { toast } from "@/hooks/use-toast";
+import { BINARY_ASSETS, type BinaryAssetPair } from "@shared/binaryAssets";
+import {
+  activeBinaryMarketQuery,
+  binaryOutcomeHistoryQuery,
+  binaryPriceHistoryQuery,
+} from "@/lib/binary-markets";
 
-export default function BinaryMarket() {
-  const { price, isConnected, priceHistory } = useBinanceFeed();
+const payoutFormat = new Intl.NumberFormat("en-IN", {
+  style: "currency",
+  currency: "INR",
+});
+
+export default function BinaryMarket({
+  assetPair,
+}: {
+  assetPair: BinaryAssetPair;
+}) {
+  const asset = BINARY_ASSETS[assetPair];
+  const { price, isConnected, priceHistory } = useBinanceFeed(assetPair);
   const { user, refreshUser } = useAuth();
+  const [searchParams] = useSearchParams();
+  const initialSide = searchParams.get("side") === "down" ? "down" : "up";
 
-  const { data: savedPrices, isPending: isPriceHistoryPending } = useQuery({
-    queryKey: ["binary-market-price-history"],
-    queryFn: async ({ signal }): Promise<PricePoint[]> => {
-      const response = await fetch("/mapi/binary-markets/price-history", {
-        signal,
-      });
-      if (!response.ok) throw new Error("Failed to load BTC price history");
-      return response.json();
-    },
-    refetchInterval: 10_000,
-    staleTime: 5000,
-  });
+  const { data: savedPrices, isPending: isPriceHistoryPending } = useQuery(
+    binaryPriceHistoryQuery(assetPair),
+  );
+
+  const { data: activeData, isError: activeMarketError } = useQuery(
+    activeBinaryMarketQuery(assetPair),
+  );
 
   const chartHistory = useMemo(() => {
     if (!savedPrices?.length) return priceHistory;
@@ -42,36 +56,14 @@ export default function BinaryMarket() {
       ...priceHistory.filter((point) => point.timestamp > lastSaved),
     ];
   }, [savedPrices, priceHistory]);
-  const chartPrice = chartHistory[chartHistory.length - 1]?.price ?? price;
+  const chartPrice =
+    isConnected && price > 0
+      ? price
+      : activeData?.livePrice ||
+        chartHistory[chartHistory.length - 1]?.price ||
+        0;
 
-  // Fetch the active market from the backend
-  const { data: activeData, isError: activeMarketError } = useQuery({
-    queryKey: ["binary-market-active"],
-    queryFn: async () => {
-      const res = await fetch("/mapi/binary-markets/active", {
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Failed to fetch");
-      return res.json();
-    },
-    // Poll faster when no market is active (gap between cycles)
-    refetchInterval: (query) => (query.state.data?.market ? 3000 : 1500),
-    staleTime: 1000,
-  });
-
-  // Fetch settled market history
-  const { data: historyData } = useQuery({
-    queryKey: ["binary-market-history"],
-    queryFn: async () => {
-      const res = await fetch("/mapi/binary-markets/history", {
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Failed to fetch");
-      return res.json();
-    },
-    refetchInterval: 10000,
-    staleTime: 5000,
-  });
+  const { data: historyData } = useQuery(binaryOutcomeHistoryQuery(assetPair));
 
   // Build recent prices array from our client-side feed
   const recentPrices = priceHistory.slice(-30).map((p) => p.price);
@@ -90,6 +82,39 @@ export default function BinaryMarket() {
 
   const activeMarket: BinaryMarketType | null = activeData?.market ?? null;
   const history: BinaryMarketType[] = historyData ?? [];
+  const latestSettlement = useRef<number>();
+
+  useEffect(() => {
+    latestSettlement.current = undefined;
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!user?.id || !historyData) return;
+    const latest = historyData[0] ? Date.parse(historyData[0].endTime) : 0;
+    const previous = latestSettlement.current;
+    if (previous !== undefined) {
+      for (const market of historyData) {
+        if (Date.parse(market.endTime) <= previous) break;
+        const positions = market.trades.filter(
+          (trade) => trade.userId === user.id && !trade.sold,
+        );
+        if (!positions.length) continue;
+        const payout = positions.reduce(
+          (total, trade) => total + trade.payout,
+          0,
+        );
+        toast({
+          type: "background",
+          title: `${asset.symbol} market settled`,
+          description: `${market.status === "settled_up" ? "UP" : "DOWN"} won. Payout ${payoutFormat.format(payout)}.`,
+          notificationKind: "market",
+          notificationHref: asset.path,
+          notificationKey: `${asset.symbol.toLowerCase()}-settled:${market.id}`,
+        });
+      }
+    }
+    latestSettlement.current = Math.max(previous ?? latest, latest);
+  }, [asset, historyData, user?.id]);
 
   // Keep a stable reference to the last known target price and market
   // so the chart doesn't break when market is null between cycles
@@ -109,7 +134,7 @@ export default function BinaryMarket() {
     if (latestSettledMarketId) {
       refreshUser();
     }
-  }, [latestSettledMarketId, refreshUser]);
+  }, [latestSettledMarketId, user?.id]);
 
   return (
     <Layout>
@@ -119,6 +144,7 @@ export default function BinaryMarket() {
           {/* Chart — spans 2 cols on lg */}
           <div className="lg:col-span-2">
             <BinaryChart
+              asset={asset}
               priceHistory={isPriceHistoryPending ? [] : chartHistory}
               targetPrice={stableTargetPrice}
               currentPrice={chartPrice}
@@ -130,7 +156,7 @@ export default function BinaryMarket() {
                 <Clock className="w-4 h-4 text-zinc-500" />
               </div>
               <div className="pl-1">
-                <PastOutcomes history={history} />
+                <PastOutcomes history={history} symbol={asset.symbol} />
               </div>
             </div>
 
@@ -141,11 +167,11 @@ export default function BinaryMarket() {
                   Description
                 </h4>
                 <p className="text-sm text-zinc-400 leading-relaxed max-w-2xl">
-                  Predict whether Bitcoin's price will be above or below a
-                  target snapshot in 5-minute cycles. Markets resolve based on
-                  the final price against the target price. If Final ≥ Target,{" "}
-                  <strong>UP</strong> wins. Otherwise, <strong>DOWN</strong>{" "}
-                  wins.
+                  Predict whether the {asset.symbol} price will be above or
+                  below a target snapshot in 5-minute cycles. Markets resolve
+                  based on the final price against the target price. If Final ≥
+                  Target, <strong>UP</strong> wins. Otherwise,{" "}
+                  <strong>DOWN</strong> wins.
                 </p>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 pt-6 border-t border-white/5">
@@ -154,7 +180,7 @@ export default function BinaryMarket() {
                     Price Source
                   </h4>
                   <p className="text-sm text-zinc-300 font-medium">
-                    Binance BTC/USDT Live Feed
+                    Binance {asset.symbol}/USDT Live Feed
                   </p>
                   <p className="text-[11px] text-zinc-500 mt-1">
                     Ultra-low latency WebSocket synchronization.
@@ -179,10 +205,13 @@ export default function BinaryMarket() {
           <div className="lg:col-span-1">
             {activeMarketError && !activeData ? (
               <p className="text-muted-foreground" role="status">
-                Live BTC markets are temporarily unavailable.
+                Live {asset.symbol} markets are temporarily unavailable.
               </p>
             ) : (
               <BinaryTradePanel
+                key={initialSide}
+                asset={asset}
+                initialSide={initialSide}
                 market={activeMarket}
                 currentPrice={price}
                 recentPrices={recentPrices}
@@ -197,14 +226,20 @@ export default function BinaryMarket() {
   );
 }
 
-function PastOutcomes({ history }: { history: BinaryMarketType[] }) {
+function PastOutcomes({
+  history,
+  symbol,
+}: {
+  history: BinaryMarketType[];
+  symbol: string;
+}) {
   // Render the oldest on the left and the newest on the right.
-  const recent = history.slice(0, BTC_OUTCOME_HISTORY_LIMIT).reverse();
+  const recent = history.slice(0, BINARY_OUTCOME_HISTORY_LIMIT).reverse();
 
   if (recent.length === 0) {
     return (
       <div className="flex gap-2.5 opacity-20">
-        {Array.from({ length: BTC_OUTCOME_HISTORY_LIMIT }, (_, i) => (
+        {Array.from({ length: BINARY_OUTCOME_HISTORY_LIMIT }, (_, i) => (
           <div key={i} className="w-7 h-7 rounded-full bg-zinc-700" />
         ))}
       </div>
@@ -212,7 +247,11 @@ function PastOutcomes({ history }: { history: BinaryMarketType[] }) {
   }
 
   return (
-    <div className="flex gap-2.5" role="group" aria-label="Recent BTC outcomes">
+    <div
+      className="flex gap-2.5"
+      role="group"
+      aria-label={`Recent ${symbol} outcomes`}
+    >
       {recent.map((m) => {
         const isUp = m.status === "settled_up";
         const time = new Date(m.endTime).toLocaleTimeString("en-IN", {

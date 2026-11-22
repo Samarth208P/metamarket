@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Layout } from "@/components/Layout";
+import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { Trophy, Medal, Award, TrendingUp } from "lucide-react";
 import { motion } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
@@ -125,6 +126,11 @@ export default function Leaderboard() {
                             </span>
                             {getRankIndicator(user.rankTrend)}
                           </div>
+                          <ProfileAvatar
+                            username={user.name}
+                            avatarUrl={user.avatarUrl}
+                            className="h-10 w-10 text-sm"
+                          />
                           <div>
                             <h3 className="text-lg font-bold text-foreground">
                               {user.name}

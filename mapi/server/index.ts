@@ -9,6 +9,7 @@ export { connectDB };
 
 import marketRoutes from "./routes/markets.ts";
 import adminRoutes from "./routes/admin.ts";
+import profileImageRoutes from "./routes/profileImage.ts";
 import {
   FRONTEND_URL,
   initializePassport,
@@ -123,6 +124,7 @@ export async function createServer({
 
   apiRouter.use(requireOnboardingComplete);
   apiRouter.patch("/user/username", handleUpdateUsername);
+  apiRouter.use("/user/avatar", profileImageRoutes);
   apiRouter.post(
     "/user/starter-gift/acknowledge",
     handleAcknowledgeStarterGift,

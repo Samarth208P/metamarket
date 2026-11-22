@@ -10,6 +10,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Navigate, useSearchParams } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 
@@ -162,25 +163,31 @@ function OnboardingForm({ initialUsername }: { initialUsername: string }) {
         </p>
       </div>
 
-      <fieldset className="space-y-3 border-t pt-3" disabled={pending}>
-        <legend className="pr-2 text-sm font-medium">Terms of play</legend>
-        <label className="flex cursor-pointer items-start gap-3 text-sm">
-          <input
-            className="mt-1 h-4 w-4 shrink-0 accent-primary"
-            type="checkbox"
+      <fieldset className="group space-y-2 pt-2" disabled={pending}>
+        <legend className="text-sm font-medium">Terms of play</legend>
+        <label
+          htmlFor="virtual-funds"
+          className="flex cursor-pointer items-start gap-3 rounded-md border border-border px-3 py-2.5 text-sm leading-5 group-disabled:cursor-not-allowed"
+        >
+          <Checkbox
+            id="virtual-funds"
+            className="mt-0.5"
             required
             checked={virtualFunds}
-            onChange={(event) => setVirtualFunds(event.target.checked)}
+            onCheckedChange={(checked) => setVirtualFunds(checked === true)}
           />
           {PLAY_TERMS.virtualFunds}
         </label>
-        <label className="flex cursor-pointer items-start gap-3 text-sm">
-          <input
-            className="mt-1 h-4 w-4 shrink-0 accent-primary"
-            type="checkbox"
+        <label
+          htmlFor="play-only"
+          className="flex cursor-pointer items-start gap-3 rounded-md border border-border px-3 py-2.5 text-sm leading-5 group-disabled:cursor-not-allowed"
+        >
+          <Checkbox
+            id="play-only"
+            className="mt-0.5"
             required
             checked={playOnly}
-            onChange={(event) => setPlayOnly(event.target.checked)}
+            onCheckedChange={(checked) => setPlayOnly(checked === true)}
           />
           {PLAY_TERMS.playOnly}
         </label>

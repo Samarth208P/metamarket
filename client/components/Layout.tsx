@@ -1,11 +1,14 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { Search, Menu, X, User, LogOut, Settings, Gift } from "lucide-react";
+import { Search, Menu, X, LogOut, Settings, Gift } from "lucide-react";
+import { ProfileAvatar } from "@/components/ProfileAvatar";
+import { AnimatedShinyText } from "@/components/ui/animated-shiny-text";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+import { NotificationCenter } from "@/components/NotificationCenter";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -116,9 +119,12 @@ export function Layout({ children }: LayoutProps) {
                     <Button
                       variant="ghost"
                       aria-label="Account menu"
-                      className="h-8 w-8 p-0 rounded-full bg-muted border border-border"
+                      className="h-8 w-8 rounded-full p-0"
                     >
-                      <User className="w-4 h-4 text-muted-foreground" />
+                      <ProfileAvatar
+                        username={user.username}
+                        avatarUrl={user.avatarUrl}
+                      />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-48">
@@ -152,10 +158,26 @@ export function Layout({ children }: LayoutProps) {
             )}
           </div>
 
-          {/* Mobile Actions */}
-          <div className="md:hidden flex items-center gap-2">
+          <div className="ml-2 flex shrink-0 items-center gap-1">
+            {user && <NotificationCenter />}
+            {user && (
+              <Link
+                to="/settings"
+                aria-label="Account settings"
+                className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:hidden"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                <ProfileAvatar
+                  username={user.username}
+                  avatarUrl={user.avatarUrl}
+                />
+              </Link>
+            )}
             <button
-              className="p-2 -mr-2"
+              type="button"
+              aria-label="Navigation menu"
+              aria-expanded={mobileMenuOpen}
+              className="-mr-2 rounded-md p-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:hidden"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             >
               {mobileMenuOpen ? (
@@ -254,8 +276,14 @@ function StarterGift({ amount }: { amount: number }) {
         <Gift className="h-5 w-5 shrink-0 text-primary" aria-hidden="true" />
         <div className="flex-1">
           <p role="status" className="text-sm font-medium">
-            Starter gift: ₹{amount.toLocaleString("en-IN")} in play money added
-            to your balance.
+            Starter gift:{" "}
+            <AnimatedShinyText
+              className="whitespace-nowrap font-bold"
+              shimmerWidth={32}
+            >
+              ₹{amount.toLocaleString("en-IN")}
+            </AnimatedShinyText>{" "}
+            in play money added to your balance.
           </p>
           {error && (
             <p role="alert" className="text-xs text-destructive">

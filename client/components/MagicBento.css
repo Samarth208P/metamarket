@@ -1,0 +1,107 @@
+.magic-bento {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+}
+
+.magic-bento__tile {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border-radius: 18px;
+  background: hsl(var(--card));
+  background: linear-gradient(
+    145deg,
+    color-mix(
+        in srgb,
+        var(--bento-accent, hsl(var(--primary))) 8%,
+        hsl(var(--card))
+      )
+      0%,
+    hsl(var(--card)) 45%
+  );
+  box-shadow: inset 0 0 0 1px hsl(var(--border));
+}
+
+.magic-bento__content {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.magic-bento__effects,
+.magic-bento__effects::after {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.magic-bento__effects {
+  z-index: -1;
+  overflow: hidden;
+}
+
+.magic-bento__tile[data-lit] .magic-bento__effects {
+  background: radial-gradient(
+    circle var(--bento-spotlight-radius) at var(--bento-x) var(--bento-y),
+    color-mix(
+      in srgb,
+      var(--bento-accent, hsl(var(--primary))) 7%,
+      transparent
+    ),
+    transparent
+  );
+}
+
+.magic-bento__tile[data-lit] .magic-bento__effects::after {
+  content: "";
+  padding: 1px;
+  background: radial-gradient(
+    circle var(--bento-spotlight-radius) at var(--bento-x) var(--bento-y),
+    color-mix(
+      in srgb,
+      var(--bento-accent, hsl(var(--primary))) 40%,
+      transparent
+    ),
+    transparent
+  );
+  mask:
+    linear-gradient(#000 0 0) content-box exclude,
+    linear-gradient(#000 0 0);
+}
+
+.magic-bento__ripple {
+  position: absolute;
+  aspect-ratio: 1;
+  border: 2px solid var(--bento-accent, hsl(var(--primary)));
+  border-radius: 50%;
+  box-shadow: 0 0 22px var(--bento-accent, hsl(var(--primary)));
+  opacity: 0;
+}
+
+@media (min-width: 640px) {
+  .magic-bento {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .magic-bento {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    gap: 16px;
+  }
+
+  .magic-bento__tile {
+    grid-column: span var(--bento-span);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .magic-bento__ripple {
+    display: none;
+  }
+}

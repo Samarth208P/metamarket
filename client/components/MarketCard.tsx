@@ -38,7 +38,7 @@ export function MarketCard({
     (endDate && new Date(endDate) < new Date()) || status !== "active";
 
   const handleCardClick = (e: React.MouseEvent) => {
-    e.preventDefault();
+    e.stopPropagation();
     setShowBetModal(true);
   };
 
@@ -65,29 +65,40 @@ export function MarketCard({
 
   return (
     <>
-      <div
+      <article
         onClick={handleCardClick}
-        className="group flex flex-col bg-card border border-border rounded-xl p-4 transition-all cursor-pointer hover:border-primary/30 hover:shadow-sm h-full"
+        className="flex min-h-[12.5rem] flex-1 cursor-pointer flex-col p-4 sm:p-5"
       >
-        <div className="flex items-start justify-between mb-3">
-          <div className="flex items-center gap-3">
+        <div className="mb-4 flex items-start justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-2.5">
             {logoUrl ? (
               <img
                 src={logoUrl}
-                alt="logo"
-                className="w-10 h-10 rounded-full object-cover border border-border"
+                alt=""
+                loading="lazy"
+                className="size-9 shrink-0 rounded-lg border border-border object-cover"
               />
             ) : (
-              <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center border border-border text-xs font-bold text-muted-foreground">
+              <div
+                aria-hidden="true"
+                className="grid size-9 shrink-0 place-items-center rounded-lg border border-border bg-muted text-sm font-bold text-muted-foreground"
+              >
                 {category.charAt(0)}
               </div>
             )}
+            <span className="text-xs font-medium text-muted-foreground">
+              {category}
+            </span>
           </div>
           <button
+            type="button"
+            aria-label={`Bookmark ${title}`}
+            aria-pressed={Boolean(isBookmarked)}
             onClick={handleBookmarkToggle}
-            className="p-1 rounded-full hover:bg-muted transition-colors text-muted-foreground"
+            className="grid size-9 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
           >
             <Bookmark
+              aria-hidden="true"
               className={cn(
                 "w-4 h-4",
                 isBookmarked && "fill-current text-primary",
@@ -96,13 +107,19 @@ export function MarketCard({
           </button>
         </div>
 
-        <h3 className="font-semibold text-foreground leading-snug text-base mb-4 line-clamp-3">
-          {title}
+        <h3 className="mb-4 text-base font-semibold leading-snug text-foreground">
+          <button
+            type="button"
+            onClick={handleCardClick}
+            className="rounded-sm text-left hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          >
+            {title}
+          </button>
         </h3>
 
         <div className="mt-auto space-y-3">
           {marketType === "multi" && primaryOptions.length > 0 ? (
-            <div className="space-y-1.5 max-h-[160px] overflow-y-auto">
+            <div className="max-h-[132px] space-y-1.5 overflow-y-auto overscroll-contain">
               {primaryOptions.map((option) => (
                 <div
                   key={option.id}
@@ -113,8 +130,10 @@ export function MarketCard({
                   </span>
                   <div className="flex items-center gap-1.5 shrink-0">
                     <button
+                      type="button"
+                      aria-label={`${option.name}: ${option.price.toFixed(0)}p`}
                       onClick={(e) => handleOpenOptionModal(e, option.id)}
-                      className="px-2.5 py-1 text-xs font-bold rounded-md transition-colors bg-yes/10 hover:bg-yes/20 text-yes"
+                      className="rounded-md bg-emerald-400/10 px-2.5 py-1 text-xs font-bold text-emerald-700 transition-colors hover:bg-emerald-400/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring dark:text-emerald-300"
                     >
                       {option.price.toFixed(0)}p
                     </button>
@@ -127,23 +146,19 @@ export function MarketCard({
               {primaryOptions.map((option, idx) => (
                 <button
                   key={option.id}
+                  type="button"
                   onClick={(e) => handleOpenOptionModal(e, option.id)}
                   className={cn(
-                    "flex items-center justify-between p-2.5 rounded-lg transition-all group/btn",
+                    "flex items-center justify-between gap-2 rounded-lg border p-2.5 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
                     idx === 0
-                      ? "bg-yes/20 hover:bg-yes text-yes hover:text-white border border-yes/40"
-                      : "bg-no/20 hover:bg-no text-no hover:text-white border border-no/40",
+                      ? "border-emerald-400/20 bg-emerald-400/10 text-emerald-700 hover:bg-emerald-400/20 dark:text-emerald-300"
+                      : "border-rose-400/20 bg-rose-400/10 text-rose-700 hover:bg-rose-400/20 dark:text-rose-300",
                   )}
                 >
-                  <span className="text-sm font-black uppercase tracking-wider">
+                  <span className="text-sm font-semibold">
                     {option.shortName || option.name}
                   </span>
-                  <span
-                    className={cn(
-                      "text-sm font-black group-hover/btn:text-white",
-                      idx === 0 ? "text-yes" : "text-no",
-                    )}
-                  >
+                  <span className="shrink-0 text-sm font-bold tabular-nums">
                     {option.price.toFixed(0)}p
                   </span>
                 </button>
@@ -154,7 +169,11 @@ export function MarketCard({
           <div className="flex items-center justify-between pt-3 border-t border-border text-xs font-medium text-muted-foreground">
             <span>₹{volume.toLocaleString()} Vol.</span>
             {endDate && (
-              <span className={cn(isClosed && "text-no font-bold")}>
+              <span
+                className={cn(
+                  isClosed && "font-bold text-rose-700 dark:text-rose-300",
+                )}
+              >
                 {isClosed
                   ? "Closed"
                   : `Ends ${new Date(endDate).toLocaleString("en-IN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata" })}`}
@@ -162,7 +181,7 @@ export function MarketCard({
             )}
           </div>
         </div>
-      </div>
+      </article>
 
       <LmsrBetModal
         isOpen={showBetModal}

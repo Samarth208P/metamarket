@@ -1,6 +1,7 @@
 import { newId, query, withSystem } from "../database.ts";
+import { DEFAULT_BINARY_ASSET } from "../../../shared/binaryAssets.ts";
 import {
-  BTC_OUTCOME_HISTORY_LIMIT,
+  BINARY_OUTCOME_HISTORY_LIMIT,
   type BinaryPriceSnapshot,
 } from "../../../shared/binaryPrice.ts";
 
@@ -91,35 +92,39 @@ const BinaryMarket = {
     return result.rows[0] ? hydrate(result.rows[0]) : null;
   },
 
-  async findActive(endTime?: Date) {
+  async findActive(endTime?: Date, assetPair: string = DEFAULT_BINARY_ASSET) {
     const result = await query<BinaryRow>(
       `select m.*, ${tradesForMarket} from metamarket.binary_markets m
-       where status = 'active' and ($1::timestamptz is null or end_time = $1)
+       where asset_pair = $2 and status = 'active' and ($1::timestamptz is null or end_time = $1)
        order by end_time desc limit 1`,
-      [endTime ?? null],
+      [endTime ?? null, assetPair],
     );
     return result.rows[0] ? hydrate(result.rows[0]) : null;
   },
 
-  async listHistory() {
+  async listHistory(assetPair: string = DEFAULT_BINARY_ASSET) {
     const result = await query<BinaryRow>(
       `select m.id, m.asset_pair, m.start_time, m.end_time, m.status, m.created_at, m.updated_at,
               m.state - 'priceSnapshots' as state, ${tradesForMarket}
        from metamarket.binary_markets m
-       where asset_pair = 'BTCUSDT' and status in ('settled_up', 'settled_down')
+       where asset_pair = $2 and status in ('settled_up', 'settled_down')
        order by end_time desc limit $1`,
-      [BTC_OUTCOME_HISTORY_LIMIT],
+      [BINARY_OUTCOME_HISTORY_LIMIT, assetPair],
     );
     return result.rows.map(hydrate);
   },
 
-  async listPriceSnapshots(from: Date, through: Date) {
+  async listPriceSnapshots(
+    from: Date,
+    through: Date,
+    assetPair: string = DEFAULT_BINARY_ASSET,
+  ) {
     const result = await query<{ snapshots: BinaryPriceSnapshot[] | null }>(
       `select state->'priceSnapshots' as snapshots
        from metamarket.binary_markets
-       where asset_pair = 'BTCUSDT' and end_time >= $1 and start_time <= $2
+       where asset_pair = $3 and end_time >= $1 and start_time <= $2
        order by start_time`,
-      [from, through],
+      [from, through, assetPair],
     );
     return result.rows.flatMap(({ snapshots }) => snapshots ?? []);
   },
@@ -147,7 +152,7 @@ const BinaryMarket = {
       );
       return result.rows[0]
         ? hydrate(result.rows[0])
-        : BinaryMarket.findActive(endTime);
+        : BinaryMarket.findActive(endTime, assetPair);
     });
   },
 
@@ -182,12 +187,12 @@ const BinaryMarket = {
     );
   },
 
-  async listExpired(limit?: number) {
+  async listExpired(limit?: number, assetPair: string = DEFAULT_BINARY_ASSET) {
     const result = await withSystem(() =>
       query<BinaryRow>(
         `select m.*, ${tradesForMarket} from metamarket.binary_markets m
-       where status in ('active', 'settling') and end_time <= now() order by end_time limit $1`,
-        [limit ?? null],
+       where asset_pair = $2 and status in ('active', 'settling') and end_time <= now() order by end_time limit $1`,
+        [limit ?? null, assetPair],
       ),
     );
     return result.rows.map(hydrate);
@@ -221,16 +226,16 @@ const BinaryMarket = {
     );
   },
 
-  async pruneHistory() {
+  async pruneHistory(assetPair: string = DEFAULT_BINARY_ASSET) {
     return withSystem(() =>
       query(
         `delete from metamarket.binary_markets
        where id in (
          select id from metamarket.binary_markets
-         where asset_pair = 'BTCUSDT' and status in ('settled_up', 'settled_down')
+         where asset_pair = $2 and status in ('settled_up', 'settled_down')
          order by end_time desc offset $1
        )`,
-        [BTC_OUTCOME_HISTORY_LIMIT],
+        [BINARY_OUTCOME_HISTORY_LIMIT, assetPair],
       ),
     );
   },

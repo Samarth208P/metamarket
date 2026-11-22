@@ -1,5 +1,6 @@
 import type { User as Account } from "../../../shared/api.ts";
 import { newId, query, withSystem } from "../database.ts";
+import { publicImageUrl } from "../services/images.ts";
 
 export const STARTER_BALANCE = 1000;
 
@@ -9,6 +10,7 @@ export interface IUser {
   email: string;
   name: string;
   username?: string;
+  avatarPath?: string | null;
   termsAcceptedAt?: Date;
   starterGiftAmount?: number;
   starterGiftSeenAt?: Date;
@@ -49,6 +51,7 @@ export function serializeUser(user: IUser): Account {
     email: user.email,
     name: user.name,
     username: user.username ?? null,
+    avatarUrl: publicImageUrl("profile-images", user.avatarPath),
     termsAcceptedAt: user.termsAcceptedAt?.toISOString() ?? null,
     needsOnboarding: needsOnboarding(user),
     starterGift:
@@ -64,7 +67,7 @@ export function serializeUser(user: IUser): Account {
 }
 
 const accountColumns = `
-  id, google_id as "googleId", email, name, username,
+  id, google_id as "googleId", email, name, username, avatar_path as "avatarPath",
   terms_accepted_at as "termsAcceptedAt", starter_gift_amount::float8 as "starterGiftAmount",
   starter_gift_seen_at as "starterGiftSeenAt", is_admin as "isAdmin", balance::float8 as balance,
   trade_history as "tradeHistory", positions, holdings, last_rank as "lastRank",
@@ -128,6 +131,19 @@ const User = {
       `update metamarket.accounts set username = $2, updated_at = now()
        where id = $1 returning username`,
       [id, username],
+    );
+    return result.rows[0] ?? null;
+  },
+
+  async updateAvatar(id: string, path: string | null) {
+    const result = await query<{ previousPath: string | null }>(
+      `with previous as (
+         select avatar_path from metamarket.accounts where id = $1 for no key update
+       )
+       update metamarket.accounts set avatar_path = $2, updated_at = now()
+       from previous where id = $1
+       returning previous.avatar_path as "previousPath"`,
+      [id, path],
     );
     return result.rows[0] ?? null;
   },

@@ -8,9 +8,9 @@ interface MarketHistory {
   payout: number | null;
 }
 
-// BTC rounds store the side and execution price or payout in the history title.
-const btcHistoryTitle =
-  /^BTC (?:UP|DOWN) (?:@ (\d+p)|Payout) \(Tgt: (\$[^)]+)\)$/;
+// Binary rounds store the asset, side and execution price or payout in the history title.
+const binaryHistoryTitle =
+  /^(BTC|ETH) (?:UP|DOWN) (?:@ (\d+p)|Payout) \(Tgt: (\$[^)]+)\)$/;
 
 export function groupPortfolioHistory(history: TradeHistoryEntry[] = []) {
   const sortedHistory = [...history].sort(
@@ -20,12 +20,14 @@ export function groupPortfolioHistory(history: TradeHistoryEntry[] = []) {
   let totalTrades = 0;
 
   for (const entry of sortedHistory) {
-    const btc = btcHistoryTitle.exec(entry.marketTitle);
+    const binary = binaryHistoryTitle.exec(entry.marketTitle);
     let market = markets.get(entry.marketId);
     if (!market) {
       market = {
         id: entry.marketId,
-        title: btc ? `BTC Up or Down (Target ${btc[2]})` : entry.marketTitle,
+        title: binary
+          ? `${binary[1]} Up or Down (Target ${binary[3]})`
+          : entry.marketTitle,
         latestActivity: entry.timestamp,
         trades: [],
         payout: null,
@@ -36,7 +38,7 @@ export function groupPortfolioHistory(history: TradeHistoryEntry[] = []) {
     if (entry.tradeType === "payout") {
       market.payout = (market.payout ?? 0) + entry.amount;
     } else {
-      market.trades.push({ entry, price: btc?.[1] });
+      market.trades.push({ entry, price: binary?.[2] });
       totalTrades++;
     }
   }

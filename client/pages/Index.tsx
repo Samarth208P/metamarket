@@ -1,27 +1,19 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/Layout";
+import { BinaryMarketCard } from "@/components/BinaryMarketCard";
+import { MagicBento, type MagicBentoItem } from "@/components/MagicBento";
 import { MarketCard } from "@/components/MarketCard";
 import { MarketErrorBoundary } from "@/components/MarketErrorBoundary";
 import { Market } from "@shared/api";
 import { Search, Activity, CheckCircle2, Bookmark } from "lucide-react";
-import { useLocation, useNavigate, Link } from "react-router-dom";
-import { Badge } from "@/components/ui/badge";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-
-async function fetchMarkets(): Promise<Market[]> {
-  const response = await fetch("/mapi/markets", {
-    credentials: "include",
-  });
-
-  if (!response.ok) {
-    throw new Error("Unable to load markets");
-  }
-
-  return response.json();
-}
+import { binaryMarketCategory, binaryMarketTitle } from "@/lib/binary-markets";
+import { fetchMarkets, marketCatalogKey } from "@/lib/markets";
+import { BINARY_ASSETS, BINARY_ASSET_PAIRS } from "@shared/binaryAssets";
 
 export default function Index() {
   const navigate = useNavigate();
@@ -34,14 +26,24 @@ export default function Index() {
   const tags = ["Politics", "Crypto", "Sports", "Business", "Entertainment"];
 
   const { data, isLoading, isError } = useQuery<Market[]>({
-    queryKey: ["markets"],
+    queryKey: marketCatalogKey,
     queryFn: fetchMarkets,
     refetchInterval: 15000,
   });
 
   const [markets, setMarkets] = useState<Market[]>([]);
 
-  const { user, refreshUser, bookmarks } = useAuth();
+  const { user, refreshUser, bookmarks, toggleBookmark } = useAuth();
+  const visibleBinaryMarkets = BINARY_ASSET_PAIRS.filter((pair) => {
+    const asset = BINARY_ASSETS[pair];
+    return (
+      (!selectedTag || selectedTag === binaryMarketCategory) &&
+      (!showBookmarksOnly || bookmarks.includes(asset.path)) &&
+      [binaryMarketTitle(asset), asset.name, binaryMarketCategory].some(
+        (value) => value.toLowerCase().includes(query.toLowerCase()),
+      )
+    );
+  });
 
   useEffect(() => {
     if (data) {
@@ -62,6 +64,7 @@ export default function Index() {
 
   const liveMarkets = filteredMarkets.filter((m) => m.status === "active");
   const resolvedMarkets = filteredMarkets.filter((m) => m.status !== "active");
+  const liveMarketCount = liveMarkets.length + visibleBinaryMarkets.length;
 
   const handleTrade = (marketId: string, updatedMarket: Market) => {
     setMarkets((current) =>
@@ -71,93 +74,108 @@ export default function Index() {
     );
   };
 
-  const renderMarket = (market: Market) => (
-    <MarketErrorBoundary
-      key={market.id}
-      market={market.id}
-      resetKey={market}
-      fallback={
-        <div className="rounded-xl border border-border bg-card p-4">
-          <h3 className="font-semibold">{market.title}</h3>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Market temporarily unavailable.
-          </p>
-        </div>
-      }
-    >
-      <MarketCard {...market} onTrade={handleTrade} />
-    </MarketErrorBoundary>
+  const marketTile = (market: Market): MagicBentoItem => ({
+    id: market.id,
+    content: (
+      <MarketErrorBoundary
+        market={market.id}
+        resetKey={market}
+        fallback={
+          <article className="p-5">
+            <h3 className="font-semibold">{market.title}</h3>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Market temporarily unavailable.
+            </p>
+          </article>
+        }
+      >
+        <MarketCard {...market} onTrade={handleTrade} />
+      </MarketErrorBoundary>
+    ),
+  });
+
+  const binaryTiles = visibleBinaryMarkets.map(
+    (pair, index): MagicBentoItem => {
+      const { path, accent } = BINARY_ASSETS[pair];
+      return {
+        id: path,
+        accent,
+        colSpan: visibleBinaryMarkets.length === 1 ? 8 : index === 0 ? 7 : 5,
+        content: (
+          <BinaryMarketCard
+            assetPair={pair}
+            isBookmarked={bookmarks.includes(path)}
+            onToggleBookmark={() => toggleBookmark(path)}
+          />
+        ),
+      };
+    },
   );
+
+  const filterClass = (active: boolean) =>
+    cn(
+      "inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full border px-3.5 py-2 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+      active
+        ? "border-primary/35 bg-primary/10 text-primary"
+        : "border-transparent text-muted-foreground hover:bg-muted/70 hover:text-foreground",
+    );
 
   return (
     <Layout>
-      <section className="container mx-auto px-4 pt-2 pb-8 md:pt-4 max-w-[1400px]">
-        {/* Tag Bar */}
-        <div className="flex items-center gap-6 mb-4 overflow-x-auto pb-2 no-scrollbar border-b border-border/20">
+      <section className="container mx-auto max-w-[1400px] px-4 pb-12 pt-6 sm:pt-9">
+        <h1 className="mb-4 text-3xl font-extrabold tracking-tight sm:text-4xl">
+          Markets
+        </h1>
+        <div
+          className="mb-6 flex items-center gap-1 overflow-x-auto border-b border-border pb-3 sm:mb-8 sm:gap-2"
+          role="group"
+          aria-label="Market filters"
+        >
           <button
+            type="button"
+            aria-pressed={!selectedTag && !showBookmarksOnly}
             onClick={() => {
               setSelectedTag(null);
               setShowBookmarksOnly(false);
             }}
-            className={cn(
-              "px-1 py-3 text-sm font-bold transition-all whitespace-nowrap relative",
-              !selectedTag && !showBookmarksOnly
-                ? "text-primary"
-                : "text-muted-foreground hover:text-foreground",
-            )}
+            className={filterClass(!selectedTag && !showBookmarksOnly)}
           >
             All Markets
-            {!selectedTag && !showBookmarksOnly && (
-              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-full" />
-            )}
           </button>
 
           {user && (
             <button
+              type="button"
+              aria-pressed={showBookmarksOnly}
               onClick={() => {
                 setShowBookmarksOnly(true);
                 setSelectedTag(null);
               }}
-              className={cn(
-                "px-1 py-3 text-sm font-bold transition-all whitespace-nowrap flex items-center gap-2 relative",
-                showBookmarksOnly
-                  ? "text-primary"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
+              className={filterClass(showBookmarksOnly)}
             >
               <Bookmark
+                aria-hidden="true"
                 className={cn(
                   "w-4 h-4",
                   showBookmarksOnly ? "fill-current" : "",
                 )}
               />
               Bookmarks
-              {showBookmarksOnly && (
-                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-full" />
-              )}
             </button>
           )}
-
-          <div className="h-4 w-[1px] bg-border mx-2 shrink-0 opacity-50" />
 
           {tags.map((tag) => (
             <button
               key={tag}
+              type="button"
+              aria-pressed={selectedTag === tag}
               onClick={() => {
                 setSelectedTag(tag);
                 setShowBookmarksOnly(false);
               }}
-              className={cn(
-                "px-1 py-3 text-sm font-bold transition-all whitespace-nowrap relative",
-                selectedTag === tag
-                  ? "text-primary"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
+              className={filterClass(selectedTag === tag)}
             >
               {tag}
-              {selectedTag === tag && (
-                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-full" />
-              )}
             </button>
           ))}
         </div>
@@ -171,118 +189,88 @@ export default function Index() {
           </div>
         )}
 
-        {!query && !selectedTag && !showBookmarksOnly && (
-          <Link
-            to="/btc"
-            className="block mb-8 relative rounded-2xl border border-border bg-card p-5 hover:border-primary/30 transition-all shadow-md group overflow-hidden"
-          >
-            <div className="absolute inset-0 bg-gradient-to-r from-orange-500/5 to-transparent pointer-events-none" />
-            <div className="flex flex-col gap-4">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-xl bg-[#f7931a] flex items-center justify-center shrink-0 shadow-lg">
-                  <span className="text-white text-2xl font-black">₿</span>
-                </div>
-                <h3 className="text-xl font-bold group-hover:text-primary transition-colors">
-                  BTC 5 Minute Up or Down
-                </h3>
+        <div className="space-y-12">
+          {liveMarketCount > 0 && (
+            <section className="space-y-4" aria-labelledby="live-markets">
+              <div className="flex items-center justify-between gap-3">
+                <h2
+                  id="live-markets"
+                  className="flex items-center gap-2 text-lg font-bold tracking-tight"
+                >
+                  <Activity aria-hidden="true" className="size-5 text-yes" />
+                  Live markets
+                </h2>
+                <span className="text-sm tabular-nums text-muted-foreground">
+                  {liveMarketCount}{" "}
+                  {liveMarketCount === 1 ? "market" : "markets"}
+                </span>
               </div>
+              <MagicBento
+                items={[...binaryTiles, ...liveMarkets.map(marketTile)]}
+              />
+            </section>
+          )}
 
-              <div className="grid grid-cols-2 gap-3 mt-2">
-                <div className="bg-yes/20 rounded-xl p-3 flex justify-center text-yes border border-yes/20 font-bold text-lg hover:bg-yes/30 transition-colors">
-                  Up
-                </div>
-                <div className="bg-no/20 rounded-xl p-3 flex justify-center text-no border border-no/20 font-bold text-lg hover:bg-no/30 transition-colors">
-                  Down
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between mt-1 text-sm text-muted-foreground">
-                <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                  <span className="font-bold text-red-500 tracking-wider">
-                    LIVE
-                  </span>
-                  <span>· Bitcoin</span>
-                </div>
-                <Bookmark className="w-4 h-4" />
-              </div>
+          {isLoading ? (
+            <div className="flex flex-col items-center justify-center py-32 gap-6">
+              <img
+                src="/animated-logo.svg"
+                alt="Loading"
+                className="w-32 h-32"
+              />
+              <p className="text-sm font-bold text-muted-foreground uppercase tracking-widest">
+                Finding Markets
+              </p>
             </div>
-          </Link>
-        )}
-
-        {isLoading ? (
-          <div className="flex flex-col items-center justify-center py-32 gap-6">
-            <img src="/animated-logo.svg" alt="Loading" className="w-32 h-32" />
-            <p className="text-sm font-bold text-muted-foreground uppercase tracking-widest">
-              Finding Markets
-            </p>
-          </div>
-        ) : isError ? (
-          <div className="text-center py-16">
-            <p className="text-sm font-semibold text-muted-foreground">
-              Unable to load markets right now.
-            </p>
-          </div>
-        ) : filteredMarkets.length > 0 ? (
-          <div className="space-y-12">
-            {/* Live Markets Section */}
-            {liveMarkets.length > 0 && (
-              <div className="space-y-6">
-                <div className="flex items-center justify-between border-b border-border pb-2">
-                  <h2 className="text-lg font-bold flex items-center gap-2">
-                    <Activity className="w-5 h-5 text-yes" />
-                    Live Markets
-                  </h2>
-                  <span className="text-xs font-bold text-muted-foreground uppercase">
-                    {liveMarkets.length} Open
-                  </span>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                  {liveMarkets.map(renderMarket)}
-                </div>
+          ) : isError ? (
+            <div className="text-center py-16">
+              <p className="text-sm font-semibold text-muted-foreground">
+                Unable to load markets right now.
+              </p>
+            </div>
+          ) : resolvedMarkets.length > 0 ? (
+            <section className="space-y-4" aria-labelledby="resolved-markets">
+              <div className="flex items-center justify-between gap-3">
+                <h2
+                  id="resolved-markets"
+                  className="flex items-center gap-2 text-lg font-bold tracking-tight"
+                >
+                  <CheckCircle2
+                    aria-hidden="true"
+                    className="size-5 text-muted-foreground"
+                  />
+                  Resolved markets
+                </h2>
+                <span className="text-sm tabular-nums text-muted-foreground">
+                  {resolvedMarkets.length} closed
+                </span>
               </div>
-            )}
-
-            {/* Resolved Markets Section */}
-            {resolvedMarkets.length > 0 && (
-              <div className="space-y-6">
-                <div className="flex items-center justify-between border-b border-border pb-2">
-                  <h2 className="text-lg font-bold flex items-center gap-2">
-                    <CheckCircle2 className="w-5 h-5 text-muted-foreground" />
-                    Resolved Markets
-                  </h2>
-                  <span className="text-xs font-bold text-muted-foreground uppercase">
-                    {resolvedMarkets.length} Closed
-                  </span>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 opacity-75 grayscale-[0.5]">
-                  {resolvedMarkets.map(renderMarket)}
-                </div>
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="text-center py-24 border border-dashed border-border rounded-2xl bg-muted/10">
-            <Search className="w-12 h-12 text-muted-foreground/30 mx-auto mb-4" />
-            <h3 className="text-xl font-bold text-foreground mb-2">
-              No markets found
-            </h3>
-            <p className="text-muted-foreground max-w-xs mx-auto">
-              We couldn't find any markets matching your current search or
-              filters.
-            </p>
-            <Button
-              variant="outline"
-              className="mt-6"
-              onClick={() => {
-                setSelectedTag(null);
-                navigate("/");
-              }}
-            >
-              Clear all filters
-            </Button>
-          </div>
-        )}
+              <MagicBento items={resolvedMarkets.map(marketTile)} />
+            </section>
+          ) : liveMarketCount === 0 ? (
+            <div className="text-center py-24 border border-dashed border-border rounded-2xl bg-muted/10">
+              <Search className="w-12 h-12 text-muted-foreground/30 mx-auto mb-4" />
+              <h3 className="text-xl font-bold text-foreground mb-2">
+                No markets found
+              </h3>
+              <p className="text-muted-foreground max-w-xs mx-auto">
+                We couldn't find any markets matching your current search or
+                filters.
+              </p>
+              <Button
+                variant="outline"
+                className="mt-6"
+                onClick={() => {
+                  setSelectedTag(null);
+                  setShowBookmarksOnly(false);
+                  navigate("/");
+                }}
+              >
+                Clear all filters
+              </Button>
+            </div>
+          ) : null}
+        </div>
       </section>
     </Layout>
   );

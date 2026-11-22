@@ -1,5 +1,12 @@
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useRef,
+} from "react";
 import type { AuthErrorResponse, OnboardingRequest, User } from "@shared/api";
+import { resetNotifications } from "@/hooks/use-toast";
 
 interface AuthContextType {
   user: User | null;
@@ -12,6 +19,7 @@ interface AuthContextType {
   isLoading: boolean;
   completeOnboarding: (data: OnboardingRequest) => Promise<void>;
   updateUsername: (username: string) => Promise<void>;
+  updateAvatar: (image: File | null) => Promise<void>;
   acknowledgeStarterGift: () => Promise<void>;
   clearHistory: () => Promise<void>;
 }
@@ -38,6 +46,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   });
   const [isLoading, setIsLoading] = useState(true);
+  const notificationAccount = useRef<string>();
+
+  useEffect(() => {
+    if (notificationAccount.current !== user?.id) {
+      notificationAccount.current = user?.id;
+      resetNotifications();
+    }
+  }, [user?.id]);
 
   // Sync bookmarks to localStorage whenever they change
   useEffect(() => {
@@ -174,6 +190,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     );
   };
 
+  const updateAvatar = async (image: File | null) => {
+    let form: FormData | undefined;
+    if (image) {
+      form = new FormData();
+      form.append("image", image);
+    }
+    const response = await fetch("/mapi/user/avatar", {
+      method: image ? "PUT" : "DELETE",
+      credentials: "include",
+      body: form,
+    });
+    await requireSuccess(response);
+    const { avatarUrl }: Pick<User, "avatarUrl"> = await response.json();
+    setUser((current) =>
+      current && current.id === user?.id ? { ...current, avatarUrl } : current,
+    );
+  };
+
   const value = {
     user,
     login,
@@ -186,6 +220,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     clearHistory,
     completeOnboarding,
     updateUsername,
+    updateAvatar,
     acknowledgeStarterGift,
   };
 

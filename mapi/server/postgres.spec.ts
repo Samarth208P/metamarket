@@ -3,6 +3,7 @@ import { once } from "node:events";
 import type { AddressInfo } from "node:net";
 import { Client } from "pg";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { MAX_IMAGE_BYTES } from "../../shared/api.ts";
 import {
   closeDB,
   connectDB,
@@ -15,8 +16,18 @@ import { createServer } from "./index.ts";
 import BinaryMarket from "./models/BinaryMarket.ts";
 import User, { type IUser } from "./models/User.ts";
 import * as feed from "./services/binanceFeed.ts";
-import { runScheduledBtcCycle } from "./services/binaryScheduler.ts";
-import { MAX_MARKET_IMAGE_BYTES } from "./services/marketImages.ts";
+import { runScheduledBinaryCycle } from "./services/binaryScheduler.ts";
+
+const samplePng = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aY7sAAAAASUVORK5CYII=",
+  "base64",
+);
+
+function imageForm(blob = new Blob([samplePng], { type: "image/png" })) {
+  const form = new FormData();
+  form.append("image", blob, "sample.png");
+  return form;
+}
 
 vi.mock("./routes/binaryMarkets.ts", async (importOriginal) => {
   const routes =
@@ -31,7 +42,7 @@ describe.skipIf(import.meta.env.MODE !== "db")(
     const secret = "metamarket-postgres-integration-test";
     const accounts: string[] = [];
     const markets: string[] = [];
-    const btcMarkets: string[] = [];
+    const binaryMarkets: string[] = [];
     const marketImages: string[] = [];
     let server: ReturnType<Awaited<ReturnType<typeof createServer>>["listen"]>;
     let admin: IUser;
@@ -62,7 +73,7 @@ describe.skipIf(import.meta.env.MODE !== "db")(
       path: string,
       options: {
         account?: IUser;
-        method?: "GET" | "POST" | "PUT" | "PATCH";
+        method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
         body?: object;
         status?: number;
       } = {},
@@ -98,8 +109,18 @@ describe.skipIf(import.meta.env.MODE !== "db")(
     beforeAll(async () => {
       vi.stubEnv("NODE_ENV", "test");
       vi.stubEnv("SESSION_SECRET", secret);
-      vi.spyOn(feed.binanceFeed, "getLatestPrice").mockReturnValue(100000);
-      vi.spyOn(feed.binanceFeed, "getRecentPrices").mockReturnValue([100000]);
+      vi.spyOn(feed.binanceFeeds.BTCUSDT, "getLatestPrice").mockReturnValue(
+        100000,
+      );
+      vi.spyOn(feed.binanceFeeds.BTCUSDT, "getRecentPrices").mockReturnValue([
+        100000,
+      ]);
+      vi.spyOn(feed.binanceFeeds.ETHUSDT, "getLatestPrice").mockReturnValue(
+        3000,
+      );
+      vi.spyOn(feed.binanceFeeds.ETHUSDT, "getRecentPrices").mockReturnValue([
+        3000,
+      ]);
       await connectDB();
       admin = await addAccount("admin", true);
       player = await addAccount("player");
@@ -126,7 +147,7 @@ describe.skipIf(import.meta.env.MODE !== "db")(
           await cleanup.query("begin");
           await cleanup.query(
             "delete from metamarket.binary_markets where id = any($1::text[])",
-            [btcMarkets],
+            [binaryMarkets],
           );
           await cleanup.query(
             "delete from metamarket.markets where id = any($1::text[])",
@@ -315,16 +336,7 @@ describe.skipIf(import.meta.env.MODE !== "db")(
       await setup(admin, `admin_${fixture.slice(0, 10)}`);
       await setup(player, `player_${fixture.slice(0, 10)}`);
 
-      const png = Buffer.from(
-        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aY7sAAAAASUVORK5CYII=",
-        "base64",
-      );
-      const form = new FormData();
-      form.append(
-        "image",
-        new Blob([png], { type: "image/png" }),
-        "sample.png",
-      );
+      const form = imageForm();
       await api("/upload", { method: "POST", body: form, status: 401 });
       await api("/upload", {
         account: player,
@@ -333,11 +345,8 @@ describe.skipIf(import.meta.env.MODE !== "db")(
         status: 403,
       });
 
-      const invalid = new FormData();
-      invalid.append(
-        "image",
+      const invalid = imageForm(
         new Blob(["not an image"], { type: "image/png" }),
-        "sample.png",
       );
       await api("/upload", {
         account: admin,
@@ -346,13 +355,10 @@ describe.skipIf(import.meta.env.MODE !== "db")(
         status: 415,
       });
 
-      const oversized = new FormData();
-      oversized.append(
-        "image",
-        new Blob([new Uint8Array(MAX_MARKET_IMAGE_BYTES + 1)], {
+      const oversized = imageForm(
+        new Blob([new Uint8Array(MAX_IMAGE_BYTES + 1)], {
           type: "image/png",
         }),
-        "sample.png",
       );
       await api("/upload", {
         account: admin,
@@ -372,53 +378,123 @@ describe.skipIf(import.meta.env.MODE !== "db")(
       marketImages.push(new URL(url).pathname.split("/").pop());
       const image = await fetch(url);
       expect(image.headers.get("Content-Type")).toContain("image/png");
-      expect(Buffer.from(await image.arrayBuffer())).toEqual(png);
+      expect(Buffer.from(await image.arrayBuffer())).toEqual(samplePng);
     }, 20000);
 
-    it("stores BTC trades and cash-outs and limits trade visibility to the owner", async () => {
-      await setup(player, `player_${fixture.slice(0, 10)}`);
-      await setup(other, `other_${fixture.slice(0, 10)}`);
-      const market = await BinaryMarket.openSlot({
-        assetPair: `BTC_TEST_${fixture}`,
-        startTime: new Date(Date.now() - 1000),
-        endTime: new Date(Date.now() + 120000),
-        targetPrice: 100000,
-        priceSnapshots: [{ price: 100000, timestamp: new Date() }],
-      });
-      btcMarkets.push(market.id);
-      const result = await api(`/binary-markets/${market.id}/trade`, {
-        account: player,
-        method: "POST",
-        body: { side: "up", amount: 25 },
-      });
-      expect(result.market.trades).toHaveLength(1);
-      expect(result.user.tradeHistory.at(-1).tradeType).toBe("buy");
-      expect(
-        (await api(`/binary-markets/${market.id}`, { account: other })).trades,
-      ).toEqual([]);
-      const otherTrades = await withAccount(other.id, () =>
-        query(
-          "select user_id from metamarket.binary_trades where market_id = $1",
-          [market.id],
-        ),
-      );
-      expect(otherTrades.rows).toEqual([]);
-      const ownTrades = await withAccount(player.id, () =>
-        query(
-          "select user_id from metamarket.binary_trades where market_id = $1",
-          [market.id],
-        ),
-      );
-      expect(ownTrades.rows).toEqual([{ user_id: player.id }]);
+    it("persists, replaces, and removes a player's profile photo", async () => {
+      const avatarPlayer = await addAccount("avatar");
+      const username = `avatar_${fixture.slice(0, 10)}`;
+      const path = "/user/avatar";
+      const upload = () =>
+        api(path, {
+          account: avatarPlayer,
+          method: "PUT",
+          body: imageForm(),
+        });
+      const remove = () =>
+        api(path, { account: avatarPlayer, method: "DELETE" });
 
-      const cashOut = await api(`/binary-markets/${market.id}/sell`, {
-        account: player,
-        method: "POST",
-        body: { side: "up" },
+      await api(path, { method: "PUT", body: imageForm(), status: 401 });
+      await api(path, { account: avatarPlayer, method: "DELETE", status: 403 });
+      expect(await setup(avatarPlayer, username)).toMatchObject({
+        avatarUrl: null,
       });
-      expect(cashOut.market.trades[0].sold).toBe(true);
-      expect(cashOut.user.balance).toBeGreaterThan(result.user.balance);
+      await api(path, {
+        account: avatarPlayer,
+        method: "PUT",
+        body: imageForm(new Blob(["not an image"], { type: "image/png" })),
+        status: 415,
+      });
+
+      try {
+        const first = await upload();
+        expect(first.avatarUrl).toContain("/object/public/profile-images/");
+        expect(await api("/user", { account: avatarPlayer })).toMatchObject(
+          first,
+        );
+        expect(await api("/user", { account: admin })).toMatchObject({
+          avatarUrl: null,
+        });
+        expect(
+          Buffer.from(await (await fetch(first.avatarUrl)).arrayBuffer()),
+        ).toEqual(samplePng);
+
+        const uploads = await Promise.all([upload(), upload()]);
+        const current = await api("/user", { account: avatarPlayer });
+        expect(uploads).toContainEqual({ avatarUrl: current.avatarUrl });
+        const replaced = uploads.find(
+          (photo) => photo.avatarUrl !== current.avatarUrl,
+        );
+        expect(replaced).toBeDefined();
+        expect((await fetch(first.avatarUrl)).ok).toBe(false);
+        expect((await fetch(replaced.avatarUrl)).ok).toBe(false);
+        expect((await fetch(current.avatarUrl)).ok).toBe(true);
+
+        expect(await remove()).toEqual({ avatarUrl: null });
+        expect(await api("/user", { account: avatarPlayer })).toMatchObject({
+          username,
+          avatarUrl: null,
+        });
+        expect((await fetch(current.avatarUrl)).ok).toBe(false);
+      } finally {
+        await remove();
+      }
     }, 20000);
+
+    it.each(["BTCUSDT", "ETHUSDT"] as const)(
+      "stores %s trades and cash-outs and limits trade visibility to the owner",
+      async (assetPair) => {
+        await setup(player, `player_${fixture.slice(0, 10)}`);
+        await setup(other, `other_${fixture.slice(0, 10)}`);
+        const target = assetPair === "BTCUSDT" ? 100000 : 3015;
+        const market = await BinaryMarket.openSlot({
+          assetPair,
+          startTime: new Date(Date.now() - 1000),
+          endTime: new Date(Date.now() + 120000),
+          targetPrice: target,
+          priceSnapshots: [{ price: target, timestamp: new Date() }],
+        });
+        binaryMarkets.push(market.id);
+        const result = await api(`/binary-markets/${market.id}/trade`, {
+          account: player,
+          method: "POST",
+          body: { side: "up", amount: 25 },
+        });
+        expect(result.market.trades).toHaveLength(1);
+        expect(result.market.trades[0].entryProbability).toBeLessThan(0.51);
+        expect(result.user.tradeHistory.at(-1).tradeType).toBe("buy");
+        expect(result.user.tradeHistory.at(-1).marketTitle).toMatch(
+          new RegExp(`^${assetPair.slice(0, 3)} UP`),
+        );
+        expect(
+          (await api(`/binary-markets/${market.id}`, { account: other }))
+            .trades,
+        ).toEqual([]);
+        const otherTrades = await withAccount(other.id, () =>
+          query(
+            "select user_id from metamarket.binary_trades where market_id = $1",
+            [market.id],
+          ),
+        );
+        expect(otherTrades.rows).toEqual([]);
+        const ownTrades = await withAccount(player.id, () =>
+          query(
+            "select user_id from metamarket.binary_trades where market_id = $1",
+            [market.id],
+          ),
+        );
+        expect(ownTrades.rows).toEqual([{ user_id: player.id }]);
+
+        const cashOut = await api(`/binary-markets/${market.id}/sell`, {
+          account: player,
+          method: "POST",
+          body: { side: "up" },
+        });
+        expect(cashOut.market.trades[0].sold).toBe(true);
+        expect(cashOut.user.balance).toBeGreaterThan(result.user.balance);
+      },
+      20000,
+    );
 
     it("loads saved chart prices and outcomes across a round boundary", async () => {
       await setup(player, `player_${fixture.slice(0, 10)}`);
@@ -435,7 +511,7 @@ describe.skipIf(import.meta.env.MODE !== "db")(
           { price: 100020, timestamp: new Date(boundary) },
         ],
       });
-      btcMarkets.push(previous.id);
+      binaryMarkets.push(previous.id);
       await withSystem(() =>
         query(
           "update metamarket.binary_markets set status = 'settled_up' where id = $1",
@@ -452,7 +528,34 @@ describe.skipIf(import.meta.env.MODE !== "db")(
           { price: 100030, timestamp: new Date(boundary + 1_000) },
         ],
       });
-      btcMarkets.push(active.id);
+      binaryMarkets.push(active.id);
+
+      const ethPrevious = await BinaryMarket.openSlot({
+        assetPair: "ETHUSDT",
+        targetPrice: 3000,
+        startTime: new Date(boundary - 300_000),
+        endTime: new Date(boundary),
+        priceSnapshots: [
+          { price: 3000, timestamp: new Date(boundary - 1_000) },
+        ],
+      });
+      binaryMarkets.push(ethPrevious.id);
+      await withSystem(() =>
+        query(
+          "update metamarket.binary_markets set status = 'settled_down' where id = $1",
+          [ethPrevious.id],
+        ),
+      );
+      const ethInput = {
+        assetPair: "ETHUSDT",
+        targetPrice: 2995,
+        startTime: new Date(boundary),
+        endTime: new Date(boundary + 300_000),
+        priceSnapshots: [{ price: 2995, timestamp: new Date(boundary) }],
+      };
+      const ethActive = await BinaryMarket.openSlot(ethInput);
+      binaryMarkets.push(ethActive.id);
+      expect((await BinaryMarket.openSlot(ethInput)).id).toBe(ethActive.id);
 
       await api("/binary-markets/price-history", { status: 401 });
       const prices = await api("/binary-markets/price-history", {
@@ -482,6 +585,43 @@ describe.skipIf(import.meta.env.MODE !== "db")(
         }),
       );
       expect(outcomes.some(({ id }) => id === active.id)).toBe(false);
+      expect(outcomes.some(({ id }) => id === ethPrevious.id)).toBe(false);
+      const ethOutcomes = await api("/binary-markets/ETHUSDT/history", {
+        account: player,
+      });
+      expect(ethOutcomes).toContainEqual(
+        expect.objectContaining({ id: ethPrevious.id, status: "settled_down" }),
+      );
+      expect(
+        ethOutcomes.every(({ assetPair }) => assetPair === "ETHUSDT"),
+      ).toBe(true);
+      const ethPrices = await api(
+        "/binary-markets/ETHUSDT/price-history",
+        { account: player },
+      );
+      expect(
+        ethPrices.filter(({ timestamp }) =>
+          [boundary - 1_000, boundary].includes(timestamp),
+        ),
+      ).toEqual([
+        { price: 3000, timestamp: boundary - 1_000 },
+        { price: 2995, timestamp: boundary },
+      ]);
+      expect(
+        await withSystem(() =>
+          BinaryMarket.findActive(ethInput.endTime, "ETHUSDT"),
+        ),
+      ).toMatchObject({ id: ethActive.id });
+      expect(
+        await api("/binary-markets/active", { account: player }),
+      ).toMatchObject({ market: { assetPair: "BTCUSDT" }, livePrice: 100000 });
+      expect(
+        await api("/binary-markets/ETHUSDT/active", { account: player }),
+      ).toMatchObject({ market: { assetPair: "ETHUSDT" }, livePrice: 3000 });
+      await api("/binary-markets/UNKNOWN/active", {
+        account: player,
+        status: 400,
+      });
     });
 
     it("appends scheduled prices once when jobs overlap", async () => {
@@ -493,7 +633,7 @@ describe.skipIf(import.meta.env.MODE !== "db")(
         targetPrice: 100000,
         priceSnapshots: [{ price: 100000, timestamp: new Date(start) }],
       });
-      btcMarkets.push(market.id);
+      binaryMarkets.push(market.id);
       const batch = [
         { price: 100010, timestamp: new Date(start + 1000) },
         { price: 100020, timestamp: new Date(start + 2000) },
@@ -551,66 +691,80 @@ describe.skipIf(import.meta.env.MODE !== "db")(
       ).rejects.toBe(rollback);
     });
 
-    it("credits an expired BTC round once when two scheduled jobs settle it", async () => {
-      await setup(player, `player_${fixture.slice(0, 10)}`);
-      const market = await BinaryMarket.openSlot({
-        assetPair: `BTC_SETTLEMENT_${fixture}`,
-        startTime: new Date(Date.now() - 180000),
-        endTime: new Date(Date.now() + 120000),
-        targetPrice: 100000,
-        priceSnapshots: [],
-      });
-      btcMarkets.push(market.id);
-      const purchase = await api(`/binary-markets/${market.id}/trade`, {
-        account: player,
-        method: "POST",
-        body: { side: "up", amount: 20 },
-      });
+    it.each(["BTCUSDT", "ETHUSDT"] as const)(
+      "credits an expired %s round once when two scheduled jobs settle it",
+      async (assetPair) => {
+        await setup(player, `player_${fixture.slice(0, 10)}`);
+        const target = assetPair === "BTCUSDT" ? 100000 : 3000;
+        const market = await BinaryMarket.openSlot({
+          assetPair,
+          startTime: new Date(Date.now() - 180000),
+          endTime: new Date(Date.now() + 120000),
+          targetPrice: target,
+          priceSnapshots: [],
+        });
+        binaryMarkets.push(market.id);
+        const purchase = await api(`/binary-markets/${market.id}/trade`, {
+          account: player,
+          method: "POST",
+          body: { side: "up", amount: 20 },
+        });
 
-      await withSystem(() =>
-        query(
-          "update metamarket.binary_markets set end_time = now() - interval '5 seconds' where id = $1",
-          [market.id],
-        ),
-      );
-      const candidate = await withSystem(() =>
-        BinaryMarket.findById(market.id),
-      );
-      const stubs = [
-        vi
-          .spyOn(feed, "fetchBinanceSecondPrices")
-          .mockImplementation(async (start, end) =>
-            start === candidate.startTime.getTime() &&
-            end === candidate.endTime.getTime()
-              ? [{ price: 101000, timestamp: candidate.endTime }]
-              : [],
+        await withSystem(() =>
+          query(
+            "update metamarket.binary_markets set end_time = now() - interval '5 seconds' where id = $1",
+            [market.id],
           ),
-        vi.spyOn(BinaryMarket, "listExpired").mockResolvedValue([candidate]),
-        vi.spyOn(BinaryMarket, "findActive").mockResolvedValue(market),
-        vi.spyOn(BinaryMarket, "pruneHistory").mockResolvedValue(undefined),
-      ];
-      try {
-        await Promise.all([runScheduledBtcCycle(), runScheduledBtcCycle()]);
-      } finally {
-        stubs.forEach((stub) => stub.mockRestore());
-      }
+        );
+        const candidate = await withSystem(() =>
+          BinaryMarket.findById(market.id),
+        );
+        const stubs = [
+          vi
+            .spyOn(feed, "fetchBinanceSecondPrices")
+            .mockImplementation(async (start, end, pair) =>
+              pair === assetPair &&
+              start === candidate.startTime.getTime() &&
+              end === candidate.endTime.getTime()
+                ? [{ price: target + 1000, timestamp: candidate.endTime }]
+                : [],
+            ),
+          vi.spyOn(BinaryMarket, "listExpired").mockResolvedValue([candidate]),
+          vi.spyOn(BinaryMarket, "findActive").mockResolvedValue(market),
+          vi.spyOn(BinaryMarket, "pruneHistory").mockResolvedValue(undefined),
+        ];
+        try {
+          await Promise.all([
+            runScheduledBinaryCycle(assetPair),
+            runScheduledBinaryCycle(assetPair),
+          ]);
+        } finally {
+          stubs.forEach((stub) => stub.mockRestore());
+        }
 
-      const settled = await api(`/binary-markets/${market.id}`, {
-        account: player,
-      });
-      expect(settled.status).toBe("settled_up");
-      expect(settled.priceSnapshots.map(({ price }) => price)).toEqual([
-        100000, 101000,
-      ]);
-      const portfolio = await api("/user", { account: player });
-      const payouts = portfolio.tradeHistory.filter(
-        (entry) => entry.marketId === market.id && entry.tradeType === "payout",
-      );
-      expect(payouts).toHaveLength(1);
-      expect(portfolio.balance).toBeCloseTo(
-        purchase.user.balance + settled.trades[0].payout,
-        2,
-      );
-    }, 20000);
+        const settled = await api(`/binary-markets/${market.id}`, {
+          account: player,
+        });
+        expect(settled.status).toBe("settled_up");
+        expect(settled.priceSnapshots.map(({ price }) => price)).toEqual([
+          target,
+          target + 1000,
+        ]);
+        const portfolio = await api("/user", { account: player });
+        const payouts = portfolio.tradeHistory.filter(
+          (entry) =>
+            entry.marketId === market.id && entry.tradeType === "payout",
+        );
+        expect(payouts).toHaveLength(1);
+        expect(payouts[0].marketTitle).toMatch(
+          new RegExp(`^${assetPair.slice(0, 3)} UP Payout`),
+        );
+        expect(portfolio.balance).toBeCloseTo(
+          purchase.user.balance + settled.trades[0].payout,
+          2,
+        );
+      },
+      20000,
+    );
   },
 );

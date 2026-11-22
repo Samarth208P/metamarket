@@ -23,6 +23,8 @@ import Admin from "./pages/Admin";
 import Settings from "./pages/Settings";
 import { Layout } from "@/components/Layout";
 import { MarketErrorBoundary } from "@/components/MarketErrorBoundary";
+import { MarketNotifications } from "@/components/MarketNotifications";
+import { BINARY_ASSETS, BINARY_ASSET_PAIRS } from "@shared/binaryAssets";
 
 import { lazy, Suspense, useEffect, type ReactNode } from "react";
 
@@ -76,6 +78,7 @@ function App() {
         <TooltipProvider>
           <Toaster />
           <BrowserRouter>
+            <MarketNotifications />
             <Routes>
               <Route path="/login" element={<Login />} />
               <Route
@@ -128,16 +131,19 @@ function App() {
                   </AdminProtectedRoute>
                 }
               />
-              <Route
-                path="/btc"
-                element={
-                  <ProtectedRoute>
-                    <MarketRoute>
-                      <BinaryMarket />
-                    </MarketRoute>
-                  </ProtectedRoute>
-                }
-              />
+              {BINARY_ASSET_PAIRS.map((pair) => (
+                <Route
+                  key={pair}
+                  path={BINARY_ASSETS[pair].path}
+                  element={
+                    <ProtectedRoute>
+                      <MarketRoute>
+                        <BinaryMarket assetPair={pair} />
+                      </MarketRoute>
+                    </ProtectedRoute>
+                  }
+                />
+              ))}
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route
                 path="*"
