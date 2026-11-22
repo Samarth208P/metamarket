@@ -1,27 +1,48 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useEffect, useMemo, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/Layout";
 import { BinaryChart } from "@/components/BinaryChart";
 import { BinaryTradePanel } from "@/components/BinaryTradePanel";
 import { useBinanceFeed } from "@/hooks/use-binance-feed";
-import type { BinaryMarket as BinaryMarketType } from "@shared/binaryPrice";
 import {
-  ArrowUp,
-  ArrowDown,
-  Clock,
-  Trophy,
-  Activity,
-  Globe,
-  Info,
-  ShieldCheck,
-  Target,
-} from "lucide-react";
+  BTC_OUTCOME_HISTORY_LIMIT,
+  type BinaryMarket as BinaryMarketType,
+  type PricePoint,
+} from "@shared/binaryPrice";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { Clock } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 
 export default function BinaryMarket() {
   const { price, isConnected, priceHistory } = useBinanceFeed();
   const { user, refreshUser } = useAuth();
+
+  const { data: savedPrices, isPending: isPriceHistoryPending } = useQuery({
+    queryKey: ["binary-market-price-history"],
+    queryFn: async ({ signal }): Promise<PricePoint[]> => {
+      const response = await fetch("/mapi/binary-markets/price-history", {
+        signal,
+      });
+      if (!response.ok) throw new Error("Failed to load BTC price history");
+      return response.json();
+    },
+    refetchInterval: 10_000,
+    staleTime: 5000,
+  });
+
+  const chartHistory = useMemo(() => {
+    if (!savedPrices?.length) return priceHistory;
+    const lastSaved = savedPrices[savedPrices.length - 1].timestamp;
+    return [
+      ...savedPrices,
+      ...priceHistory.filter((point) => point.timestamp > lastSaved),
+    ];
+  }, [savedPrices, priceHistory]);
+  const chartPrice = chartHistory[chartHistory.length - 1]?.price ?? price;
 
   // Fetch the active market from the backend
   const { data: activeData, isError: activeMarketError } = useQuery({
@@ -37,8 +58,6 @@ export default function BinaryMarket() {
     refetchInterval: (query) => (query.state.data?.market ? 3000 : 1500),
     staleTime: 1000,
   });
-
-  const lastActiveId = React.useRef<string | null>(null);
 
   // Fetch settled market history
   const { data: historyData } = useQuery({
@@ -75,40 +94,22 @@ export default function BinaryMarket() {
   // Keep a stable reference to the last known target price and market
   // so the chart doesn't break when market is null between cycles
   const lastTargetPriceRef = useRef<number>(0);
-  const lastMarketRef = useRef<BinaryMarketType | null>(null);
-
   useEffect(() => {
     if (activeMarket) {
       lastTargetPriceRef.current = activeMarket.targetPrice;
-      lastMarketRef.current = activeMarket;
     }
   }, [activeMarket]);
 
-  const displayedMarket = activeMarket;
   const stableTargetPrice =
-    activeMarket?.targetPrice ?? (lastTargetPriceRef.current || price);
-  const isFrozen = false; // Never freeze the UI anymore, always show what's current
+    activeMarket?.targetPrice ?? (lastTargetPriceRef.current || chartPrice);
 
   // Refresh balance when market officially settles
-  const marketHistoryLength = history.length;
+  const latestSettledMarketId = history[0]?.id;
   useEffect(() => {
-    if (marketHistoryLength > 0) {
+    if (latestSettledMarketId) {
       refreshUser();
     }
-  }, [marketHistoryLength, refreshUser]);
-
-  if (activeMarketError && !activeData) {
-    return (
-      <Layout>
-        <main className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-          <h1 className="text-2xl font-bold">BTC markets</h1>
-          <p className="mt-2 text-muted-foreground" role="status">
-            Live BTC markets are temporarily unavailable.
-          </p>
-        </main>
-      </Layout>
-    );
-  }
+  }, [latestSettledMarketId, refreshUser]);
 
   return (
     <Layout>
@@ -118,20 +119,13 @@ export default function BinaryMarket() {
           {/* Chart — spans 2 cols on lg */}
           <div className="lg:col-span-2">
             <BinaryChart
-              priceHistory={priceHistory}
+              priceHistory={isPriceHistoryPending ? [] : chartHistory}
               targetPrice={stableTargetPrice}
-              currentPrice={price}
+              currentPrice={chartPrice}
               isConnected={isConnected}
-              frozenAtTime={
-                isFrozen
-                  ? new Date(displayedMarket.endTime).getTime()
-                  : undefined
-              }
-              frozenPrice={isFrozen ? displayedMarket.finalPrice : undefined}
             />
 
-            {/* History Tracker Between Chart and Description - Hidden on Mobile */}
-            <div className="hidden lg:flex mt-8 flex items-center gap-4 bg-zinc-900/40 border border-white/5 rounded-2xl px-5 py-3.5 backdrop-blur-sm shadow-inner max-w-fit">
+            <div className="flex mt-5 lg:mt-8 items-center gap-4 bg-zinc-900/40 border border-white/5 rounded-2xl px-5 py-3.5 backdrop-blur-sm shadow-inner max-w-fit">
               <div className="border-r border-white/10 pr-4">
                 <Clock className="w-4 h-4 text-zinc-500" />
               </div>
@@ -183,14 +177,19 @@ export default function BinaryMarket() {
 
           {/* Trade Panel */}
           <div className="lg:col-span-1">
-            <BinaryTradePanel
-              market={displayedMarket}
-              currentPrice={price}
-              recentPrices={recentPrices}
-              isConnected={isConnected}
-              isFrozen={isFrozen}
-              serverProbability={serverProbability}
-            />
+            {activeMarketError && !activeData ? (
+              <p className="text-muted-foreground" role="status">
+                Live BTC markets are temporarily unavailable.
+              </p>
+            ) : (
+              <BinaryTradePanel
+                market={activeMarket}
+                currentPrice={price}
+                recentPrices={recentPrices}
+                isConnected={isConnected}
+                serverProbability={serverProbability}
+              />
+            )}
           </div>
         </div>
       </div>
@@ -199,13 +198,13 @@ export default function BinaryMarket() {
 }
 
 function PastOutcomes({ history }: { history: BinaryMarketType[] }) {
-  // Render the oldest left, newest right. We take the most recent 5
-  const recent = [...history].slice(0, 5).reverse();
+  // Render the oldest on the left and the newest on the right.
+  const recent = history.slice(0, BTC_OUTCOME_HISTORY_LIMIT).reverse();
 
   if (recent.length === 0) {
     return (
       <div className="flex gap-2.5 opacity-20">
-        {[1, 2, 3, 4, 5].map((i) => (
+        {Array.from({ length: BTC_OUTCOME_HISTORY_LIMIT }, (_, i) => (
           <div key={i} className="w-7 h-7 rounded-full bg-zinc-700" />
         ))}
       </div>
@@ -213,32 +212,36 @@ function PastOutcomes({ history }: { history: BinaryMarketType[] }) {
   }
 
   return (
-    <div className="flex gap-2.5">
+    <div className="flex gap-2.5" role="group" aria-label="Recent BTC outcomes">
       {recent.map((m) => {
         const isUp = m.status === "settled_up";
+        const time = new Date(m.endTime).toLocaleTimeString("en-IN", {
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false,
+        });
+        const label = `${time} outcome · ${isUp ? "UP" : "DOWN"}`;
         return (
-          <div
-            key={m.id}
-            className={`w-7 h-7 rounded-full flex items-center justify-center shadow-inner ${isUp ? "bg-[#5dbf75]" : "bg-[#ef4444]"}`}
-          >
-            {isUp ? (
-              <svg
-                className="w-3.5 h-3.5 text-white"
-                viewBox="0 0 24 24"
-                fill="currentColor"
+          <Tooltip key={m.id}>
+            <TooltipTrigger asChild>
+              <span
+                role="img"
+                tabIndex={0}
+                aria-label={label}
+                className={`w-7 h-7 rounded-full flex items-center justify-center shadow-inner focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${isUp ? "bg-[#5dbf75]" : "bg-[#ef4444]"}`}
               >
-                <path d="M12 5l7 11H5z" />
-              </svg>
-            ) : (
-              <svg
-                className="w-3.5 h-3.5 text-white transform rotate-180"
-                viewBox="0 0 24 24"
-                fill="currentColor"
-              >
-                <path d="M12 5l7 11H5z" />
-              </svg>
-            )}
-          </div>
+                <svg
+                  aria-hidden="true"
+                  className={`w-3.5 h-3.5 text-white ${isUp ? "" : "rotate-180"}`}
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                >
+                  <path d="M12 5l7 11H5z" />
+                </svg>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>{label}</TooltipContent>
+          </Tooltip>
         );
       })}
     </div>

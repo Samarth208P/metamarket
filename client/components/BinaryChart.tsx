@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from "react";
+import { useMemo } from "react";
 import {
   AreaChart,
   Area,
@@ -8,16 +8,13 @@ import {
   ResponsiveContainer,
   Tooltip,
 } from "recharts";
-import { motion } from "framer-motion";
-import type { PricePoint } from "@/hooks/use-binance-feed";
+import { MARKET_DURATION_MS, type PricePoint } from "@shared/binaryPrice";
 
 interface BinaryChartProps {
   priceHistory: PricePoint[];
   targetPrice: number;
   currentPrice: number;
   isConnected: boolean;
-  frozenAtTime?: number;
-  frozenPrice?: number;
 }
 
 export function BinaryChart({
@@ -25,75 +22,18 @@ export function BinaryChart({
   targetPrice,
   currentPrice,
   isConnected,
-  frozenAtTime,
-  frozenPrice,
 }: BinaryChartProps) {
-  const [now, setNow] = useState(Date.now());
-
-  useEffect(() => {
-    let frameId: number;
-    const loop = () => {
-      setNow(Date.now());
-      frameId = requestAnimationFrame(loop);
-    };
-    frameId = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(frameId);
-  }, []);
-
-  const delayedTime = frozenAtTime ? frozenAtTime : now - 300;
-  const displayCurrentPrice =
-    frozenPrice !== undefined ? frozenPrice : currentPrice;
-
-  // Cubic spline interpolation for ultra-smooth curves
-  function lerp(a: number, b: number, t: number) {
-    return a + (b - a) * t;
-  }
-  function smoothStep(t: number) {
-    return t * t * (3 - 2 * t);
-  }
-
-  const WINDOW_MS = 5 * 60 * 1000; // 5 minutes
-
+  const windowEnd = priceHistory[priceHistory.length - 1]?.timestamp ?? 0;
+  const windowStart = windowEnd - MARKET_DURATION_MS;
   const chartData = useMemo(() => {
-    const windowStart = delayedTime - WINDOW_MS;
-    const raw = priceHistory
-      .filter(
-        (point) =>
-          point.timestamp <= delayedTime && point.timestamp >= windowStart,
-      )
-      .map((point) => ({ time: point.timestamp, price: point.price }));
-
-    // Append live point for continuity
-    if (raw.length > 0 && !frozenAtTime) {
-      raw.push({ time: delayedTime, price: displayCurrentPrice });
-    }
-
-    // Force chart to span the full 5 minutes by extending the first known price backwards
-    // Removed to allow the chart to ignore the "before part" if no past was known
-
-    if (raw.length < 3) return raw;
-
-    // Interpolate between points for a fluid curve
-    const interpolated: { time: number; price: number }[] = [];
-    const STEPS = 3; // sub-steps between each real point
-
-    for (let i = 0; i < raw.length - 1; i++) {
-      const p0 = raw[i];
-      const p1 = raw[i + 1];
-      interpolated.push(p0);
-
-      for (let s = 1; s < STEPS; s++) {
-        const t = smoothStep(s / STEPS);
-        interpolated.push({
-          time: lerp(p0.time, p1.time, s / STEPS),
-          price: lerp(p0.price, p1.price, t),
-        });
-      }
-    }
-    interpolated.push(raw[raw.length - 1]);
-
-    return interpolated;
-  }, [priceHistory, delayedTime, displayCurrentPrice, frozenAtTime]);
+    const firstVisible = priceHistory.findIndex(
+      (point) => point.timestamp >= windowStart,
+    );
+    // Leave a point before the window so the chart can clip the line at the left edge.
+    return priceHistory
+      .slice(Math.max(0, firstVisible - 1))
+      .map(({ timestamp, price }) => ({ time: timestamp, price }));
+  }, [priceHistory, windowStart]);
 
   // Dynamic Y-axis domain based on data range with hysteresis to prevent stuttering
   const { yMin, yMax } = useMemo(() => {
@@ -117,21 +57,12 @@ export function BinaryChart({
     };
   }, [chartData, targetPrice]);
 
-  const plottedPrice =
-    chartData.length > 0
-      ? chartData[chartData.length - 1].price
-      : displayCurrentPrice;
-  const isAboveTargetVisual = plottedPrice >= targetPrice;
-  const isAboveTargetLive = displayCurrentPrice >= targetPrice;
-
-  const accentColor = isAboveTargetVisual ? "#22c55e" : "#ef4444";
-  const liveAccentColor = isAboveTargetLive ? "#34d399" : "#f87171"; // emerald-400 / red-400
+  const isAboveTarget = currentPrice >= targetPrice;
+  const accentColor = isAboveTarget ? "#22c55e" : "#ef4444";
   const gradientId = "priceGradient";
 
   return (
-    <div
-      className="relative rounded-xl border border-border bg-card p-4 sm:p-6 shadow-sm"
-    >
+    <div className="relative rounded-xl border border-border bg-card p-4 sm:p-6 shadow-sm">
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
@@ -163,17 +94,17 @@ export function BinaryChart({
         <div className="text-right">
           <p className="text-2xl sm:text-3xl font-bold tracking-tight text-white tabular-nums">
             $
-            {displayCurrentPrice.toLocaleString("en-US", {
+            {currentPrice.toLocaleString("en-US", {
               minimumFractionDigits: 2,
               maximumFractionDigits: 2,
             })}
             <span
               className={`ml-2 text-sm sm:text-base font-bold ${
-                isAboveTargetLive ? "text-emerald-400" : "text-red-400"
+                isAboveTarget ? "text-emerald-400" : "text-red-400"
               }`}
             >
-              {isAboveTargetLive ? "▲" : "▼"}{" "}
-              {Math.abs(displayCurrentPrice - targetPrice).toFixed(2)}
+              {isAboveTarget ? "▲" : "▼"}{" "}
+              {Math.abs(currentPrice - targetPrice).toFixed(2)}
             </span>
           </p>
           <p className="text-xs text-zinc-500 mt-0.5">
@@ -194,7 +125,11 @@ export function BinaryChart({
         {chartData.length < 2 ? (
           <div className="h-full flex items-center justify-center">
             <div className="text-center flex flex-col items-center gap-3">
-              <img src="/animated-logo.svg" alt="Loading" className="w-16 h-16" />
+              <img
+                src="/animated-logo.svg"
+                alt="Loading"
+                className="w-16 h-16"
+              />
               <p className="text-sm font-bold text-zinc-500 uppercase tracking-widest">
                 Waiting for price data...
               </p>
@@ -219,7 +154,8 @@ export function BinaryChart({
               <XAxis
                 dataKey="time"
                 type="number"
-                domain={[delayedTime - WINDOW_MS, delayedTime]}
+                domain={[windowStart, windowEnd]}
+                allowDataOverflow
                 axisLine={false}
                 tick={false}
               />

@@ -1,4 +1,8 @@
 import { newId, query, withSystem } from "../database.ts";
+import {
+  BTC_OUTCOME_HISTORY_LIMIT,
+  type BinaryPriceSnapshot,
+} from "../../../shared/binaryPrice.ts";
 
 export type BinaryMarketStatus =
   | "waiting"
@@ -101,10 +105,23 @@ const BinaryMarket = {
     const result = await query<BinaryRow>(
       `select m.id, m.asset_pair, m.start_time, m.end_time, m.status, m.created_at, m.updated_at,
               m.state - 'priceSnapshots' as state, ${tradesForMarket}
-       from metamarket.binary_markets m where status in ('settled_up', 'settled_down')
-       order by end_time desc limit 20`,
+       from metamarket.binary_markets m
+       where asset_pair = 'BTCUSDT' and status in ('settled_up', 'settled_down')
+       order by end_time desc limit $1`,
+      [BTC_OUTCOME_HISTORY_LIMIT],
     );
     return result.rows.map(hydrate);
+  },
+
+  async listPriceSnapshots(from: Date, through: Date) {
+    const result = await query<{ snapshots: BinaryPriceSnapshot[] | null }>(
+      `select state->'priceSnapshots' as snapshots
+       from metamarket.binary_markets
+       where asset_pair = 'BTCUSDT' and end_time >= $1 and start_time <= $2
+       order by start_time`,
+      [from, through],
+    );
+    return result.rows.flatMap(({ snapshots }) => snapshots ?? []);
   },
 
   async openSlot(
@@ -208,10 +225,12 @@ const BinaryMarket = {
     return withSystem(() =>
       query(
         `delete from metamarket.binary_markets
-       where status in ('settled_up', 'settled_down') and id in (
-         select id from metamarket.binary_markets where status in ('settled_up', 'settled_down')
-         order by end_time desc offset 5
+       where id in (
+         select id from metamarket.binary_markets
+         where asset_pair = 'BTCUSDT' and status in ('settled_up', 'settled_down')
+         order by end_time desc offset $1
        )`,
+        [BTC_OUTCOME_HISTORY_LIMIT],
       ),
     );
   },

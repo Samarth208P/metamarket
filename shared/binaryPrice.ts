@@ -9,6 +9,7 @@
 
 // ─── Constants ────────────────────────────────────────────────────────
 export const MARKET_DURATION_MS = 5 * 60 * 1000; // 5 minutes
+export const BTC_OUTCOME_HISTORY_LIMIT = 5;
 export const DEFAULT_VOLATILITY = 0.04; // Increased from 0.0015 for more realistic (less jumpy) pricing
 export const VIV_JITTER_RANGE = 0.0001;
 export const MOMENTUM_BIAS_CAP = 0.05; // Max 5p shift from momentum
@@ -38,6 +39,11 @@ export interface BinaryTrade {
 export interface BinaryPriceSnapshot {
   price: number;
   timestamp: string;
+}
+
+export interface PricePoint {
+  price: number;
+  timestamp: number;
 }
 
 export interface BinaryMarket {

@@ -25,6 +25,7 @@ import {
   calculatePotentialPayout,
   MARKET_DURATION_MS,
   formatPaise,
+  type PricePoint,
 } from "../../../shared/binaryPrice.ts";
 
 const router = Router();
@@ -244,6 +245,32 @@ router.get("/history", async (req, res) => {
  * GET /binary-markets/:id
  * Get a specific binary market by ID.
  */
+router.get(
+  "/price-history",
+  asyncRoute(async (_req, res) => {
+    const now = Date.now();
+    // Keep enough leading points to fill the chart while newer candles are saved.
+    const from = now - MARKET_DURATION_MS - 60_000;
+    const snapshots = await BinaryMarket.listPriceSnapshots(
+      new Date(from),
+      new Date(now),
+    );
+    const points = new Map<number, PricePoint>();
+    for (const snapshot of snapshots) {
+      const timestamp = Date.parse(snapshot.timestamp);
+      if (
+        timestamp >= from &&
+        timestamp <= now &&
+        Number.isFinite(snapshot.price) &&
+        snapshot.price > 0
+      ) {
+        points.set(timestamp, { timestamp, price: snapshot.price });
+      }
+    }
+    res.json([...points.values()].sort((a, b) => a.timestamp - b.timestamp));
+  }),
+);
+
 router.get("/:id", async (req, res) => {
   try {
     const market = await BinaryMarket.findById(req.params.id);

@@ -420,6 +420,70 @@ describe.skipIf(import.meta.env.MODE !== "db")(
       expect(cashOut.user.balance).toBeGreaterThan(result.user.balance);
     }, 20000);
 
+    it("loads saved chart prices and outcomes across a round boundary", async () => {
+      await setup(player, `player_${fixture.slice(0, 10)}`);
+      const now = Date.now();
+      const boundary = now - 80_000;
+      const previous = await BinaryMarket.openSlot({
+        assetPair: "BTCUSDT",
+        targetPrice: 100000,
+        startTime: new Date(boundary - 300_000),
+        endTime: new Date(boundary),
+        priceSnapshots: [
+          { price: 100000, timestamp: new Date(boundary - 300_000) },
+          { price: 100010, timestamp: new Date(boundary - 1_000) },
+          { price: 100020, timestamp: new Date(boundary) },
+        ],
+      });
+      btcMarkets.push(previous.id);
+      await withSystem(() =>
+        query(
+          "update metamarket.binary_markets set status = 'settled_up' where id = $1",
+          [previous.id],
+        ),
+      );
+      const active = await BinaryMarket.openSlot({
+        assetPair: "BTCUSDT",
+        targetPrice: 100020,
+        startTime: new Date(boundary),
+        endTime: new Date(boundary + 300_000),
+        priceSnapshots: [
+          { price: 100020, timestamp: new Date(boundary) },
+          { price: 100030, timestamp: new Date(boundary + 1_000) },
+        ],
+      });
+      btcMarkets.push(active.id);
+
+      await api("/binary-markets/price-history", { status: 401 });
+      const prices = await api("/binary-markets/price-history", {
+        account: player,
+      });
+      expect(
+        prices.filter(({ timestamp }) =>
+          [boundary - 1_000, boundary, boundary + 1_000].includes(timestamp),
+        ),
+      ).toEqual([
+        { price: 100010, timestamp: boundary - 1_000 },
+        { price: 100020, timestamp: boundary },
+        { price: 100030, timestamp: boundary + 1_000 },
+      ]);
+      expect(
+        prices.some(({ timestamp }) => timestamp === boundary - 300_000),
+      ).toBe(false);
+
+      const outcomes = await api("/binary-markets/history", {
+        account: player,
+      });
+      expect(outcomes).toContainEqual(
+        expect.objectContaining({
+          id: previous.id,
+          status: "settled_up",
+          endTime: new Date(boundary).toISOString(),
+        }),
+      );
+      expect(outcomes.some(({ id }) => id === active.id)).toBe(false);
+    });
+
     it("appends scheduled prices once when jobs overlap", async () => {
       const start = Math.floor(Date.now() / 1000) * 1000;
       const market = await BinaryMarket.openSlot({
@@ -446,6 +510,45 @@ describe.skipIf(import.meta.env.MODE !== "db")(
       expect(stored.priceSnapshots.map(({ price }) => price)).toEqual([
         100000, 100010, 100020, 100030,
       ]);
+    });
+
+    it("keeps the latest five final BTC outcomes as each round settles", async () => {
+      const rollback = new Error("Roll back BTC retention fixtures");
+      await expect(
+        withSystem(async () => {
+          const start = Date.now() + 3_600_000;
+          const finished: string[] = [];
+          for (let index = 0; index < 6; index++) {
+            const market = await BinaryMarket.openSlot({
+              assetPair: "BTCUSDT",
+              targetPrice: 100000,
+              startTime: new Date(start + index * 300_000),
+              endTime: new Date(start + (index + 1) * 300_000),
+              priceSnapshots: [],
+            });
+            finished.push(market.id);
+            const status = index % 2 === 0 ? "settled_up" : "settled_down";
+            await query(
+              "update metamarket.binary_markets set status = $2 where id = $1",
+              [market.id, status],
+            );
+          }
+          await BinaryMarket.pruneHistory();
+          const history = await BinaryMarket.listHistory();
+          expect(history.map(({ id }) => id)).toEqual(
+            finished.slice(1).reverse(),
+          );
+          expect(history.map(({ status }) => status)).toEqual([
+            "settled_down",
+            "settled_up",
+            "settled_down",
+            "settled_up",
+            "settled_down",
+          ]);
+          expect(await BinaryMarket.findById(finished[0])).toBeNull();
+          throw rollback;
+        }),
+      ).rejects.toBe(rollback);
     });
 
     it("credits an expired BTC round once when two scheduled jobs settle it", async () => {

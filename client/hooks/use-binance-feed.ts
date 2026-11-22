@@ -1,13 +1,9 @@
 import { useState, useEffect } from "react";
+import type { PricePoint } from "@shared/binaryPrice";
 
 const BINANCE_WS_URL = "wss://data-stream.binance.vision:9443/ws/btcusdt@aggTrade";
 const MAX_HISTORY = 1000;
 const RECONNECT_DELAY = 3000;
-
-export interface PricePoint {
-  price: number;
-  timestamp: number;
-}
 
 // Global state to persist data across page navigations
 let globalPrice = 0;

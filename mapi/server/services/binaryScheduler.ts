@@ -6,9 +6,10 @@
  *   - At market end: compare final price vs target, credit winners
  */
 
-import BinaryMarket, {
-  type IBinaryMarket,
-  type IBinaryPriceSnapshot,
+import BinaryMarket from "../models/BinaryMarket.ts";
+import type {
+  IBinaryMarket,
+  IBinaryPriceSnapshot,
 } from "../models/BinaryMarket.ts";
 import User from "../models/User.ts";
 import { withSystem } from "../database.ts";
