@@ -129,6 +129,7 @@ export function BinaryMarketCard({
           size="icon"
           aria-label={`Bookmark ${asset.symbol} market`}
           aria-pressed={isBookmarked}
+          data-bento-no-ripple
           onClick={onToggleBookmark}
           className="shrink-0 rounded-full text-muted-foreground hover:bg-muted"
         >

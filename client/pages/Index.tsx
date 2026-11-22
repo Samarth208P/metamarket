@@ -79,6 +79,7 @@ export default function Index() {
 
   const marketTile = (market: Market): MagicBentoItem => ({
     id: market.id,
+    accent: market.id === RAMAYANA_MARKET_ID ? "#edbd77" : undefined,
     content: (
       <MarketErrorBoundary
         market={market.id}
@@ -136,9 +137,9 @@ export default function Index() {
 
   return (
     <Layout>
-      <section className="container mx-auto max-w-[1400px] px-4 pb-12 pt-6 sm:pt-9">
+      <section className="container mx-auto max-w-[1400px] px-4 pb-12">
         <div
-          className="mb-6 flex items-center gap-1 overflow-x-auto border-b border-border pb-3 sm:mb-8 sm:gap-2"
+          className="mb-6 flex items-center gap-1 overflow-x-auto border-b border-border py-4 sm:mb-8 sm:gap-2 sm:py-6"
           role="group"
           aria-label="Market filters"
         >

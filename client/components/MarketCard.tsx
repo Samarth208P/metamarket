@@ -94,6 +94,7 @@ export function MarketCard({
             type="button"
             aria-label={`Bookmark ${title}`}
             aria-pressed={Boolean(isBookmarked)}
+            data-bento-no-ripple
             onClick={handleBookmarkToggle}
             className="grid size-9 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
           >

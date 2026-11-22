@@ -30,6 +30,7 @@
   flex: 1;
   flex-direction: column;
   min-width: 0;
+  border-radius: inherit;
 }
 
 .magic-bento__effects,

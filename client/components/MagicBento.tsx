@@ -94,8 +94,10 @@ export function MagicBento({ items }: { items: MagicBentoItem[] }) {
     const { clientX, clientY, currentTarget: grid, button, target } = event;
     if (
       button !== 0 ||
-      !grid.contains(target as Node) ||
+      !(target instanceof Element) ||
+      !grid.contains(target) ||
       target === grid ||
+      target.closest("[data-bento-no-ripple]") ||
       window.matchMedia("(prefers-reduced-motion: reduce)").matches
     )
       return;

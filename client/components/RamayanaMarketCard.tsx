@@ -12,7 +12,7 @@ export function RamayanaMarketCard({ market }: { market: Market }) {
   const bookmarked = bookmarks.includes(market.id);
 
   return (
-    <article className="relative flex min-h-52 flex-1 overflow-hidden bg-[#241712] text-[#fff0d9]">
+    <article className="relative flex min-h-52 flex-1 overflow-hidden rounded-[inherit] p-px text-[#fff0d9]">
       <Link
         to={RAMAYANA_PATH}
         style={diyaCursor}
@@ -42,6 +42,7 @@ export function RamayanaMarketCard({ market }: { market: Market }) {
         type="button"
         aria-label={`Bookmark ${market.title}`}
         aria-pressed={bookmarked}
+        data-bento-no-ripple
         onClick={() => toggleBookmark(market.id)}
         style={diyaCursor}
         className="absolute right-2 top-2 grid size-9 place-items-center rounded-full text-[#e3bb86] hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#edbd77]"
