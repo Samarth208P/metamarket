@@ -141,7 +141,13 @@ No separate API process is needed for local work. `pnpm start:api` is the produc
 
 After Netlify enables branch deploys for `develop`, each push updates [the development site](https://develop--mytamarket.netlify.app). Netlify builds the frontend and preview API from the same commit. The preview function reads only `PREVIEW_*` settings, and only the production build for `main` emits the Render API rewrite. Local saves appear immediately in Vite and stay on your machine until you push.
 
-Set `PREVIEW_MONGODB_URI` and `PREVIEW_SESSION_SECRET` for the **branch-deploy** context, scoped to Functions where available. Use a separate MongoDB cluster and a database user limited to `metamarket_preview`. Until those are set, `/mapi/ping` identifies the preview and data endpoints return `503`. For preview sign-in, use `PREVIEW_GOOGLE_CLIENT_ID` and `PREVIEW_GOOGLE_CLIENT_SECRET` with callback `https://develop--mytamarket.netlify.app/mapi/auth/google/callback`. Uploads use `PREVIEW_CLOUDINARY_CLOUD_NAME`, `PREVIEW_CLOUDINARY_API_KEY`, and `PREVIEW_CLOUDINARY_API_SECRET` from a separate account. The preview contains no BTC scheduler or scheduled Netlify function.
+The preview uses `PREVIEW_MONGODB_URI` and `PREVIEW_SESSION_SECRET` scoped to **Functions** on **`branch:develop`**. A session secret is already set. Use a separate MongoDB cluster and a database user limited to `metamarket_preview`. With the URI in your PowerShell environment, set it using your local Netlify CLI:
+
+```powershell
+netlify env:set PREVIEW_MONGODB_URI "$env:PREVIEW_MONGODB_URI" --site mytamarket --context branch:develop --scope functions --secret
+```
+
+Trigger a new develop deploy after setting the URI. Preview `/mapi/ping` identifies the environment. `/mapi/health` and the data routes return `503` until the database is available. For preview sign-in, use `PREVIEW_GOOGLE_CLIENT_ID` and `PREVIEW_GOOGLE_CLIENT_SECRET` with callback `https://develop--mytamarket.netlify.app/mapi/auth/google/callback`. Uploads use `PREVIEW_CLOUDINARY_CLOUD_NAME`, `PREVIEW_CLOUDINARY_API_KEY`, and `PREVIEW_CLOUDINARY_API_SECRET` from a separate account. The preview keeps the BTC scheduler off and deploys only the preview API function.
 
 ## Repository Notes
 
