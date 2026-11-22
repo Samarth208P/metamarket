@@ -4,6 +4,7 @@ import { Layout } from "@/components/Layout";
 import { BinaryMarketCard } from "@/components/BinaryMarketCard";
 import { MagicBento, type MagicBentoItem } from "@/components/MagicBento";
 import { MarketCard } from "@/components/MarketCard";
+import { RamayanaMarketCard } from "@/components/RamayanaMarketCard";
 import { MarketErrorBoundary } from "@/components/MarketErrorBoundary";
 import { Market } from "@shared/api";
 import { Search, Activity, CheckCircle2, Bookmark } from "lucide-react";
@@ -14,6 +15,7 @@ import { cn } from "@/lib/utils";
 import { binaryMarketCategory, binaryMarketTitle } from "@/lib/binary-markets";
 import { fetchMarkets, marketCatalogKey } from "@/lib/markets";
 import { BINARY_ASSETS, BINARY_ASSET_PAIRS } from "@shared/binaryAssets";
+import { RAMAYANA_MARKET_ID } from "@shared/ramayana";
 
 export default function Index() {
   const navigate = useNavigate();
@@ -64,6 +66,7 @@ export default function Index() {
 
   const liveMarkets = filteredMarkets.filter((m) => m.status === "active");
   const resolvedMarkets = filteredMarkets.filter((m) => m.status !== "active");
+  const ramayanaMarket = liveMarkets.find((m) => m.id === RAMAYANA_MARKET_ID);
   const liveMarketCount = liveMarkets.length + visibleBinaryMarkets.length;
 
   const handleTrade = (marketId: string, updatedMarket: Market) => {
@@ -89,7 +92,11 @@ export default function Index() {
           </article>
         }
       >
-        <MarketCard {...market} onTrade={handleTrade} />
+        {market.id === RAMAYANA_MARKET_ID ? (
+          <RamayanaMarketCard market={market} />
+        ) : (
+          <MarketCard {...market} onTrade={handleTrade} />
+        )}
       </MarketErrorBoundary>
     ),
   });
@@ -100,7 +107,14 @@ export default function Index() {
       return {
         id: path,
         accent,
-        colSpan: visibleBinaryMarkets.length === 1 ? 8 : index === 0 ? 7 : 5,
+        colSpan:
+          visibleBinaryMarkets.length === 1
+            ? 8
+            : ramayanaMarket
+              ? 4
+              : index === 0
+                ? 7
+                : 5,
         content: (
           <BinaryMarketCard
             assetPair={pair}
@@ -203,7 +217,13 @@ export default function Index() {
                 </span>
               </div>
               <MagicBento
-                items={[...binaryTiles, ...liveMarkets.map(marketTile)]}
+                items={[
+                  ...(ramayanaMarket ? [marketTile(ramayanaMarket)] : []),
+                  ...binaryTiles,
+                  ...liveMarkets
+                    .filter((market) => market.id !== RAMAYANA_MARKET_ID)
+                    .map(marketTile),
+                ]}
               />
             </section>
           )}

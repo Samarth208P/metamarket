@@ -194,8 +194,8 @@ export function MarketComposer({
 
     const title = draft.title.trim();
     const description = draft.description.trim();
-    if (!title || !description || !draft.category || !draft.endDate) {
-      setError("Enter a title, description, category, and closing time.");
+    if (!title || !description || !draft.category) {
+      setError("Enter a title, description, and category.");
       return;
     }
     if (
@@ -243,7 +243,9 @@ export function MarketComposer({
             title,
             description,
             category: draft.category,
-            endDate: new Date(draft.endDate).toISOString(),
+            endDate: draft.endDate
+              ? new Date(draft.endDate).toISOString()
+              : undefined,
             marketType: draft.marketType,
             initialB: Number(draft.initialB),
             minB: Number(draft.minB),
@@ -391,20 +393,20 @@ export function MarketComposer({
               </Select>
             </div>
             <div className="min-w-0 space-y-2">
-              <Label htmlFor="market-close">Closes at</Label>
+              <Label htmlFor="market-close">Closes at (optional)</Label>
               <Input
                 id="market-close"
                 type="datetime-local"
                 value={draft.endDate}
                 onChange={(event) => updateDraft("endDate", event.target.value)}
                 aria-describedby="market-close-hint"
-                required
               />
               <p
                 id="market-close-hint"
                 className="text-xs text-muted-foreground"
               >
-                Your local time
+                Your local time. Leave blank to keep trading open until
+                resolution.
               </p>
             </div>
           </div>

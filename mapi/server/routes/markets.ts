@@ -8,6 +8,7 @@ import Comment from "../models/Comment.ts";
 import { ApiError, asyncRoute, transactionRoute } from "./asyncRoute.ts";
 import { parseImageUpload } from "./imageUpload.ts";
 import { publicImageUrl, uploadImage } from "../services/images.ts";
+import { getRamayanaBoxOffice } from "../services/ramayanaBoxOffice.ts";
 import {
   QUOTE_TTL_MS,
   calculateCurrentB,
@@ -344,6 +345,13 @@ async function getSolvencyOverview() {
 }
 
 router.get(
+  "/ramayana/box-office",
+  asyncRoute(async (_req, res) => {
+    res.json(await getRamayanaBoxOffice());
+  }),
+);
+
+router.get(
   "/markets",
   asyncRoute(async (_req, res) => {
     const markets = await Market.list();
@@ -566,7 +574,13 @@ router.put(
     if (title) market.title = title;
     if (description) market.description = description;
     if (category) market.category = category;
-    if (endDate) market.endDate = new Date(endDate);
+    if (endDate === null) market.endDate = undefined;
+    else if (endDate) {
+      const closeTime = new Date(endDate);
+      if (!Number.isFinite(closeTime.getTime()))
+        throw new ApiError(400, { error: "Invalid closing time" });
+      market.endDate = closeTime;
+    }
     if (logoUrl) market.logoUrl = logoUrl;
     if (typeof initialB === "number" && initialB > 0)
       market.initialB = initialB;

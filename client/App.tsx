@@ -7,6 +7,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   BrowserRouter,
   Link,
+  Navigate,
   Routes,
   Route,
   useLocation,
@@ -25,11 +26,13 @@ import { Layout } from "@/components/Layout";
 import { MarketErrorBoundary } from "@/components/MarketErrorBoundary";
 import { MarketNotifications } from "@/components/MarketNotifications";
 import { BINARY_ASSETS, BINARY_ASSET_PAIRS } from "@shared/binaryAssets";
+import { RAMAYANA_MARKET_ID, RAMAYANA_PATH } from "@shared/ramayana";
 
 import { lazy, Suspense, useEffect, type ReactNode } from "react";
 
 const MarketDetail = lazy(() => import("./pages/MarketDetail"));
 const BinaryMarket = lazy(() => import("./pages/BinaryMarket"));
+const RamayanaMarket = lazy(() => import("./pages/RamayanaMarket"));
 
 const queryClient = new QueryClient();
 
@@ -112,6 +115,20 @@ function App() {
                     <Leaderboard />
                   </ProtectedRoute>
                 }
+              />
+              <Route
+                path={RAMAYANA_PATH}
+                element={
+                  <ProtectedRoute>
+                    <MarketRoute>
+                      <RamayanaMarket />
+                    </MarketRoute>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path={`/market/${RAMAYANA_MARKET_ID}`}
+                element={<Navigate to={RAMAYANA_PATH} replace />}
               />
               <Route
                 path="/market/:id"

@@ -4,12 +4,17 @@ import { useMatch } from "react-router-dom";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "@/hooks/use-toast";
 import { fetchMarkets, marketCatalogKey } from "@/lib/markets";
+import { RAMAYANA_MARKET_ID, RAMAYANA_PATH } from "@shared/ramayana";
 
 type MarketPhase = "open" | "closed" | "resolved";
 
 export function MarketNotifications() {
   const { user, bookmarks } = useAuth();
-  const viewedId = useMatch("/market/:id")?.params.id;
+  const regularMarket = useMatch("/market/:id");
+  const ramayanaMarket = useMatch(RAMAYANA_PATH);
+  const viewedId = ramayanaMarket
+    ? RAMAYANA_MARKET_ID
+    : regularMarket?.params.id;
   const isCatalogOpen = Boolean(useMatch("/"));
   const trackedIds = useMemo(() => {
     const ids = new Set(bookmarks);
@@ -62,7 +67,10 @@ export function MarketNotifications() {
         title: phase === "closed" ? "Market closed" : "Market resolved",
         description: market.title,
         notificationKind: "market",
-        notificationHref: `/market/${market.id}`,
+        notificationHref:
+          market.id === RAMAYANA_MARKET_ID
+            ? RAMAYANA_PATH
+            : `/market/${market.id}`,
         notificationKey:
           phase === "closed"
             ? `closed:${market.id}:${market.endDate}`

@@ -115,7 +115,9 @@ function EditMarket({ market, onUpdated }: MarketActionProps) {
             endDate:
               date === toLocalInputValue(market.endDate)
                 ? undefined
-                : new Date(date).toISOString(),
+                : date
+                  ? new Date(date).toISOString()
+                  : null,
             initialB: Number(baseB),
             minB: Number(minB),
             isDynamic,
@@ -171,20 +173,20 @@ function EditMarket({ market, onUpdated }: MarketActionProps) {
         >
           <fieldset disabled={update.isPending} className="min-w-0 space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="edit-market-close">Closes at</Label>
+              <Label htmlFor="edit-market-close">Closes at (optional)</Label>
               <Input
                 id="edit-market-close"
                 type="datetime-local"
                 value={date}
                 onChange={(event) => setDate(event.target.value)}
                 aria-describedby="edit-market-close-hint"
-                required={Boolean(market.endDate)}
               />
               <p
                 id="edit-market-close-hint"
                 className="text-xs text-muted-foreground"
               >
-                Your local time
+                Your local time. Leave blank to keep trading open until
+                resolution.
               </p>
             </div>
             <div className="grid grid-cols-2 gap-3">
