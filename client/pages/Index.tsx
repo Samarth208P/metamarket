@@ -123,9 +123,6 @@ export default function Index() {
   return (
     <Layout>
       <section className="container mx-auto max-w-[1400px] px-4 pb-12 pt-6 sm:pt-9">
-        <h1 className="mb-4 text-3xl font-extrabold tracking-tight sm:text-4xl">
-          Markets
-        </h1>
         <div
           className="mb-6 flex items-center gap-1 overflow-x-auto border-b border-border pb-3 sm:mb-8 sm:gap-2"
           role="group"
