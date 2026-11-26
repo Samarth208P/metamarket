@@ -903,14 +903,18 @@ export function LmsrBetModal({
                   <Trophy className="w-12 h-12 text-yellow-500" />
                   <div>
                     <div className="text-[10px] font-black uppercase text-muted-foreground mb-2 tracking-widest">
-                      Winning Outcome
+                      {market.codexSourceUrl && !isResolved
+                        ? "Trading closed"
+                        : "Winning Outcome"}
                     </div>
                     <div className="text-3xl font-black text-foreground">
                       {market.resolvedOptionId
                         ? market.options.find(
                             (o) => o.id === market.resolvedOptionId,
                           )?.name
-                        : "Resolved"}
+                        : market.codexSourceUrl && !isResolved
+                          ? "Awaiting resolution"
+                          : "Resolved"}
                     </div>
                   </div>
                   {userPnl !== null && userPnl !== 0 && (

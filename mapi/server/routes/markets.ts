@@ -498,6 +498,8 @@ export async function publishMarket(
           },
         ];
 
+  if (managed && Date.parse(endDate) <= Date.now())
+    throw new ApiError(409, { error: "The proposed cutoff has passed." });
   const market = await withSystem(() =>
     Market.create({
       title,
@@ -694,7 +696,7 @@ router.post(
     ensureLmsrMarketState(market);
     if (market.status !== "active")
       throw new ApiError(400, { error: "Cannot trade a resolved market" });
-    if (market.endDate && new Date(market.endDate) < new Date())
+    if (market.endDate && new Date(market.endDate).getTime() <= Date.now())
       throw new ApiError(400, { error: "Market has closed for trading" });
 
     const option = market.options.find(
