@@ -8,6 +8,7 @@ import { connectDB, isRecordId, withAccount } from "./database.ts";
 export { connectDB };
 
 import marketRoutes from "./routes/markets.ts";
+import { codexAgentRoutes, codexOwnerRoutes } from "./routes/codex.ts";
 import adminRoutes from "./routes/admin.ts";
 import profileImageRoutes from "./routes/profileImage.ts";
 import {
@@ -106,6 +107,7 @@ export async function createServer({
   apiRouter.get("/auth/google", handleGoogleAuth);
   apiRouter.get("/auth/google/callback", handleGoogleCallback);
   apiRouter.post("/auth/logout", handleLogout);
+  apiRouter.use("/codex/agent", codexAgentRoutes);
 
   apiRouter.use(
     asyncRoute(async (req, _res, next) => {
@@ -123,6 +125,7 @@ export async function createServer({
   apiRouter.post("/user/onboarding", handleOnboarding);
 
   apiRouter.use(requireOnboardingComplete);
+  apiRouter.use("/admin/codex", codexOwnerRoutes);
   apiRouter.patch("/user/username", handleUpdateUsername);
   apiRouter.use("/user/avatar", profileImageRoutes);
   apiRouter.post(
