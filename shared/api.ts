@@ -140,14 +140,6 @@ export interface LeaderboardUser {
   rankTrend: number;
 }
 
-export interface SolvencyOverview {
-  realReserves: number;
-  totalPotentialPayouts: number;
-  solvencyRatio: number;
-  threshold: number;
-  isBelowThreshold: boolean;
-}
-
 export interface TradeResponse {
   market: Market;
   user: User;

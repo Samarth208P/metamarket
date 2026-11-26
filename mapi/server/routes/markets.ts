@@ -3,7 +3,6 @@ import { Router, type RequestHandler } from "express";
 import { isRecordId, withSystem } from "../database.ts";
 import User, { serializeUser } from "../models/User.ts";
 import Market, { calculateYesPrice } from "../models/Market.ts";
-import Treasury from "../models/Treasury.ts";
 import Comment from "../models/Comment.ts";
 import { ApiError, asyncRoute, transactionRoute } from "./asyncRoute.ts";
 import { parseImageUpload } from "./imageUpload.ts";
@@ -303,48 +302,6 @@ function getOrCreatePosition(
   return position;
 }
 
-async function getSolvencyOverview() {
-  const treasury = await Treasury.get();
-  const users = await User.listPortfolios();
-  const markets = await Market.list("active");
-  let totalPotentialPayouts = 0;
-
-  markets.forEach((market) => {
-    ensureLmsrMarketState(market);
-    const optionTotals = new Map<string, number>();
-
-    users.forEach((user) => {
-      ensureUserPositions(user, market);
-      (user.positions || [])
-        .filter((position: any) => position.marketId === market.id)
-        .forEach((position: any) => {
-          optionTotals.set(
-            position.optionId,
-            (optionTotals.get(position.optionId) || 0) + position.shares,
-          );
-        });
-    });
-
-    totalPotentialPayouts += Math.max(0, ...Array.from(optionTotals.values()));
-  });
-
-  const solvencyRatio =
-    totalPotentialPayouts <= 0
-      ? Number.POSITIVE_INFINITY
-      : treasury.realReserves / totalPotentialPayouts;
-  return {
-    treasury,
-    overview: {
-      realReserves: treasury.realReserves,
-      totalPotentialPayouts,
-      solvencyRatio,
-      threshold: treasury.solvencyThreshold,
-      isBelowThreshold:
-        totalPotentialPayouts > 0 && solvencyRatio < treasury.solvencyThreshold,
-    },
-  };
-}
-
 router.get(
   "/ramayana/box-office",
   asyncRoute(async (_req, res) => {
@@ -367,39 +324,6 @@ router.get(
     }
 
     res.json(catalog);
-  }),
-);
-
-router.get(
-  "/admin/solvency",
-  ensureAuthenticated,
-  ensureAdmin,
-  asyncRoute(async (_req, res) => {
-    const { overview } = await getSolvencyOverview();
-    return res.json(overview);
-  }),
-);
-
-router.put(
-  "/admin/solvency",
-  ensureAuthenticated,
-  ensureAdmin,
-  asyncRoute(async (req, res) => {
-    const { realReserves, threshold } = req.body;
-    await Treasury.update({
-      realReserves:
-        typeof realReserves === "number" && Number.isFinite(realReserves)
-          ? realReserves
-          : undefined,
-      solvencyThreshold:
-        typeof threshold === "number" &&
-        Number.isFinite(threshold) &&
-        threshold > 0
-          ? threshold
-          : undefined,
-    });
-    const { overview } = await getSolvencyOverview();
-    return res.json(overview);
   }),
 );
 
@@ -453,14 +377,6 @@ export async function publishMarket(
     throw new ApiError(400, {
       error: "Title, description, and category are required",
     });
-
-  const { overview } = await getSolvencyOverview();
-  if (overview.isBelowThreshold) {
-    throw new ApiError(400, {
-      error:
-        "Solvency guard active. Add reserves or lower platform liability before creating new markets.",
-    });
-  }
 
   const baseB = Math.max(
     10,
