@@ -19,7 +19,8 @@ import {
   DrawerClose,
 } from "@/components/ui/drawer";
 import { useAuth } from "@/hooks/use-auth";
-import { calculateBuyCost, calculateSellPayout, MarketPool } from "@/lib/amm";
+import { calculateSellPayout, MarketPool } from "@/lib/amm";
+import { maxPurchaseAmount, pricePurchase } from "@shared/purchase";
 import { useToast } from "@/hooks/use-toast";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
@@ -148,7 +149,7 @@ export function BetModal({
   const cost = useMemo(
     () =>
       isBuying
-        ? calculateBuyCost(activePool, outcome, numAmount)
+        ? pricePurchase(numAmount).totalCost
         : -calculateSellPayout(activePool, outcome, numAmount),
     [isBuying, activePool, outcome, numAmount],
   );
@@ -208,7 +209,7 @@ export function BetModal({
   const handleMax = () => {
     if (!user) return;
     if (isBuying) {
-      setAmount(user.balance.toString());
+      setAmount(String(maxPurchaseAmount(user.balance)));
     } else {
       const holding = user.holdings?.find(
         (h) =>
@@ -720,7 +721,7 @@ export function BetModal({
         <div className="pt-2 space-y-2 border-t border-border">
           <div className="flex justify-between text-sm">
             <span className="text-muted-foreground">
-              Est. {isBuying ? "Cost" : "Payout"}
+              {isBuying ? "Total including fees" : "Est. Payout"}
             </span>
             <span className="font-bold">₹{Math.abs(cost).toFixed(2)}</span>
           </div>
@@ -729,7 +730,7 @@ export function BetModal({
               <span className="text-muted-foreground">Potential Return</span>
               <span className="font-bold text-green-500">
                 ₹{probableWinnings.toFixed(2)} (
-                {(((probableWinnings - numAmount) / numAmount) * 100).toFixed(
+                {(((probableWinnings - cost) / cost) * 100).toFixed(
                   0,
                 )}
                 %)
