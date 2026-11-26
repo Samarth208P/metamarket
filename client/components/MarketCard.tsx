@@ -11,20 +11,19 @@ type MarketCardProps = Market & {
   onTrade?: (marketId: string, tradeResult: any) => void;
 };
 
-export function MarketCard({
-  id,
-  title,
-  category,
-  description,
-  volume,
-  marketType = "binary",
-  logoUrl,
-  options,
-  onTrade,
-  status,
-  endDate,
-  priceHistory = [],
-}: MarketCardProps) {
+export function MarketCard({ onTrade, ...market }: MarketCardProps) {
+  const {
+    id,
+    title,
+    category,
+    volume,
+    marketType = "binary",
+    logoUrl,
+    options,
+    status,
+    endDate,
+    priceHistory = [],
+  } = market;
   const [showBetModal, setShowBetModal] = useState(false);
   const [selectedOptionId, setSelectedOptionId] = useState<string | undefined>(
     undefined,
@@ -177,7 +176,7 @@ export function MarketCard({
               >
                 {isClosed
                   ? "Closed"
-                  : `Ends ${new Date(endDate).toLocaleString("en-IN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata" })}`}
+                  : `Ends ${new Date(endDate).toLocaleString("en-IN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", timeZone: market.codexSourceUrl ? "UTC" : "Asia/Kolkata", timeZoneName: market.codexSourceUrl ? "short" : undefined })}`}
               </span>
             )}
           </div>
@@ -191,26 +190,7 @@ export function MarketCard({
           setSelectedOptionId(undefined);
         }}
         initialOptionId={selectedOptionId}
-        market={
-          {
-            id,
-            title,
-            description,
-            category,
-            volume,
-            marketType,
-            logoUrl,
-            options,
-            status,
-            endDate,
-            yesPrice: options[0]?.price || 0,
-            noPrice: options[1]?.price || 0,
-            createdAt: "",
-            updatedAt: "",
-            priceHistory,
-            ammType: "lmsr",
-          } as Market
-        }
+        market={{ ...market, marketType, priceHistory }}
         onTrade={onTrade || (() => {})}
       />
     </>

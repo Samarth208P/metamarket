@@ -781,6 +781,26 @@ export function LmsrBetModal({
 
   const modalTitle = `${market.title}${activeTeamName ? ` - ${activeTeamName}` : ""}`;
 
+  const awaitingCodex = Boolean(
+    market.codexSourceUrl && isTimeClosed && !isResolved,
+  );
+  const closedLabel = market.resolvedOptionId
+    ? market.options.find((option) => option.id === market.resolvedOptionId)
+        ?.name
+    : awaitingCodex
+      ? "Awaiting resolution"
+      : "Resolved";
+  const sourceLink = market.codexSourceUrl && (
+    <a
+      className="ml-2 text-primary underline"
+      href={market.codexSourceUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+    >
+      Resolution source
+    </a>
+  );
+
   if (isMobile) {
     return (
       <Drawer open={isOpen} onOpenChange={onClose}>
@@ -802,17 +822,18 @@ export function LmsrBetModal({
           </DrawerHeader>
           <div className="p-4 flex flex-col gap-5 overflow-y-auto no-scrollbar">
             {graphElement}
+            {sourceLink && (
+              <p className="text-sm leading-relaxed text-muted-foreground">
+                {market.description} {sourceLink}
+              </p>
+            )}
             {isMarketClosed ? (
               <div className="p-8 text-center bg-muted/20 rounded-2xl border border-border">
                 <div className="text-[10px] font-black uppercase text-muted-foreground mb-4">
-                  Market Resolved
+                  {awaitingCodex ? "Trading closed" : "Market resolved"}
                 </div>
                 <div className="text-3xl font-black text-primary mb-2">
-                  {market.resolvedOptionId
-                    ? market.options.find(
-                        (o) => o.id === market.resolvedOptionId,
-                      )?.name
-                    : "RESOLVED"}
+                  {closedLabel}
                 </div>
                 {userPnl !== null && userPnl !== 0 && (
                   <div
@@ -878,16 +899,7 @@ export function LmsrBetModal({
                 </h4>
                 <p className="text-sm text-muted-foreground leading-relaxed">
                   {market.description}
-                  {market.codexSourceUrl && (
-                    <a
-                      className="ml-2 text-primary underline"
-                      href={market.codexSourceUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      Resolution source
-                    </a>
-                  )}
+                  {sourceLink}
                 </p>
               </div>
               <div className="pt-6 border-t border-border/50">
@@ -903,18 +915,10 @@ export function LmsrBetModal({
                   <Trophy className="w-12 h-12 text-yellow-500" />
                   <div>
                     <div className="text-[10px] font-black uppercase text-muted-foreground mb-2 tracking-widest">
-                      {market.codexSourceUrl && !isResolved
-                        ? "Trading closed"
-                        : "Winning Outcome"}
+                      {awaitingCodex ? "Trading closed" : "Winning Outcome"}
                     </div>
                     <div className="text-3xl font-black text-foreground">
-                      {market.resolvedOptionId
-                        ? market.options.find(
-                            (o) => o.id === market.resolvedOptionId,
-                          )?.name
-                        : market.codexSourceUrl && !isResolved
-                          ? "Awaiting resolution"
-                          : "Resolved"}
+                      {closedLabel}
                     </div>
                   </div>
                   {userPnl !== null && userPnl !== 0 && (
