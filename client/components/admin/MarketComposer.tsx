@@ -41,6 +41,7 @@ const marketTypes = [
 const liquidityPresets = [500, 2000, 5000];
 const imageTypes = "image/jpeg,image/png,image/webp";
 const emptyDraft = {
+  logoUrl: "",
   title: "",
   description: "",
   category: "",
@@ -164,7 +165,6 @@ export function MarketComposer({
   onCreated: (market: Market) => void;
 }) {
   const [draft, setDraft] = useState(emptyDraft);
-  const [logo, setLogo] = useState<File>();
   const [teams, setTeams] = useState(initialTeams);
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState("");
@@ -220,17 +220,15 @@ export function MarketComposer({
 
     setIsCreating(true);
     try {
-      const [logoUrl, uploadedTeams] = await Promise.all([
-        logo ? uploadImage(logo) : undefined,
+      const uploadedTeams =
         draft.marketType === "multi"
-          ? Promise.all(
+          ? await Promise.all(
               teams.map(async (team) => ({
                 name: team.name.trim(),
                 imageUrl: team.file ? await uploadImage(team.file) : undefined,
               })),
             )
-          : undefined,
-      ]);
+          : undefined;
       const market = await adminRequest<Market>(
         "/markets",
         "Unable to create market.",
@@ -248,7 +246,7 @@ export function MarketComposer({
             initialB: Number(draft.initialB),
             minB: Number(draft.minB),
             isDynamic: draft.isDynamic,
-            logoUrl,
+            logoUrl: draft.logoUrl.trim() || undefined,
             teams: uploadedTeams,
             ...(draft.marketType === "versus" && {
               optionA: draft.optionA.trim(),
@@ -263,7 +261,6 @@ export function MarketComposer({
       onCreated(market);
       setDraft(emptyDraft);
       setTeams(initialTeams());
-      setLogo(undefined);
       setAdvancedOpen(false);
       toast({
         title: "Market created",
@@ -502,14 +499,21 @@ export function MarketComposer({
             </fieldset>
           )}
 
-          <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
-            <p className="text-sm font-semibold">
-              Market logo{" "}
+          <div className="space-y-2">
+            <Label htmlFor="market-image-url">
+              Image link{" "}
               <span className="font-normal text-muted-foreground">
                 (optional)
               </span>
-            </p>
-            <ImagePicker file={logo} label="market logo" onChange={setLogo} />
+            </Label>
+            <Input
+              id="market-image-url"
+              type="url"
+              pattern="https?://.+"
+              placeholder="https://example.com/image.jpg"
+              value={draft.logoUrl}
+              onChange={(event) => updateDraft("logoUrl", event.target.value)}
+            />
           </div>
 
           <div className="rounded-lg border bg-muted/20">
