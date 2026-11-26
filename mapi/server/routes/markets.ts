@@ -174,6 +174,7 @@ function serializeMarket(doc: any) {
     description: doc.description,
     category: doc.category,
     creatorId: doc.creatorId,
+    codexSourceUrl: doc.codexSourceUrl,
     marketType: doc.marketType || "binary",
     ammType: doc.ammType || "lmsr",
     optionA: doc.optionA,
@@ -426,130 +427,136 @@ router.get(
   }),
 );
 
-router.post(
-  "/markets",
-  ensureAuthenticated,
-  ensureAdmin,
-  asyncRoute(async (req, res) => {
-    const {
+export async function publishMarket(
+  input: any,
+  creatorId: string,
+  managed?: { codexProposalId: string; codexSourceUrl: string },
+) {
+  const {
+    title,
+    description,
+    category,
+    endDate,
+    marketType,
+    optionA,
+    optionB,
+    shortA,
+    shortB,
+    logoUrl,
+    teams,
+    initialB,
+    minB,
+    isDynamic,
+    initialLiquidity,
+  } = input;
+  if (!title || !description || !category)
+    throw new ApiError(400, {
+      error: "Title, description, and category are required",
+    });
+
+  const { overview } = await getSolvencyOverview();
+  if (overview.isBelowThreshold) {
+    throw new ApiError(400, {
+      error:
+        "Solvency guard active. Add reserves or lower platform liability before creating new markets.",
+    });
+  }
+
+  const baseB = Math.max(
+    10,
+    Number(initialB) || Number(initialLiquidity) || 1000,
+  );
+  const floorB = Math.max(1, Number(minB) || Math.round(baseB * 0.25));
+  const nextMarketType = marketType || "binary";
+  const options =
+    nextMarketType === "multi"
+      ? (Array.isArray(teams) ? teams : []).map((team: any, index: number) => ({
+          id: makeOptionId(index),
+          name: team.name,
+          shortName: team.name,
+          imageUrl: team.imageUrl,
+          shares: baseB * 10,
+        }))
+      : [
+          {
+            id: "yes",
+            name:
+              nextMarketType === "versus"
+                ? optionA || shortA || "Option A"
+                : "Yes",
+            shortName: shortA || optionA || "Yes",
+            shares: baseB * 10,
+          },
+          {
+            id: "no",
+            name:
+              nextMarketType === "versus"
+                ? optionB || shortB || "Option B"
+                : "No",
+            shortName: shortB || optionB || "No",
+            shares: baseB * 10,
+          },
+        ];
+
+  const market = await withSystem(() =>
+    Market.create({
       title,
       description,
       category,
-      endDate,
-      marketType,
+      marketType: nextMarketType,
+      ammType: "lmsr",
       optionA,
       optionB,
       shortA,
       shortB,
       logoUrl,
-      teams,
-      initialB,
-      minB,
-      isDynamic,
-      initialLiquidity,
-    } = req.body;
-    if (!title || !description || !category)
-      return res
-        .status(400)
-        .json({ error: "Title, description, and category are required" });
-
-    const { overview } = await getSolvencyOverview();
-    if (overview.isBelowThreshold) {
-      return res.status(400).json({
-        error:
-          "Solvency guard active. Add reserves or lower platform liability before creating new markets.",
-      });
-    }
-
-    const baseB = Math.max(
-      10,
-      Number(initialB) || Number(initialLiquidity) || 1000,
-    );
-    const floorB = Math.max(1, Number(minB) || Math.round(baseB * 0.25));
-    const nextMarketType = marketType || "binary";
-    const options =
-      nextMarketType === "multi"
-        ? (Array.isArray(teams) ? teams : []).map(
-            (team: any, index: number) => ({
-              id: makeOptionId(index),
+      creatorId,
+      ...managed,
+      options,
+      teams:
+        nextMarketType === "multi"
+          ? (teams || []).map((team: any) => ({
               name: team.name,
-              shortName: team.name,
               imageUrl: team.imageUrl,
-              shares: baseB * 10,
-            }),
-          )
-        : [
-            {
-              id: "yes",
-              name:
-                nextMarketType === "versus"
-                  ? optionA || shortA || "Option A"
-                  : "Yes",
-              shortName: shortA || optionA || "Yes",
-              shares: baseB * 10,
-            },
-            {
-              id: "no",
-              name:
-                nextMarketType === "versus"
-                  ? optionB || shortB || "Option B"
-                  : "No",
-              shortName: shortB || optionB || "No",
-              shares: baseB * 10,
-            },
-          ];
+              yesPool: baseB,
+              noPool: baseB,
+            }))
+          : undefined,
+      endDate: endDate ? new Date(endDate) : undefined,
+      initialB: baseB,
+      minB: floorB,
+      isDynamic: Boolean(isDynamic),
+      yesPool: baseB,
+      noPool: baseB,
+      priceHistory: [
+        {
+          yesPrice: nextMarketType === "multi" ? 0 : 50,
+          noPrice: nextMarketType === "multi" ? 0 : 50,
+          allPrices:
+            nextMarketType === "multi"
+              ? options.map(() =>
+                  Number((100 / Math.max(options.length, 1)).toFixed(2)),
+                )
+              : undefined,
+          prices: options.map((option: any) => ({
+            optionId: option.id,
+            price: Number((100 / Math.max(options.length, 1)).toFixed(2)),
+          })),
+          note: `Market opened with base liquidity parameter ${baseB}`,
+          timestamp: new Date(),
+        },
+      ],
+    }),
+  );
+  return serializeMarket(market);
+}
 
-    const market = await withSystem(() =>
-      Market.create({
-        title,
-        description,
-        category,
-        marketType: nextMarketType,
-        ammType: "lmsr",
-        optionA,
-        optionB,
-        shortA,
-        shortB,
-        logoUrl,
-        creatorId: req.user.id,
-        options,
-        teams:
-          nextMarketType === "multi"
-            ? (teams || []).map((team: any) => ({
-                name: team.name,
-                imageUrl: team.imageUrl,
-                yesPool: baseB,
-                noPool: baseB,
-              }))
-            : undefined,
-        endDate: endDate ? new Date(endDate) : undefined,
-        initialB: baseB,
-        minB: floorB,
-        isDynamic: Boolean(isDynamic),
-        yesPool: baseB,
-        noPool: baseB,
-        priceHistory: [
-          {
-            yesPrice: nextMarketType === "multi" ? 0 : 50,
-            noPrice: nextMarketType === "multi" ? 0 : 50,
-            allPrices:
-              nextMarketType === "multi"
-                ? options.map(() =>
-                    Number((100 / Math.max(options.length, 1)).toFixed(2)),
-                  )
-                : undefined,
-            prices: options.map((option: any) => ({
-              optionId: option.id,
-              price: Number((100 / Math.max(options.length, 1)).toFixed(2)),
-            })),
-            note: `Market opened with base liquidity parameter ${baseB}`,
-            timestamp: new Date(),
-          },
-        ],
-      }),
-    );
-
-    return res.status(201).json(serializeMarket(market));
+router.post(
+  "/markets",
+  ensureAuthenticated,
+  ensureAdmin,
+  asyncRoute(async (req, res) => {
+    res.status(201).json(await publishMarket(req.body, req.user.id));
   }),
 );
 
@@ -560,6 +567,8 @@ router.put(
   transactionRoute(async (req) => {
     const market = await Market.findById(req.params.id, true);
     if (!market) throw new ApiError(404, { error: "Market not found" });
+
+    if (market.codexProposalId) throw new ApiError(409, { error: "Published Codex terms are fixed." });
 
     const {
       title,
@@ -860,93 +869,109 @@ router.post(
   }),
 );
 
+// Called inside a system transaction so a payout and its approval commit together.
+export async function settleMarket(
+  id: string,
+  input: { outcome?: string; optionId?: string; teamIndex?: number },
+  proposalId?: string,
+) {
+  const { outcome, optionId, teamIndex } = input;
+  const market = await Market.findById(id, true);
+  if (!market) throw new ApiError(404, { error: "Market not found" });
+  if (market.codexProposalId !== proposalId)
+    throw new ApiError(409, {
+      error: "Use the Codex settlement review for this market.",
+    });
+  if (
+    proposalId &&
+    (!market.endDate || new Date(market.endDate).getTime() > Date.now())
+  )
+    throw new ApiError(409, { error: "Market is still open." });
+  ensureLmsrMarketState(market);
+  if (market.status !== "active")
+    throw new ApiError(400, { error: "Market is already resolved" });
+
+  const resolvedOptionId =
+    optionId ||
+    (market.marketType === "multi" && Number.isInteger(teamIndex)
+      ? makeOptionId(Number(teamIndex))
+      : outcome);
+  const winningOption = market.options.find(
+    (option: any) => option.id === resolvedOptionId,
+  );
+  if (!winningOption)
+    throw new ApiError(400, { error: "Winning option not found" });
+
+  market.status =
+    market.marketType === "multi"
+      ? "resolved_option"
+      : resolvedOptionId === "yes"
+        ? "resolved_yes"
+        : "resolved_no";
+  market.resolvedOptionId = resolvedOptionId;
+  if (resolvedOptionId === "yes" || resolvedOptionId === "no")
+    market.resolvedOutcome = resolvedOptionId;
+  market.priceHistory.push({
+    yesPrice: resolvedOptionId === "yes" ? 100 : 0,
+    noPrice:
+      resolvedOptionId === "no" ? 100 : resolvedOptionId === "yes" ? 0 : 0,
+    allPrices:
+      market.marketType === "multi"
+        ? market.options.map((option: any) =>
+            option.id === resolvedOptionId ? 100 : 0,
+          )
+        : undefined,
+    prices: market.options.map((option: any) => ({
+      optionId: option.id,
+      price: option.id === resolvedOptionId ? 100 : 0,
+    })),
+    note: `Market resolved as ${winningOption.name}`,
+    timestamp: new Date(),
+  });
+  await Market.save(market);
+
+  const users = await User.listPortfolios({
+    marketId: market.id,
+    lock: true,
+  });
+  for (const user of users) {
+    ensureUserPositions(user, market);
+    const winningPosition = (user.positions || []).find(
+      (position: any) =>
+        position.marketId === market.id &&
+        position.optionId === resolvedOptionId,
+    );
+    const payout = winningPosition?.shares || 0;
+    if (!user.tradeHistory) user.tradeHistory = [];
+    user.tradeHistory.push({
+      marketId: market.id,
+      marketTitle: market.title,
+      tradeType: "payout",
+      optionId: resolvedOptionId,
+      optionName: winningOption.name,
+      amount: payout,
+      shares: payout,
+      averagePrice: payout > 0 ? 1 : 0,
+      fee: 0,
+      cashDelta: payout,
+      timestamp: new Date(),
+    });
+    user.balance += payout;
+    user.positions = (user.positions || []).filter(
+      (position: any) => position.marketId !== market.id,
+    );
+
+    await User.savePortfolio(user);
+  }
+
+  return serializeMarket(market);
+}
+
 router.post(
   "/markets/:id/resolve",
   ensureAuthenticated,
   ensureAdmin,
-  transactionRoute(async (req) => {
-    const { outcome, optionId, teamIndex } = req.body;
-    const market = await Market.findById(req.params.id, true);
-    if (!market) throw new ApiError(404, { error: "Market not found" });
-    ensureLmsrMarketState(market);
-    if (market.status !== "active")
-      throw new ApiError(400, { error: "Market is already resolved" });
-
-    const resolvedOptionId =
-      optionId ||
-      (market.marketType === "multi" && Number.isInteger(teamIndex)
-        ? makeOptionId(Number(teamIndex))
-        : outcome);
-    const winningOption = market.options.find(
-      (option: any) => option.id === resolvedOptionId,
-    );
-    if (!winningOption)
-      throw new ApiError(400, { error: "Winning option not found" });
-
-    market.status =
-      market.marketType === "multi"
-        ? "resolved_option"
-        : resolvedOptionId === "yes"
-          ? "resolved_yes"
-          : "resolved_no";
-    market.resolvedOptionId = resolvedOptionId;
-    if (resolvedOptionId === "yes" || resolvedOptionId === "no")
-      market.resolvedOutcome = resolvedOptionId;
-    market.priceHistory.push({
-      yesPrice: resolvedOptionId === "yes" ? 100 : 0,
-      noPrice:
-        resolvedOptionId === "no" ? 100 : resolvedOptionId === "yes" ? 0 : 0,
-      allPrices:
-        market.marketType === "multi"
-          ? market.options.map((option: any) =>
-              option.id === resolvedOptionId ? 100 : 0,
-            )
-          : undefined,
-      prices: market.options.map((option: any) => ({
-        optionId: option.id,
-        price: option.id === resolvedOptionId ? 100 : 0,
-      })),
-      note: `Market resolved as ${winningOption.name}`,
-      timestamp: new Date(),
-    });
-    await Market.save(market);
-
-    const users = await User.listPortfolios({
-      marketId: market.id,
-      lock: true,
-    });
-    for (const user of users) {
-      ensureUserPositions(user, market);
-      const winningPosition = (user.positions || []).find(
-        (position: any) =>
-          position.marketId === market.id &&
-          position.optionId === resolvedOptionId,
-      );
-      const payout = winningPosition?.shares || 0;
-      if (!user.tradeHistory) user.tradeHistory = [];
-      user.tradeHistory.push({
-        marketId: market.id,
-        marketTitle: market.title,
-        tradeType: "payout",
-        optionId: resolvedOptionId,
-        optionName: winningOption.name,
-        amount: payout,
-        shares: payout,
-        averagePrice: payout > 0 ? 1 : 0,
-        fee: 0,
-        cashDelta: payout,
-        timestamp: new Date(),
-      });
-      user.balance += payout;
-      user.positions = (user.positions || []).filter(
-        (position: any) => position.marketId !== market.id,
-      );
-
-      await User.savePortfolio(user);
-    }
-
-    return serializeMarket(market);
-  }),
+  transactionRoute((req) => settleMarket(req.params.id, req.body)),
 );
 
 router.get(

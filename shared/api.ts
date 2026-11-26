@@ -89,6 +89,7 @@ export interface QuoteResponse {
 }
 
 export interface Market {
+  codexSourceUrl?: string;
   id: string;
   title: string;
   description: string;

@@ -41,6 +41,8 @@ export interface IMarket {
     noPool: number;
   }[];
   creatorId?: string;
+  codexProposalId?: string;
+  codexSourceUrl?: string;
   status: MarketStatus;
   yesPool: number;
   noPool: number;
