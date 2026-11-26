@@ -95,8 +95,11 @@ export function parseDraft(value: unknown, now = Date.now()): CodexDraft {
   const metric = field(r.metric, "point-in-time metric", 180);
   const unit = field(r.unit, "measurement unit", 60);
   if (
-    /\b(ever|at any (?:time|point)|before (?:expiry|the cutoff)|first to|all[- ]time high|cumulative|total (?:sales|streams|views) (?:by|since))\b/i.test(
+    /\b(ever|at any (?:time|point)|before (?:expiry|the cutoff)|first to|all[- ]time (?:high|low)|cumulative|lifetime (?:sales|streams|views|downloads)|total (?:tickets sold|sales|streams|views|downloads))\b/i.test(
       title + " " + metric,
+    ) ||
+    /\b(?:hit|touch|reach|cross|surpass|break)\b.*\b(?:by|before|during|within)\b/i.test(
+      title,
     )
   )
     invalid("Use a measurement that can change until the exact cutoff.");
