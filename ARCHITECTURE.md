@@ -89,6 +89,12 @@ Admins upload JPEG, PNG, or WebP files up to 5 MiB via `POST /mapi/upload`. Expr
 - **Five-minute BTC rounds** use [binary pricing](shared/binaryPrice.ts) and a Binance price feed. Cron invokes the cycle every ten seconds. The job fills one-second price history from closed Binance candles and locks the round and affected accounts to settle payouts once if invocations overlap. The browser uses its own Binance feed for chart ticks and polls Express for the round, odds, and trade state. [BTC scheduler](mapi/server/services/binaryScheduler.ts) · [BTC routes](mapi/server/routes/binaryMarkets.ts) · [BTC page](client/pages/BinaryMarket.tsx)
 - **Failure isolation** keeps the regular API available when the BTC module fails to start. The catalog logs and skips unreadable market records. React loads BTC and regular market detail separately and wraps them in market error boundaries. [API startup](mapi/server/index.ts) · [Client routes](client/App.tsx)
 
+## Codex market reviews
+
+From this checkout, prompt Codex with **Create a market**, **Revise a draft**, or **Check expired markets**. The [operator skill](.agents/skills/metamarket-operator/SKILL.md) submits private proposals on demand. The owner signs in to `/admin` and opens **Codex reviews** to approve or dismiss each version.
+
+The submission token grants access to the agent routes. Publication and settlement require the configured owner's admin session. An approved draft links to one standard market. Its published cutoff, source and rule stay fixed. Missing evidence leaves trading closed until the next prompted check. See the [setup and submission contract](.agents/skills/metamarket-operator/references/submissions.md) for the environment settings and CLI.
+
 ## Verify changes
 
 | Command                                                       | What it checks                                                                                                                                                  |
