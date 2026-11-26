@@ -8,7 +8,7 @@
   <strong>Play-money prediction markets with LMSR pricing and quote-based trading.</strong>
 </p>
 
-MetaMarket started at IIT Roorkee and is open to anyone with a Google account. It lets users explore and trade on future outcomes across binary, head-to-head, and multi-outcome markets, while giving admins the tools to create markets, monitor solvency, upload assets, and resolve results.
+MetaMarket started at IIT Roorkee and is open to anyone with a Google account. It lets users explore and trade on future outcomes across binary, head-to-head, and multi-outcome markets, while giving admins the tools to create markets, upload assets, and resolve results.
 
 ## Overview
 
@@ -23,7 +23,7 @@ At a product level, MetaMarket is built around a simple idea: market prices act 
 - Dynamic liquidity support through configurable `b`, `minB`, and time-decay settings
 - Google sign-in for verified Google accounts, with required username setup and play terms
 - Portfolio, leaderboard, bookmarks, and market comments
-- Admin dashboard for market creation, image uploads, resolution, and solvency controls
+- Admin dashboard for market creation, image uploads, and resolution
 - Shared API types and pricing utilities used by both client and server
 
 ## Pricing Intuition

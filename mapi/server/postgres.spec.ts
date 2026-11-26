@@ -300,8 +300,14 @@ describe.skipIf(import.meta.env.MODE !== "db")(
       expect(trade.user.balance).toBe(900);
       expect(trade.user.positions[0].shares).toBeGreaterThan(0);
       const nextMarket = await api("/markets", {
-        account: admin, method: "POST", status: 201,
-        body: {title: "Open while another market has positions", description: "Integration fixture", category: "General"},
+        account: admin,
+        method: "POST",
+        status: 201,
+        body: {
+          title: "Open while another market has positions",
+          description: "Integration fixture",
+          category: "General",
+        },
       });
       markets.push(nextMarket.id);
       await api(`/markets/${market.id}/resolve`, {

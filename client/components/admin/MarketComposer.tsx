@@ -159,10 +159,8 @@ function ImagePicker({
 }
 
 export function MarketComposer({
-  blocked,
   onCreated,
 }: {
-  blocked: boolean;
   onCreated: (market: Market) => void;
 }) {
   const [draft, setDraft] = useState(emptyDraft);
@@ -189,7 +187,7 @@ export function MarketComposer({
 
   async function createMarket(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (blocked || isCreating) return;
+    if (isCreating) return;
     setError("");
 
     const title = draft.title.trim();
@@ -621,14 +619,6 @@ export function MarketComposer({
         </fieldset>
 
         <footer className="space-y-3 border-t px-4 py-4 sm:px-6">
-          {blocked && (
-            <p
-              role="status"
-              className="text-sm font-medium text-red-700 dark:text-red-300"
-            >
-              Market creation is paused. Review reserves in Solvency Guard.
-            </p>
-          )}
           {error && (
             <p
               role="alert"
@@ -640,7 +630,7 @@ export function MarketComposer({
           <Button
             type="submit"
             className="w-full bg-blue-700 text-white hover:bg-blue-800"
-            disabled={blocked || isCreating}
+            disabled={isCreating}
           >
             {isCreating ? (
               <>

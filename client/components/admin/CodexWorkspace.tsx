@@ -26,11 +26,9 @@ function SourceLink({ url, children }: { url: string; children: ReactNode }) {
 
 function ProposalCard({
   row,
-  blocked,
   refresh,
 }: {
   row: CodexReview;
-  blocked: boolean;
   refresh: () => Promise<void>;
 }) {
   const { draft, phase, evidence } = row;
@@ -179,13 +177,11 @@ function ProposalCard({
           expired markets” in Codex.
         </p>
       )}
-      {creation && (expired || blocked || imageState === "failed") && (
+      {creation && (expired || imageState === "failed") && (
         <p className="text-sm text-destructive">
           {expired
             ? "The proposed cutoff has passed."
-            : blocked
-              ? "Publication is paused by the solvency guard."
-              : "The image could not load. Revise the draft in Codex."}
+            : "The image could not load. Revise the draft in Codex."}
         </p>
       )}
       {error && (
@@ -196,10 +192,7 @@ function ProposalCard({
       {actionable && (
         <div className="flex flex-wrap gap-2">
           <Button
-            disabled={
-              busy ||
-              (creation && (expired || blocked || imageState !== "ready"))
-            }
+            disabled={busy || (creation && (expired || imageState !== "ready"))}
             onClick={() => decide("approve")}
           >
             {creation ? "Approve & publish" : "Approve & settle " + winner}
@@ -217,13 +210,7 @@ function ProposalCard({
   );
 }
 
-export function CodexWorkspace({
-  children,
-  blocked,
-}: {
-  children: ReactNode;
-  blocked: boolean;
-}) {
+export function CodexWorkspace({ children }: { children: ReactNode }) {
   const [review, setReview] = useState(false);
   const { user } = useAuth();
   const client = useQueryClient();
@@ -242,7 +229,6 @@ export function CodexWorkspace({
       result.refetch(),
       client.invalidateQueries({ queryKey: marketCatalogKey }),
       client.invalidateQueries({ queryKey: ["market"] }),
-      client.invalidateQueries({ queryKey: ["adminSolvency"] }),
     ]);
   }
 
@@ -301,7 +287,6 @@ export function CodexWorkspace({
             <ProposalCard
               key={row.id + "-" + row.revision}
               row={row}
-              blocked={blocked}
               refresh={refresh}
             />
           ))}
