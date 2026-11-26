@@ -1,4 +1,4 @@
-import { createHmac } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import { once } from "node:events";
 import type { AddressInfo } from "node:net";
 import { Client } from "pg";
@@ -43,6 +43,7 @@ describe.skipIf(import.meta.env.MODE !== "db")(
     const accounts: string[] = [];
     const markets: string[] = [];
     const binaryMarkets: string[] = [];
+    const proposals: string[] = [];
     const marketImages: string[] = [];
     let server: ReturnType<Awaited<ReturnType<typeof createServer>>["listen"]>;
     let admin: IUser;
@@ -73,6 +74,7 @@ describe.skipIf(import.meta.env.MODE !== "db")(
       path: string,
       options: {
         account?: IUser;
+        agentToken?: string;
         method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
         body?: object;
         status?: number;
@@ -87,6 +89,9 @@ describe.skipIf(import.meta.env.MODE !== "db")(
             ? {}
             : { "Content-Type": "application/json" }),
           ...(account ? { cookie: session(account.id) } : {}),
+          ...(options.agentToken
+            ? { authorization: "Bearer " + options.agentToken }
+            : {}),
         },
         body: body instanceof FormData ? body : JSON.stringify(body),
       });
@@ -138,13 +143,21 @@ describe.skipIf(import.meta.env.MODE !== "db")(
           );
         // This administrative connection is always to the dedicated local CLI database.
         if (!accounts.length) return;
-        const cleanup = new Client({
-          connectionString:
-            "postgresql://postgres:postgres@127.0.0.1:54322/postgres",
-        });
+        const cleanupUrl = new URL(
+          "postgresql://postgres:postgres@127.0.0.1:54322/postgres",
+        );
+        const localBackend =
+          process.env.SUPABASE_DEV_DATABASE_URL ||
+          process.env.METAMARKET_DEV_DATABASE_URL;
+        if (localBackend) cleanupUrl.pathname = new URL(localBackend).pathname;
+        const cleanup = new Client({ connectionString: cleanupUrl.href });
         await cleanup.connect();
         try {
           await cleanup.query("begin");
+          await cleanup.query(
+            "delete from metamarket.codex_market_reviews where id = any($1::uuid[])",
+            [proposals],
+          );
           await cleanup.query(
             "delete from metamarket.binary_markets where id = any($1::text[])",
             [binaryMarkets],
@@ -307,6 +320,237 @@ describe.skipIf(import.meta.env.MODE !== "db")(
         [],
       );
     }, 20000);
+
+    it("publishes and settles a versioned Codex proposal only after owner approval", async () => {
+      const owner = await addAccount("codex-owner", true);
+      await setup(owner, "owner_" + fixture.slice(0, 10));
+      const agentToken = "integration-submitter";
+      vi.stubEnv("METAMARKET_REVIEW_OWNER_EMAIL", owner.email);
+      vi.stubEnv("METAMARKET_CODEX_TOKEN", agentToken);
+      const id = randomUUID();
+      proposals.push(id);
+      const drafts = "/codex/agent/drafts/" + id;
+      const reports = "/codex/agent/evidence/" + id;
+      const review = "/admin/codex/" + id;
+      const cutoff = Date.now() - 1000;
+      const endDate = new Date(cutoff).toISOString();
+      const title = "Which fixture has more concurrent viewers at the cutoff?";
+      const draft = {
+        title,
+        category: "Entertainment",
+        endDate,
+        marketType: "versus",
+        outcomes: ["A", "B"],
+        sourceName: "Fixture archive",
+        sourceUrl: "https://example.org/history",
+        archiveExampleUrl: "https://example.org/past",
+        logoUrl: "https://example.org/image.png",
+        storyUrl: "https://example.org/story",
+        whyNow: "Two launches are competing.",
+        whyUnsettled: "Audiences can join and leave until the cutoff.",
+        rule: {
+          kind: "ranking",
+          metric: "Concurrent viewers",
+          unit: "viewers",
+          wins: "highest",
+        },
+        initialB: 1000,
+        minB: 100,
+        isDynamic: false,
+      };
+      const decision = (
+        kind: string,
+        revision: number,
+        action = "approve",
+        status = 200,
+        account = owner,
+      ) =>
+        api(review + "/" + action, {
+          method: "POST",
+          account,
+          body: { kind, revision },
+          status,
+        });
+      let marketId: string;
+      vi.useFakeTimers({ toFake: ["Date"] });
+      try {
+        vi.setSystemTime(cutoff - 60000);
+        await api(drafts, {
+          method: "PUT",
+          account: owner,
+          body: { revision: 0, draft },
+          status: 401,
+        });
+        const create = () =>
+          api(drafts, {
+            method: "PUT",
+            agentToken,
+            body: { revision: 0, draft },
+          });
+        expect((await create()).revision).toBe(1);
+        expect((await create()).revision).toBe(1);
+        expect(
+          (await api("/markets", { account: owner })).some(
+            (m) => m.title === title,
+          ),
+        ).toBe(false);
+        await api(review + "/approve", {
+          method: "POST",
+          agentToken,
+          body: { kind: "draft", revision: 1 },
+          status: 401,
+        });
+        await decision("draft", 1, "approve", 403, admin);
+        await decision("draft", 1, "dismiss");
+        const revisedDraft = { ...draft, initialB: 1250 };
+        const revised = await api(drafts, {
+          method: "PUT",
+          agentToken,
+          body: { revision: 1, draft: revisedDraft },
+        });
+        expect(revised.revision).toBe(2);
+        await decision("draft", 1, "approve", 409);
+        const [published, retry] = await Promise.all([
+          decision("draft", 2),
+          decision("draft", 2),
+        ]);
+        marketId = published.marketId;
+        markets.push(marketId);
+        expect(retry.marketId).toBe(marketId);
+        const listed = (await api("/markets", { account: owner })).filter(
+          (m) => m.title === title,
+        );
+        expect(listed).toHaveLength(1);
+        expect(listed[0]).toMatchObject({
+          id: marketId,
+          codexSourceUrl: draft.sourceUrl,
+          initialB: 1250,
+        });
+        await api("/markets/" + marketId, {
+          method: "PUT",
+          account: owner,
+          body: { endDate: null },
+          status: 409,
+        });
+        await api("/markets/" + marketId + "/resolve", {
+          method: "POST",
+          account: owner,
+          body: { optionId: "no" },
+          status: 409,
+        });
+        await api(reports, {
+          method: "PUT",
+          agentToken,
+          body: {
+            revision: 2,
+            evidence: { status: "missing", note: "Too early" },
+          },
+          status: 400,
+        });
+        const quote = await api("/markets/" + marketId + "/quote", {
+          account: owner,
+          method: "POST",
+          body: { optionId: "no", type: "buy", amount: 50 },
+        });
+        await api("/markets/" + marketId + "/trade", {
+          account: owner,
+          method: "POST",
+          body: {
+            optionId: "no",
+            type: "buy",
+            amount: 50,
+            quotedAt: quote.quotedAt,
+            minShares: quote.minShares,
+          },
+        });
+      } finally {
+        vi.useRealTimers();
+      }
+      expect(
+        (await api("/codex/agent/expired", { agentToken })).map((x) => x.id),
+      ).toContain(id);
+      expect((await api("/admin/codex", { account: admin })).enabled).toBe(
+        false,
+      );
+      await api(reports, {
+        method: "PUT",
+        agentToken,
+        body: {
+          revision: 2,
+          evidence: { status: "missing", note: "Archive has a gap" },
+        },
+      });
+      expect(
+        (await api("/admin/codex", { account: owner })).reviews.find(
+          (x) => x.id === id,
+        ).phase,
+      ).toBe("awaiting_evidence");
+      await decision("resolution", 3, "approve", 409);
+      const evidence = {
+        status: "observed",
+        observedAt: endDate,
+        readings: [5, 7],
+        note: "B had seven viewers at the cutoff.",
+        evidenceUrl: "https://example.org/cutoff",
+      };
+      await api(reports, {
+        method: "PUT",
+        agentToken,
+        body: {
+          revision: 3,
+          evidence: {
+            ...evidence,
+            observedAt: new Date(cutoff - 1000).toISOString(),
+          },
+        },
+        status: 400,
+      });
+      await api(reports, {
+        method: "PUT",
+        agentToken,
+        body: {
+          revision: 3,
+          evidence: {
+            ...evidence,
+            evidenceUrl: "https://other.example/cutoff",
+          },
+        },
+        status: 400,
+      });
+      await api(reports, {
+        method: "PUT",
+        agentToken,
+        body: { revision: 3, evidence },
+      });
+      await decision("resolution", 4, "dismiss");
+      await decision("resolution", 4, "approve", 409);
+      expect(
+        (await api("/codex/agent/expired", { agentToken })).some(
+          (x) => x.id === id,
+        ),
+      ).toBe(true);
+      await api(reports, {
+        method: "PUT",
+        agentToken,
+        body: { revision: 4, evidence },
+      });
+      await decision("resolution", 4, "approve", 409);
+      await Promise.all([decision("resolution", 5), decision("resolution", 5)]);
+      expect(
+        await api("/markets/" + marketId, { account: owner }),
+      ).toMatchObject({ status: "resolved_no", resolvedOptionId: "no" });
+      const user = await withSystem(() => User.findById(owner.id));
+      const payouts = user.tradeHistory.filter(
+        (t) => t.marketId === marketId && t.tradeType === "payout",
+      );
+      expect(payouts).toHaveLength(1);
+      expect(payouts[0].amount).toBeGreaterThan(0);
+      expect(
+        (await api("/codex/agent/expired", { agentToken })).some(
+          (x) => x.id === id,
+        ),
+      ).toBe(false);
+    });
 
     it("validates and persists a username change for the signed-in account", async () => {
       const username = `renamed_${fixture.slice(0, 10)}`;
@@ -595,10 +839,9 @@ describe.skipIf(import.meta.env.MODE !== "db")(
       expect(
         ethOutcomes.every(({ assetPair }) => assetPair === "ETHUSDT"),
       ).toBe(true);
-      const ethPrices = await api(
-        "/binary-markets/ETHUSDT/price-history",
-        { account: player },
-      );
+      const ethPrices = await api("/binary-markets/ETHUSDT/price-history", {
+        account: player,
+      });
       expect(
         ethPrices.filter(({ timestamp }) =>
           [boundary - 1_000, boundary].includes(timestamp),
