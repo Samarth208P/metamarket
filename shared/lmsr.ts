@@ -1,4 +1,5 @@
 import type { MarketOption, QuoteResponse } from "./api.ts";
+import { pricePurchase } from "./purchase.ts";
 
 export const SELL_FEE_RATE = 0.05;
 export const QUOTE_TTL_MS = 15000;
@@ -200,6 +201,7 @@ export function createQuote(params: {
 }): QuoteResponse {
   const quotedAt = new Date();
   const tolerance = params.tolerance ?? 0.02;
+  const purchase = params.type === "buy" ? pricePurchase(params.amount) : null;
 
   return {
     marketId: params.marketId,
@@ -214,7 +216,8 @@ export function createQuote(params: {
         : params.expectedShares,
     grossPayout: params.grossPayout ?? 0,
     netPayout: params.netPayout ?? 0,
-    fee: params.fee ?? 0,
+    fee: purchase?.fee ?? params.fee ?? 0,
+    totalCost: purchase?.totalCost ?? 0,
     averagePrice: params.averagePrice,
     currentPrice: params.currentPrice,
     quotedAt: quotedAt.toISOString(),

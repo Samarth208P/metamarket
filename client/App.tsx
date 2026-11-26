@@ -73,6 +73,18 @@ function App() {
   useEffect(() => {
     // Force dark mode as default for the premium look
     document.documentElement.classList.add("dark");
+    const keyboard = () => {
+      document.documentElement.dataset.input = "keyboard";
+    };
+    const pointer = () => {
+      delete document.documentElement.dataset.input;
+    };
+    window.addEventListener("keydown", keyboard, true);
+    window.addEventListener("pointerdown", pointer, true);
+    return () => {
+      window.removeEventListener("keydown", keyboard, true);
+      window.removeEventListener("pointerdown", pointer, true);
+    };
   }, []);
 
   return (

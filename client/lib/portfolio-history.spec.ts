@@ -35,7 +35,7 @@ describe("groupPortfolioHistory", () => {
       ...btcEntry(
         "sell",
         200,
-        "BTC DOWN @ 41p (Tgt: $59,149.9)",
+        "BTC DOWN @ 41.3p (Tgt: $59,149.9)",
         "2026-11-22T07:29:45Z",
       ),
       optionId: "down",
@@ -71,7 +71,7 @@ describe("groupPortfolioHistory", () => {
       title: "BTC Up or Down (Target $59,149.9)",
       latestActivity: payout.timestamp,
       trades: [
-        { entry: sell, price: "41p" },
+        { entry: sell, price: "41.3p" },
         { entry: buy, price: "74p" },
       ],
       payout: 678.41,

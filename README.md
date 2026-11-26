@@ -76,6 +76,8 @@ The React app calls `/mapi` to load markets, comments, the leaderboard, and the 
 
 Supabase Cron invokes the `btc-cycle` Edge Function every ten seconds. It uses closed Binance candles to open and settle five-minute rounds, backfills one-second price history, and credits winners in a Postgres transaction. The local Vite API runs its own worker. The BTC page streams Binance chart ticks and polls the API for odds, positions, and results.
 
+The Ramayana market reads the worldwide total from Sacnilk’s “Overseas and worldwide” section once a minute while the market is open in a browser. The daily chart uses Sacnilk’s per-day worldwide entries. The authenticated box-office API returns the initial report and a short-lived WebSocket URL. Local clients connect to the API server, and hosted clients connect directly to the `ramayana-feed` Edge Function. The browser fetches a fresh report when reconnecting.
+
 ### Market isolation
 
 Each regular market has its own ID, options, prices, positions, and result. Yes/no, head-to-head, and multi-outcome markets share the LMSR engine. The BTC market uses its own routes, pricing engine, and round data. The frontend loads the BTC and regular detail pages separately. If a card or detail page fails to render, the rest of the app stays available. The catalog logs and skips unreadable records, and a BTC initialization failure returns `503` for BTC routes while the regular API keeps serving requests.
@@ -172,7 +174,7 @@ The `market-images` bucket serves market artwork at public URLs. Express verifie
 
 ## Deployment
 
-A push to GitHub `main` triggers the Netlify frontend build. Netlify serves `dist` and proxies `/mapi/*` to the project's `mapi` Edge Function. When Edge Function code changes, deploy it from the same revision with `pnpm exec supabase functions deploy mapi btc-cycle` before pushing the frontend.
+A push to GitHub `main` triggers the Netlify frontend build. Netlify serves `dist` and proxies `/mapi/*` to the project's `mapi` Edge Function. When Edge Function code changes, deploy it from the same revision with `pnpm exec supabase functions deploy mapi btc-cycle ramayana-feed` before pushing the frontend.
 
 For public Google sign-in, set the OAuth project audience to **External** and publish the app to **In production**. In **Google Auth Platform → Clients**, register the exact callback URI used by `GOOGLE_CALLBACK_URL`. For the main site, use `https://metamarket.live/mapi/auth/google/callback` and set `FRONTEND_URL` to `https://metamarket.live`. Configure a persistent `SESSION_SECRET` on the API host. [Google OAuth audience settings](https://support.google.com/cloud/answer/15549945?hl=en) · [Google redirect URI configuration](https://developers.google.com/identity/protocols/oauth2/web-server#creatingcred)
 

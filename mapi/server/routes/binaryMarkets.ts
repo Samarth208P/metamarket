@@ -20,8 +20,10 @@ import {
 } from "../services/binaryScheduler.ts";
 import { ApiError, asyncRoute } from "./asyncRoute.ts";
 import { withSystem } from "../database.ts";
+import { pricePurchase } from "../../../shared/purchase.ts";
 import {
   calculateLiveProbability,
+  binaryQuotes,
   calculatePotentialPayout,
   MARKET_DURATION_MS,
   formatPaise,
@@ -84,6 +86,7 @@ function serializeBinaryMarket(doc: IBinaryMarket, viewerId: string) {
         userName: t.userName,
         side: t.side,
         amount: t.amount,
+        fee: t.fee ?? 0,
         entryProbability: t.entryProbability,
         payout: t.payout,
         timestamp:
@@ -202,11 +205,12 @@ router.get(
         ? feedPrices
         : await fetchBinanceRecentPricesRest(assetPair);
 
+      const quotedAt = Date.now();
       const { probability, activeVolatility, momentumBias } =
         calculateLiveProbability({
           currentPrice,
           targetPrice: market.targetPrice,
-          timeRemainingMs,
+          timeRemainingMs: Math.max(0, endTimeMs - quotedAt),
           recentPrices,
         });
 
@@ -220,9 +224,13 @@ router.get(
           up: probability,
           down: 1 - probability,
         },
+        quotes:
+          currentPrice > 0 && quotedAt < endTimeMs
+            ? binaryQuotes(probability, market.id, quotedAt)
+            : undefined,
         activeVolatility,
         momentumBias,
-        timeRemainingMs,
+        timeRemainingMs: Math.max(0, endTimeMs - quotedAt),
       });
     } catch (err) {
       console.error("[BinaryRoutes] Error fetching active market:", err);
@@ -330,6 +338,22 @@ async function loadTradePrices(marketId: string) {
   return { currentPrice, recentPrices, assetPair };
 }
 
+function executionQuotes(
+  market: IBinaryMarket,
+  prices: Awaited<ReturnType<typeof loadTradePrices>>,
+) {
+  const now = Date.now();
+  const timeRemainingMs = market.endTime.getTime() - now;
+  if (timeRemainingMs <= 0)
+    throw new ApiError(400, { error: "Market has expired" });
+  const { probability } = calculateLiveProbability({
+    ...prices,
+    targetPrice: market.targetPrice,
+    timeRemainingMs,
+  });
+  return binaryQuotes(probability, market.id, now);
+}
+
 /**
  * POST /binary-markets/:id/trade
  * Place a trade on an active binary market.
@@ -358,26 +382,28 @@ router.post(
       if (market.status !== "active")
         throw new ApiError(400, { error: "Market is not active" });
 
-      // Check if market has expired
-      if (new Date(market.endTime).getTime() <= Date.now()) {
-        throw new ApiError(400, { error: "Market has expired" });
-      }
-
       // Load user & check balance
       const user = await User.findById(req.user.id, true);
       if (!user || needsOnboarding(user))
         throw new ApiError(403, { error: "Profile setup required" });
-      if (user.balance < numericAmount) {
-        throw new ApiError(400, { error: "Insufficient balance" });
+      const { fee, totalCost } = pricePurchase(numericAmount);
+      if (user.balance < totalCost) {
+        throw new ApiError(400, {
+          error: "Insufficient balance including the purchase fee",
+        });
       }
 
-      const { probability } = calculateLiveProbability({
-        ...prices,
-        targetPrice: market.targetPrice,
-        timeRemainingMs: market.endTime.getTime() - Date.now(),
-      });
-
-      const entryProbability = side === "up" ? probability : 1 - probability;
+      const entryProbability = executionQuotes(market, prices).buy[
+        side as "up" | "down"
+      ];
+      if (
+        req.body.maxPrice !== undefined &&
+        !(entryProbability <= req.body.maxPrice)
+      ) {
+        throw new ApiError(409, {
+          error: "The buy price moved. Review the latest quote.",
+        });
+      }
       const potentialPayout = calculatePotentialPayout(
         numericAmount,
         entryProbability,
@@ -389,6 +415,7 @@ router.post(
         userName: user.username,
         side: side as "up" | "down",
         amount: numericAmount,
+        fee,
         entryProbability,
         payout: 0,
         timestamp: new Date(),
@@ -398,7 +425,7 @@ router.post(
       market.volume += numericAmount;
 
       // Deduct balance
-      user.balance -= numericAmount;
+      user.balance -= totalCost;
 
       // Add to trade history
       if (!user.tradeHistory) user.tradeHistory = [];
@@ -411,8 +438,8 @@ router.post(
         amount: numericAmount,
         shares: 1,
         averagePrice: entryProbability * 100,
-        fee: 0,
-        cashDelta: -numericAmount,
+        fee,
+        cashDelta: -totalCost,
         timestamp: new Date(),
       } as any);
 
@@ -430,6 +457,7 @@ router.post(
         },
         user: serializeUser(user),
         userBalance: user.balance,
+        totalCost,
         potentialPayout,
       };
     });
@@ -459,12 +487,6 @@ router.post(
       if (market.status !== "active")
         throw new ApiError(400, { error: "Market is not active" });
 
-      if (new Date(market.endTime).getTime() <= Date.now()) {
-        throw new ApiError(400, {
-          error: "Market has expired, waiting for settlement",
-        });
-      }
-
       const user = await User.findById(req.user.id, true);
       if (!user || needsOnboarding(user))
         throw new ApiError(403, { error: "Profile setup required" });
@@ -485,14 +507,17 @@ router.post(
         Math.min(1, parseFloat(req.body.ratio) || 1),
       );
 
-      const { probability } = calculateLiveProbability({
-        ...prices,
-        targetPrice: market.targetPrice,
-        timeRemainingMs: market.endTime.getTime() - Date.now(),
-      });
-
-      const currentSideProbability =
-        side === "up" ? probability : 1 - probability;
+      const currentSideProbability = executionQuotes(market, prices).sell[
+        side as "up" | "down"
+      ];
+      if (
+        req.body.minPrice !== undefined &&
+        !(currentSideProbability >= req.body.minPrice)
+      ) {
+        throw new ApiError(409, {
+          error: "The sell price moved. Review the latest quote.",
+        });
+      }
 
       let totalPayoutValue = 0;
       for (const trade of activeTrades) {
@@ -509,6 +534,7 @@ router.post(
           // Partial sell - we reduce the amount and entry basis proportionally
           // This keeps the remaining 'shares' active
           trade.amount = trade.amount * (1 - ratio);
+          if (trade.fee) trade.fee *= 1 - ratio;
         }
       }
 

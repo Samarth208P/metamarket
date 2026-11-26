@@ -1,4 +1,5 @@
-import { useState, useMemo, useEffect } from "react";
+import { TradeModeSwitch } from "./TradeModeSwitch";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -32,12 +33,13 @@ import {
 } from "recharts";
 import { X, Loader2, Trophy } from "lucide-react";
 import { CommentsSection } from "./CommentsSection";
-import { motion, AnimatePresence } from "framer-motion";
 import type { Market, MarketOption, QuoteResponse } from "@shared/api";
+import { maxPurchaseAmount } from "@shared/purchase";
 
 interface LmsrBetModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onDismissed?: () => void;
   market: Market;
   initialOptionId?: string;
   onTrade: (marketId: string, tradeResult: any) => void;
@@ -46,6 +48,7 @@ interface LmsrBetModalProps {
 export function LmsrBetModal({
   isOpen,
   onClose,
+  onDismissed,
   market,
   initialOptionId,
   onTrade,
@@ -53,6 +56,18 @@ export function LmsrBetModal({
   const { user, updateUser, refreshUser } = useAuth();
   const { toast } = useToast();
   const isMobile = useIsMobile();
+  const opener = useRef<HTMLElement | null>(null);
+  function rememberOpener() {
+    opener.current =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+  }
+  function finishDismissal(event: Event) {
+    event.preventDefault();
+    opener.current?.focus({ preventScroll: true });
+    if (!isOpen) onDismissed?.();
+  }
 
   const [tradeType, setTradeType] = useState<"buy" | "sell">("buy");
   const [amount, setAmount] = useState("");
@@ -60,10 +75,9 @@ export function LmsrBetModal({
     initialOptionId ||
       (market.marketType === "multi" ? null : market.options[0]?.id || "yes"),
   );
-  const [quote, setQuote] = useState<QuoteResponse | null>(null);
+  const [fetchedQuote, setQuote] = useState<QuoteResponse | null>(null);
   const [isQuoteLoading, setIsQuoteLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isGraphLoading, setIsGraphLoading] = useState(true);
   const [isConfirming, setIsConfirming] = useState(false);
 
   const slippageTolerance = 0.02;
@@ -76,9 +90,6 @@ export function LmsrBetModal({
             ? null
             : market.options[0]?.id || "yes"),
       );
-      setIsGraphLoading(true);
-      const timer = setTimeout(() => setIsGraphLoading(false), 2000);
-      return () => clearTimeout(timer);
     }
   }, [initialOptionId, isOpen, market.options, market.marketType]);
 
@@ -140,6 +151,20 @@ export function LmsrBetModal({
     ? new Date(market.endDate) < new Date()
     : false;
   const isMarketClosed = isResolved || isTimeClosed;
+  const quote =
+    fetchedQuote?.type === tradeType &&
+    fetchedQuote.marketId === market.id &&
+    fetchedQuote.optionId === selectedOption?.id &&
+    fetchedQuote.amount === numericAmount
+      ? fetchedQuote
+      : null;
+  const canSubmit =
+    quote &&
+    !isSubmitting &&
+    !isMarketClosed &&
+    (tradeType === "buy"
+      ? quote.totalCost <= (user?.balance ?? 0)
+      : numericAmount <= (userHolding?.shares ?? 0) + 1e-6);
 
   // ── Multi-market helpers ──────────────────────────────────────────
   const isMultiNoPick =
@@ -206,7 +231,7 @@ export function LmsrBetModal({
   ]);
 
   const handleTrade = async () => {
-    if (!selectedOption || !quote) return;
+    if (!selectedOption || !canSubmit) return;
 
     setIsSubmitting(true);
     try {
@@ -263,7 +288,11 @@ export function LmsrBetModal({
   const handleMax = () => {
     if (!user) return;
     setAmount(
-      String(tradeType === "buy" ? user.balance : userHolding?.shares || 0),
+      String(
+        tradeType === "buy"
+          ? maxPurchaseAmount(user.balance)
+          : userHolding?.shares || 0,
+      ),
     );
   };
 
@@ -374,22 +403,11 @@ export function LmsrBetModal({
     });
   }, [market.priceHistory, market.options, market.createdAt, market.id]);
 
-  const graphElement = isGraphLoading ? (
-    <div className="h-[200px] md:h-[260px] flex flex-col items-center justify-center gap-4 bg-muted/5 rounded-xl border border-border/50">
-      <img src="/animated-logo.svg" alt="loading" className="w-12 h-12" />
-      <p className="text-[10px] font-black uppercase text-muted-foreground tracking-[0.2em]">
-        Fetching Real-time Odds...
-      </p>
-    </div>
-  ) : (
+  const graphElement = (
     <div className="flex flex-col">
       <div className="h-[200px] md:h-[260px] bg-muted/10 rounded-xl p-4 border border-border/50 relative overflow-hidden">
         {chartData && chartData.length > 0 ? (
-          <ResponsiveContainer
-            width="100%"
-            height="100%"
-            key={chartData.length}
-          >
+          <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={chartData}>
               <defs>
                 {lineColors.map((color, idx) => (
@@ -424,6 +442,7 @@ export function LmsrBetModal({
                 tickFormatter={(val) => `${val}p`}
               />
               <Tooltip
+                isAnimationActive={false}
                 content={({ active, payload }) => {
                   if (active && payload && payload.length) {
                     return (
@@ -478,6 +497,7 @@ export function LmsrBetModal({
               />
               {market.options.map((opt, idx) => (
                 <Area
+                  isAnimationActive={false}
                   key={opt.id}
                   type="monotone"
                   dataKey={`opt_${opt.id}`}
@@ -485,7 +505,6 @@ export function LmsrBetModal({
                   fillOpacity={1}
                   fill={`url(#colorOpt${idx % lineColors.length})`}
                   strokeWidth={opt.id === selectedOptionId ? 4 : 2}
-                  animationDuration={500}
                 />
               ))}
               <ReferenceLine
@@ -540,7 +559,7 @@ export function LmsrBetModal({
               setSelectedOptionId(opt.id);
               setTradeType("buy");
             }}
-            className="flex items-center justify-between p-3 rounded-xl bg-muted/30 border border-border/50 hover:border-primary/30 transition-all w-full text-left"
+            className="flex items-center justify-between p-3 rounded-xl bg-muted/30 border border-border/50 hover:border-primary/30 transition-colors w-full text-left"
           >
             <div className="flex items-center gap-3 min-w-0">
               {opt.imageUrl ? (
@@ -573,35 +592,11 @@ export function LmsrBetModal({
     <div className="flex flex-col gap-5">
       {countdownDisplay}
 
-      <div
-        className={cn(
-          "flex p-1 bg-muted rounded-lg",
-          isSubmitting && "opacity-50 pointer-events-none",
-        )}
-      >
-        <button
-          onClick={() => setTradeType("buy")}
-          className={cn(
-            "flex-1 py-1.5 text-sm font-semibold rounded-md transition-colors",
-            tradeType === "buy"
-              ? "bg-background shadow-sm text-foreground"
-              : "text-muted-foreground",
-          )}
-        >
-          Buy
-        </button>
-        <button
-          onClick={() => setTradeType("sell")}
-          className={cn(
-            "flex-1 py-1.5 text-sm font-semibold rounded-md transition-colors",
-            tradeType === "sell"
-              ? "bg-background shadow-sm text-foreground"
-              : "text-muted-foreground",
-          )}
-        >
-          Sell
-        </button>
-      </div>
+      <TradeModeSwitch
+        value={tradeType}
+        disabled={isSubmitting}
+        onChange={setTradeType}
+      />
 
       <div
         className={cn(
@@ -612,9 +607,10 @@ export function LmsrBetModal({
         {market.options.map((opt, idx) => (
           <button
             key={opt.id}
+            aria-pressed={selectedOptionId === opt.id}
             onClick={() => setSelectedOptionId(opt.id)}
             className={cn(
-              "flex-1 flex flex-col items-center py-4 rounded-xl border-2 transition-all",
+              "flex-1 flex flex-col items-center py-4 rounded-xl border-2 transition-colors",
               selectedOptionId === opt.id
                 ? idx === 0
                   ? "border-yes bg-yes/15 ring-2 ring-yes/20"
@@ -657,7 +653,7 @@ export function LmsrBetModal({
             value={amount}
             disabled={isSubmitting}
             onChange={(e) => setAmount(e.target.value)}
-            className="h-12 text-lg font-bold bg-muted/20 border-border focus:border-primary/50 focus:ring-1 focus:ring-primary/50 transition-all pr-16 rounded-xl"
+            className="h-12 text-lg font-bold bg-muted/20 border-border focus:border-primary/50 focus:ring-1 focus:ring-primary/50 transition-colors pr-16 rounded-xl"
           />
           <div className="absolute right-3 top-1/2 -translate-y-1/2">
             <button
@@ -674,7 +670,7 @@ export function LmsrBetModal({
               key={val}
               variant="outline"
               size="sm"
-              className="h-8 text-[10px] font-bold border-border bg-muted/10 hover:bg-primary/10 hover:text-primary hover:border-primary/30 rounded-lg transition-all"
+              className="h-8 text-[10px] font-bold border-border bg-muted/10 hover:bg-primary/10 hover:text-primary hover:border-primary/30 rounded-lg transition-colors"
               onClick={() =>
                 setAmount((prev) => String((Number(prev) || 0) + val))
               }
@@ -715,10 +711,16 @@ export function LmsrBetModal({
                 {quote.currentPrice.toFixed(2)}p
               </span>
             </div>
-            {tradeType === "sell" && (
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">
+                {tradeType === "buy" ? "Purchase fee (₹1 + 0.1%)" : "Fee (5%)"}
+              </span>
+              <span className="font-bold">₹{quote.fee.toFixed(2)}</span>
+            </div>
+            {tradeType === "buy" && (
               <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Fee (5%)</span>
-                <span className="font-bold">₹{quote.fee.toFixed(2)}</span>
+                <span className="text-muted-foreground">Total to pay</span>
+                <span className="font-bold">₹{quote.totalCost.toFixed(2)}</span>
               </div>
             )}
           </div>
@@ -745,14 +747,14 @@ export function LmsrBetModal({
           </Button>
           <Button
             onClick={handleTrade}
-            disabled={isSubmitting || !quote}
+            disabled={!canSubmit}
             className={cn(
               "flex-[2] h-12 text-base font-black uppercase tracking-widest",
               tradeType === "buy" ? "bg-yes text-white" : "bg-no text-white",
             )}
           >
             {isSubmitting ? (
-              <Loader2 className="w-5 h-5 animate-spin" />
+              <Loader2 className="w-5 h-5 motion-safe:animate-spin" />
             ) : (
               "Confirm Order"
             )}
@@ -761,13 +763,7 @@ export function LmsrBetModal({
       ) : (
         <Button
           onClick={() => setIsConfirming(true)}
-          disabled={
-            numericAmount <= 0 ||
-            !quote ||
-            (tradeType === "buy"
-              ? numericAmount > (user?.balance || 0)
-              : numericAmount > (userHolding?.shares || 0) + 1e-6)
-          }
+          disabled={!canSubmit}
           className={cn(
             "w-full h-12 text-base font-bold",
             tradeType === "buy" ? "bg-primary" : "bg-foreground",
@@ -803,15 +799,23 @@ export function LmsrBetModal({
 
   if (isMobile) {
     return (
-      <Drawer open={isOpen} onOpenChange={onClose}>
-        <DrawerContent className="max-h-[90vh]">
+      <Drawer
+        autoFocus
+        open={isOpen}
+        onOpenChange={(open) => !open && onClose()}
+      >
+        <DrawerContent
+          className="max-h-[90dvh]"
+          onOpenAutoFocus={rememberOpener}
+          onCloseAutoFocus={finishDismissal}
+          aria-describedby={undefined}
+        >
           <DrawerHeader className="text-left border-b border-border pb-4 relative">
             <DrawerTitle className="text-lg leading-tight font-bold pr-8">
               {modalTitle}
             </DrawerTitle>
             <DrawerClose asChild>
               <button
-                onClick={onClose}
                 aria-label="Close"
                 title="Close"
                 className="absolute right-4 top-4 p-2 rounded-full hover:bg-muted transition-colors"
@@ -880,8 +884,10 @@ export function LmsrBetModal({
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent
+        onOpenAutoFocus={rememberOpener}
+        onCloseAutoFocus={finishDismissal}
         className={cn(
-          "sm:max-w-[950px] p-0 gap-0 overflow-hidden bg-card border-border rounded-2xl transition-all duration-500",
+          "sm:max-w-[950px] p-0 gap-0 overflow-hidden bg-card border-border rounded-2xl",
           isConfirming ? "ring-4 ring-green-500/50 shadow-2xl" : "",
         )}
       >

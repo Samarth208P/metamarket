@@ -9,6 +9,10 @@ import { parseImageUpload } from "./imageUpload.ts";
 import { publicImageUrl, uploadImage } from "../services/images.ts";
 import { getRamayanaBoxOffice } from "../services/ramayanaBoxOffice.ts";
 import {
+  createStreamTicket,
+  ramayanaStreamPath,
+} from "../services/ramayanaStreamTicket.ts";
+import {
   QUOTE_TTL_MS,
   calculateCurrentB,
   createQuote,
@@ -304,8 +308,15 @@ function getOrCreatePosition(
 
 router.get(
   "/ramayana/box-office",
-  asyncRoute(async (_req, res) => {
-    res.json(await getRamayanaBoxOffice());
+  asyncRoute(async (req, res) => {
+    const report = await getRamayanaBoxOffice();
+    const endpoint = req.app.locals.edge
+      ? new URL("/functions/v1/ramayana-feed", process.env.SUPABASE_URL).href
+          .replace(/^https:/, "wss:")
+          .replace(/^http:/, "ws:")
+      : ramayanaStreamPath;
+    const ticket = createStreamTicket(process.env.SESSION_SECRET);
+    res.json({ ...report, streamUrl: endpoint + "?ticket=" + ticket });
   }),
 );
 
@@ -647,39 +658,12 @@ router.post(
     let fee = 0;
     let cashDelta = 0;
     let averagePrice = 0;
-    let quoteResponse: any;
+    let quoteResponse: ReturnType<typeof createQuote>;
 
     if (type === "buy") {
-      if (numericAmount > user.balance)
-        throw new ApiError(400, { error: "Insufficient balance" });
       const result = quoteBuy(state, currentB, nextOptionId, numericAmount);
-      const minAcceptedShares = Number(expectedShares) * (1 - tolerance);
-      if (result.shares + 1e-6 < minAcceptedShares) {
-        quoteResponse = createQuote({
-          marketId: market.id,
-          type: "buy",
-          option: { ...option, price: result.currentPrice * 100 },
-          amount: numericAmount,
-          expectedShares: result.shares,
-          averagePrice: result.averagePrice,
-          currentPrice: result.currentPrice * 100,
-          currentB,
-          tolerance,
-        });
-        throw new ApiError(409, {
-          error:
-            "Price moved before execution. Please review the updated quote.",
-          quote: quoteResponse,
-        });
-      }
-
       shares = result.shares;
       averagePrice = result.averagePrice;
-      cashDelta = -numericAmount;
-      option.shares += shares;
-      getOrCreatePosition(user, market.id, nextOptionId, option.name).shares +=
-        shares;
-      user.balance += cashDelta;
       quoteResponse = createQuote({
         marketId: market.id,
         type: "buy",
@@ -691,6 +675,25 @@ router.post(
         currentB,
         tolerance,
       });
+      if (quoteResponse.totalCost > user.balance)
+        throw new ApiError(400, {
+          error: "Insufficient balance including the purchase fee",
+        });
+      const minAcceptedShares = Number(expectedShares) * (1 - tolerance);
+      if (shares + 1e-6 < minAcceptedShares) {
+        throw new ApiError(409, {
+          error:
+            "Price moved before execution. Please review the updated quote.",
+          quote: quoteResponse,
+        });
+      }
+
+      fee = quoteResponse.fee;
+      cashDelta = -quoteResponse.totalCost;
+      option.shares += shares;
+      getOrCreatePosition(user, market.id, nextOptionId, option.name).shares +=
+        shares;
+      user.balance += cashDelta;
     } else {
       const position = getOrCreatePosition(
         user,
@@ -731,7 +734,7 @@ router.post(
       (position: any) => position.shares > 1e-6,
     );
 
-    market.volume += Math.abs(cashDelta);
+    market.volume += type === "buy" ? numericAmount : Math.abs(cashDelta);
 
     const nextPrices = getOptionPrices(toLmsrState(market), currentB);
     market.priceHistory.push({

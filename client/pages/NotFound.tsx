@@ -1,4 +1,5 @@
-import { useLocation } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
+import { Button } from "@/components/ui/button";
 import { useEffect } from "react";
 
 const NotFound = () => {
@@ -21,12 +22,9 @@ const NotFound = () => {
         <p className="text-muted-foreground pb-4">
           The route you are looking for doesn't exist.
         </p>
-        <a
-          href="/"
-          className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground shadow hover:bg-primary/90 h-9 px-4 py-2"
-        >
-          Return to Home
-        </a>
+        <Button asChild size="sm">
+          <Link to="/">Return to Home</Link>
+        </Button>
       </div>
     </div>
   );

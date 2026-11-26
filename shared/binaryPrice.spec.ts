@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  binaryQuotes,
   normalCDF,
   calculateUpProbability,
   calculateLiveProbability,
@@ -7,6 +8,30 @@ import {
   formatCountdown,
   MARKET_DURATION_MS,
 } from "./binaryPrice";
+
+describe("executable binary quotes", () => {
+  it.each([0.01, 0.5, 0.99])(
+    "varies both prices around a fixed probability of %s",
+    (up) => {
+      const prices = Array.from({ length: 60 }, (_, i) => {
+        const time = i * 5_000;
+        const quotes = binaryQuotes(up, "sample-round", time);
+        expect(binaryQuotes(up, "sample-round", time + 4999)).toEqual(quotes);
+        for (const side of ["up", "down"] as const) {
+          const mid = Math.round((side === "up" ? up : 1 - up) * 1000);
+          expect(quotes.sell[side]).toBeGreaterThanOrEqual((mid - 5) / 1000);
+          expect(quotes.sell[side]).toBeLessThanOrEqual(mid / 1000);
+          expect(quotes.buy[side]).toBeGreaterThanOrEqual(mid / 1000);
+          expect(quotes.buy[side]).toBeLessThanOrEqual((mid + 5) / 1000);
+        }
+        return quotes;
+      });
+      expect(new Set(prices.map((q) => q.buy.up)).size).toBeGreaterThan(1);
+      expect(new Set(prices.map((q) => q.sell.up)).size).toBeGreaterThan(1);
+      expect(prices.some((q) => q.buy.up === up)).toBe(true);
+    },
+  );
+});
 
 describe("normalCDF", () => {
   it("returns 0.5 for x = 0", () => {

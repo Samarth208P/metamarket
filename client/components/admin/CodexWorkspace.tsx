@@ -1,7 +1,15 @@
 import { useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Inbox, RefreshCw } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import {
   cutoffTerms,
@@ -210,7 +218,7 @@ function ProposalCard({
   );
 }
 
-export function CodexWorkspace({ children }: { children: ReactNode }) {
+export function CodexWorkspace() {
   const [review, setReview] = useState(false);
   const { user } = useAuth();
   const client = useQueryClient();
@@ -232,50 +240,51 @@ export function CodexWorkspace({ children }: { children: ReactNode }) {
     ]);
   }
 
+  if (!result.data?.enabled && !result.isError) return null;
+
   return (
-    <div id="market-workspace" className="min-w-0 space-y-3">
-      {(result.data?.enabled || result.isError) && (
-        <div
-          aria-label="Market creation and review"
-          className="flex flex-wrap gap-2"
+    <Dialog
+      open={review}
+      onOpenChange={(open) => {
+        setReview(open);
+        if (open) void result.refetch();
+      }}
+    >
+      <DialogTrigger asChild>
+        <Button size="sm" variant="outline" className="admin-secondary">
+          <Inbox aria-hidden="true" /> Codex reviews
+          {rows.length > 0 && (
+            <span className="rounded bg-muted px-1.5 text-xs tabular-nums">
+              {rows.length}
+            </span>
+          )}
+        </Button>
+      </DialogTrigger>
+      <DialogContent
+        aria-describedby={undefined}
+        className="flex max-h-[86dvh] w-[calc(100%-2rem)] max-w-2xl flex-col gap-0 overflow-hidden rounded-xl p-0"
+        overlayClassName="bg-black/60"
+      >
+        <DialogHeader className="flex-row items-center justify-between space-y-0 border-b py-3 pl-5 pr-14">
+          <DialogTitle>Codex reviews</DialogTitle>
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-label="Refresh reviews"
+            onClick={() => result.refetch()}
+            disabled={result.isFetching}
+          >
+            <RefreshCw
+              className={result.isFetching ? "motion-safe:animate-spin" : ""}
+              aria-hidden="true"
+            />{" "}
+            Refresh
+          </Button>
+        </DialogHeader>
+        <section
+          aria-label="Codex review queue"
+          className="space-y-3 overflow-y-auto overscroll-contain p-5"
         >
-          <Button
-            type="button"
-            size="sm"
-            variant={review ? "outline" : "default"}
-            aria-pressed={!review}
-            onClick={() => setReview(false)}
-          >
-            Manual creation
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant={review ? "default" : "outline"}
-            aria-pressed={review}
-            onClick={() => {
-              setReview(true);
-              void result.refetch();
-            }}
-          >
-            Codex reviews{rows.length ? " (" + rows.length + ")" : ""}
-          </Button>
-        </div>
-      )}
-      <div hidden={review}>{children}</div>
-      {review && (
-        <section aria-label="Codex review queue" className="space-y-3">
-          <div className="flex items-center justify-between gap-2">
-            <h2 className="text-lg font-semibold">Codex reviews</h2>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => result.refetch()}
-              disabled={result.isFetching}
-            >
-              Refresh
-            </Button>
-          </div>
           {result.isError && <p role="alert">{result.error.message}</p>}
           {!result.isError && !rows.length && (
             <p className="rounded-xl border p-4 text-sm text-muted-foreground">
@@ -291,7 +300,7 @@ export function CodexWorkspace({ children }: { children: ReactNode }) {
             />
           ))}
         </section>
-      )}
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

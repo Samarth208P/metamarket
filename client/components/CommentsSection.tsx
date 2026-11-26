@@ -86,6 +86,7 @@ export function CommentsSection({ marketId, isLive }: CommentsSectionProps) {
       {isLive && user && (
         <form onSubmit={handleSubmit} className="flex gap-2">
           <Input
+            aria-label="Your comment"
             placeholder="What's your take?"
             value={newComment}
             onChange={(e) => setNewComment(e.target.value)}
@@ -95,6 +96,7 @@ export function CommentsSection({ marketId, isLive }: CommentsSectionProps) {
             type="submit"
             disabled={isSubmitting || !newComment.trim()}
             size="icon"
+            aria-label="Post comment"
             className="shrink-0"
           >
             <Send className="w-4 h-4" />
@@ -108,10 +110,10 @@ export function CommentsSection({ marketId, isLive }: CommentsSectionProps) {
             No comments yet. Be the first to speak!
           </p>
         ) : (
-          comments.map((comment, idx) => (
+          comments.map((comment) => (
             <div
-              key={idx}
-              className="group animate-in fade-in slide-in-from-top-2"
+              key={comment.id}
+              className="group"
             >
               <div className="flex items-center justify-between mb-1">
                 <span className="text-xs font-black text-foreground">

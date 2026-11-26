@@ -178,6 +178,7 @@ export default function MarketDetail() {
                       wrapperStyle={{ fontSize: "12px", fontWeight: 600 }}
                     />
                     <Line
+                      isAnimationActive={false}
                       type="stepAfter"
                       dataKey="yes"
                       stroke="hsl(var(--yes-color))"
@@ -186,6 +187,7 @@ export default function MarketDetail() {
                       name="YES"
                     />
                     <Line
+                      isAnimationActive={false}
                       type="stepAfter"
                       dataKey="no"
                       stroke="hsl(var(--no-color))"

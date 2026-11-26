@@ -1,5 +1,6 @@
 import type { Market, MarketType } from "@shared/api";
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { flushSync } from "react-dom";
 import {
   ChevronDown,
   GitFork,
@@ -11,6 +12,14 @@ import {
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -24,6 +33,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { adminRequest, formatRupees, marketTypeLabels } from "./markets";
+import { DisclosurePanel } from "@/components/ui/disclosure-panel";
 
 const categories = [
   "Education",
@@ -34,9 +44,9 @@ const categories = [
   "IITR",
 ];
 const marketTypes = [
-  { value: "binary", icon: ToggleLeft, description: "One question" },
-  { value: "versus", icon: Swords, description: "Two sides" },
-  { value: "multi", icon: GitFork, description: "One winning team" },
+  { value: "binary", icon: ToggleLeft },
+  { value: "versus", icon: Swords },
+  { value: "multi", icon: GitFork },
 ] as const;
 const liquidityPresets = [500, 2000, 5000];
 const imageTypes = "image/jpeg,image/png,image/webp";
@@ -165,11 +175,13 @@ export function MarketComposer({
   onCreated: (market: Market) => void;
 }) {
   const [draft, setDraft] = useState(emptyDraft);
+  const [open, setOpen] = useState(false);
   const [teams, setTeams] = useState(initialTeams);
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState("");
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const nextTeamId = useRef(3);
+  const heading = useRef<HTMLHeadingElement>(null);
   const { toast } = useToast();
 
   function updateDraft<Key extends keyof typeof emptyDraft>(
@@ -259,6 +271,7 @@ export function MarketComposer({
       );
 
       onCreated(market);
+      setOpen(false);
       setDraft(emptyDraft);
       setTeams(initialTeams());
       setAdvancedOpen(false);
@@ -278,380 +291,419 @@ export function MarketComposer({
   }
 
   return (
-    <section
-      id="create-market"
-      aria-labelledby="create-market-title"
-      className="min-w-0 scroll-mt-20 rounded-2xl border bg-card shadow-sm"
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!isCreating) setOpen(nextOpen);
+      }}
     >
-      <header className="flex items-center gap-3 border-b px-4 py-3.5 sm:px-6">
-        <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
-          <Plus className="size-5" aria-hidden="true" />
-        </span>
-        <div>
-          <h2
-            id="create-market-title"
-            className="text-lg font-bold tracking-tight"
+      <DialogTrigger asChild>
+        <Button size="sm" className="admin-primary">
+          <Plus aria-hidden="true" />
+          New market
+        </Button>
+      </DialogTrigger>
+      <DialogContent
+        aria-describedby={undefined}
+        className="flex max-h-[min(86dvh,40rem)] w-[calc(100%-1.5rem)] max-w-lg flex-col gap-0 overflow-hidden rounded-xl p-0"
+        overlayClassName="bg-black/60"
+        onOpenAutoFocus={(event) => {
+          event.preventDefault();
+          heading.current?.focus();
+        }}
+      >
+        <DialogHeader className="border-b px-5 py-4 text-left">
+          <DialogTitle
+            ref={heading}
+            tabIndex={-1}
+            className="w-fit outline-none"
           >
-            Create market
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            Set the format, rules, and closing time.
-          </p>
-        </div>
-      </header>
-
-      <form onSubmit={createMarket} aria-busy={isCreating}>
-        <fieldset
-          disabled={isCreating}
-          className="min-w-0 space-y-4 px-4 py-4 sm:px-6"
+            New market
+          </DialogTitle>
+        </DialogHeader>
+        <form
+          className="flex min-h-0 flex-col"
+          onSubmit={createMarket}
+          aria-busy={isCreating}
         >
-          <fieldset className="min-w-0">
-            <legend className="mb-2 text-sm font-semibold">
-              Market format
-            </legend>
-            <div className="grid grid-cols-3 gap-2">
-              {marketTypes.map(({ value, icon: Icon, description }) => (
-                <label key={value} className="group relative min-w-0">
-                  <input
-                    type="radio"
-                    name="market-format"
-                    value={value}
-                    checked={draft.marketType === value}
-                    onChange={() => updateDraft("marketType", value)}
-                    className="peer absolute inset-0 m-0 size-full cursor-pointer opacity-0"
-                  />
-                  <span className="flex h-full flex-col items-start gap-1 rounded-lg border bg-background px-2 py-2.5 group-hover:border-primary/50 peer-checked:border-primary peer-checked:bg-primary/[0.07] peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2 sm:px-3">
-                    <Icon
-                      className="mb-1 size-4 text-primary"
-                      aria-hidden="true"
-                    />
-                    <span className="text-xs font-semibold sm:text-sm">
-                      {marketTypeLabels[value]}
-                    </span>
-                    <span className="text-xs leading-tight text-muted-foreground">
-                      {description}
-                    </span>
-                  </span>
-                </label>
-              ))}
-            </div>
-          </fieldset>
-
-          <div className="space-y-2">
-            <Label htmlFor="market-title">Title</Label>
-            <Input
-              id="market-title"
-              placeholder={
-                draft.marketType === "binary"
-                  ? "Will the event happen?"
-                  : "Who will win the event?"
-              }
-              value={draft.title}
-              onChange={(event) => updateDraft("title", event.target.value)}
-              required
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="market-description">Description</Label>
-            <Textarea
-              id="market-description"
-              placeholder="Describe the event and what determines the outcome."
-              value={draft.description}
-              onChange={(event) =>
-                updateDraft("description", event.target.value)
-              }
-              rows={2}
-              required
-            />
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
-            <div className="space-y-2">
-              <Label htmlFor="market-category">Category</Label>
-              <Select
-                value={draft.category}
-                onValueChange={(value) => updateDraft("category", value)}
-                required
-                disabled={isCreating}
-              >
-                <SelectTrigger id="market-category">
-                  <SelectValue placeholder="Select category" />
-                </SelectTrigger>
-                <SelectContent>
-                  {categories.map((category) => (
-                    <SelectItem key={category} value={category}>
-                      {category}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="min-w-0 space-y-2">
-              <Label htmlFor="market-close">Closes at (optional)</Label>
-              <Input
-                id="market-close"
-                type="datetime-local"
-                value={draft.endDate}
-                onChange={(event) => updateDraft("endDate", event.target.value)}
-                aria-describedby="market-close-hint"
-              />
-              <p
-                id="market-close-hint"
-                className="text-xs text-muted-foreground"
-              >
-                Your local time. Leave blank to keep trading open until
-                resolution.
-              </p>
-            </div>
-          </div>
-
-          {draft.marketType === "versus" && (
-            <div className="space-y-3 rounded-lg border bg-muted/20 p-3">
-              {(["A", "B"] as const).map((side) => (
-                <div
-                  key={side}
-                  className="grid gap-3 sm:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]"
-                >
-                  <div className="space-y-2">
-                    <Label htmlFor={`market-side-${side}`}>
-                      Side {side} name
-                    </Label>
-                    <Input
-                      id={`market-side-${side}`}
-                      value={draft[`option${side}`]}
-                      onChange={(event) =>
-                        updateDraft(`option${side}`, event.target.value)
-                      }
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor={`market-short-${side}`}>
-                      Short label{" "}
-                      <span className="font-normal text-muted-foreground">
-                        (optional)
+          <div className="min-h-0 overflow-y-auto overscroll-contain">
+            <fieldset
+              disabled={isCreating}
+              className="min-w-0 space-y-3 px-5 py-4"
+            >
+              <fieldset className="min-w-0">
+                <legend className="mb-2 text-sm font-semibold">
+                  Market format
+                </legend>
+                <div className="grid grid-cols-3 gap-2">
+                  {marketTypes.map(({ value, icon: Icon }) => (
+                    <label key={value} className="group relative min-w-0">
+                      <input
+                        type="radio"
+                        name="market-format"
+                        value={value}
+                        checked={draft.marketType === value}
+                        onChange={() => updateDraft("marketType", value)}
+                        className="peer absolute inset-0 m-0 size-full cursor-pointer opacity-0"
+                      />
+                      <span className="flex h-9 items-center justify-center gap-1.5 rounded-md border bg-background px-1 text-muted-foreground transition-colors duration-200 group-hover:border-primary/50 peer-checked:border-primary/50 peer-checked:bg-primary/10 peer-checked:text-primary peer-focus-visible:ring-2 peer-focus-visible:ring-ring">
+                        <Icon className="size-4 shrink-0" aria-hidden="true" />
+                        <span className="text-xs font-semibold sm:text-sm">
+                          {marketTypeLabels[value]}
+                        </span>
                       </span>
-                    </Label>
-                    <Input
-                      id={`market-short-${side}`}
-                      value={draft[`short${side}`]}
-                      onChange={(event) =>
-                        updateDraft(`short${side}`, event.target.value)
-                      }
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {draft.marketType === "multi" && (
-            <fieldset className="min-w-0 space-y-2">
-              <legend className="mb-2 text-sm font-semibold">Teams</legend>
-              {teams.map((team, index) => (
-                <div key={team.id} className="flex items-center gap-2">
-                  <ImagePicker
-                    compact
-                    file={team.file}
-                    label={`team ${index + 1} logo`}
-                    onChange={(file) => updateTeam(team.id, { file })}
-                  />
-                  <Input
-                    aria-label={`Team ${index + 1} name`}
-                    placeholder={`Team ${index + 1} name`}
-                    value={team.name}
-                    onChange={(event) =>
-                      updateTeam(team.id, { name: event.target.value })
-                    }
-                    required
-                  />
-                  {teams.length > 2 && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="shrink-0 text-muted-foreground hover:bg-muted hover:text-destructive"
-                      aria-label={`Remove team ${index + 1}`}
-                      onClick={() =>
-                        setTeams((current) =>
-                          current.filter(({ id }) => id !== team.id),
-                        )
-                      }
-                    >
-                      <X aria-hidden="true" />
-                    </Button>
-                  )}
-                </div>
-              ))}
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="hover:bg-muted hover:text-foreground"
-                onClick={() => {
-                  const id = nextTeamId.current++;
-                  setTeams((current) => [...current, { id, name: "" }]);
-                }}
-              >
-                <Plus aria-hidden="true" /> Add team
-              </Button>
-            </fieldset>
-          )}
-
-          <div className="space-y-2">
-            <Label htmlFor="market-image-url">
-              Image link{" "}
-              <span className="font-normal text-muted-foreground">
-                (optional)
-              </span>
-            </Label>
-            <Input
-              id="market-image-url"
-              type="url"
-              pattern="https?://.+"
-              placeholder="https://example.com/image.jpg"
-              value={draft.logoUrl}
-              onChange={(event) => updateDraft("logoUrl", event.target.value)}
-            />
-          </div>
-
-          <div className="rounded-lg border bg-muted/20">
-            <Button
-              type="button"
-              variant="ghost"
-              className="h-auto w-full justify-between px-3 py-3 text-left hover:bg-muted/50 hover:text-foreground"
-              aria-expanded={advancedOpen}
-              aria-controls="market-liquidity"
-              onClick={() => setAdvancedOpen((current) => !current)}
-            >
-              <span className="font-semibold">Liquidity settings</span>
-              <span className="flex items-center gap-2 text-xs font-medium tabular-nums text-muted-foreground">
-                {formatRupees(Number(draft.initialB))}
-                <ChevronDown
-                  className={cn(advancedOpen && "rotate-180")}
-                  aria-hidden="true"
-                />
-              </span>
-            </Button>
-            <div
-              id="market-liquidity"
-              hidden={!advancedOpen}
-              className="space-y-4 border-t px-3 py-4"
-            >
-              <div className="space-y-2">
-                <Label htmlFor="market-base-b">Base liquidity (B)</Label>
-                <p className="text-xs text-muted-foreground">
-                  Higher liquidity makes prices harder to move.
-                </p>
-                <div className="flex items-center gap-3">
-                  <input
-                    aria-label="Adjust base liquidity"
-                    type="range"
-                    min={100}
-                    max={10000}
-                    step={100}
-                    value={draft.initialB}
-                    onChange={(event) =>
-                      updateDraft("initialB", event.target.value)
-                    }
-                    className="min-w-0 flex-1 accent-primary"
-                  />
-                  <Input
-                    id="market-base-b"
-                    className="w-24"
-                    type="number"
-                    min={10}
-                    step={1}
-                    value={draft.initialB}
-                    onChange={(event) =>
-                      updateDraft("initialB", event.target.value)
-                    }
-                    disabled={!advancedOpen}
-                    required
-                  />
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {liquidityPresets.map((preset) => (
-                    <Button
-                      key={preset}
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="aria-pressed:border-primary aria-pressed:bg-primary/10 hover:bg-muted hover:text-foreground"
-                      aria-pressed={Number(draft.initialB) === preset}
-                      onClick={() => updateDraft("initialB", String(preset))}
-                    >
-                      {formatRupees(preset)}
-                    </Button>
+                    </label>
                   ))}
                 </div>
-              </div>
+              </fieldset>
+
               <div className="space-y-2">
-                <Label htmlFor="market-min-b">
-                  Minimum dynamic liquidity (B)
-                </Label>
+                <Label htmlFor="market-title">Title</Label>
                 <Input
-                  id="market-min-b"
-                  type="number"
-                  min={1}
-                  step={1}
-                  value={draft.minB}
-                  onChange={(event) => updateDraft("minB", event.target.value)}
-                  disabled={!advancedOpen}
+                  id="market-title"
+                  placeholder={
+                    draft.marketType === "binary"
+                      ? "Will the event happen?"
+                      : "Who will win the event?"
+                  }
+                  value={draft.title}
+                  onChange={(event) => updateDraft("title", event.target.value)}
                   required
                 />
               </div>
-              <label className="flex items-start gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={draft.isDynamic}
-                  onChange={(event) =>
-                    updateDraft("isDynamic", event.target.checked)
-                  }
-                  className="mt-0.5 size-4 shrink-0 accent-primary"
-                />
-                <span>
-                  <span className="block font-medium">Dynamic liquidity</span>
-                  <span className="text-xs text-muted-foreground">
-                    Reduce liquidity toward the minimum as the market closes.
-                  </span>
-                </span>
-              </label>
-            </div>
-          </div>
-        </fieldset>
 
-        <footer className="space-y-3 border-t px-4 py-4 sm:px-6">
-          {error && (
-            <p
-              role="alert"
-              className="text-sm font-medium text-red-700 dark:text-red-300"
-            >
-              {error}
-            </p>
-          )}
-          <Button
-            type="submit"
-            className="w-full bg-blue-700 text-white hover:bg-blue-800"
-            disabled={isCreating}
-          >
-            {isCreating ? (
-              <>
-                <Loader2
-                  className="motion-safe:animate-spin"
-                  aria-hidden="true"
-                />{" "}
-                Creating market…
-              </>
-            ) : (
-              <>
-                <Plus aria-hidden="true" /> Create market
-              </>
+              <div className="space-y-2">
+                <Label htmlFor="market-description">Description</Label>
+                <Textarea
+                  id="market-description"
+                  placeholder="Describe the event and what determines the outcome."
+                  value={draft.description}
+                  onChange={(event) =>
+                    updateDraft("description", event.target.value)
+                  }
+                  rows={2}
+                  className="min-h-16"
+                  required
+                />
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+                <div className="space-y-2">
+                  <Label htmlFor="market-category">Category</Label>
+                  <Select
+                    value={draft.category}
+                    onValueChange={(value) => updateDraft("category", value)}
+                    required
+                    disabled={isCreating}
+                  >
+                    <SelectTrigger id="market-category">
+                      <SelectValue placeholder="Select category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {categories.map((category) => (
+                        <SelectItem key={category} value={category}>
+                          {category}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="min-w-0 space-y-2">
+                  <Label htmlFor="market-close">Closes at (optional)</Label>
+                  <Input
+                    id="market-close"
+                    type="datetime-local"
+                    value={draft.endDate}
+                    onChange={(event) =>
+                      updateDraft("endDate", event.target.value)
+                    }
+                    aria-describedby="market-close-hint"
+                  />
+                  <p
+                    id="market-close-hint"
+                    className="text-xs text-muted-foreground"
+                  >
+                    Local time. Leave blank to close at resolution.
+                  </p>
+                </div>
+              </div>
+
+              {draft.marketType === "versus" && (
+                <div className="space-y-3 rounded-lg border bg-muted/20 p-3">
+                  {(["A", "B"] as const).map((side) => (
+                    <div
+                      key={side}
+                      className="grid gap-3 sm:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]"
+                    >
+                      <div className="space-y-2">
+                        <Label htmlFor={`market-side-${side}`}>
+                          Side {side} name
+                        </Label>
+                        <Input
+                          id={`market-side-${side}`}
+                          value={draft[`option${side}`]}
+                          onChange={(event) =>
+                            updateDraft(`option${side}`, event.target.value)
+                          }
+                          required
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor={`market-short-${side}`}>
+                          Short label{" "}
+                          <span className="font-normal text-muted-foreground">
+                            (optional)
+                          </span>
+                        </Label>
+                        <Input
+                          id={`market-short-${side}`}
+                          value={draft[`short${side}`]}
+                          onChange={(event) =>
+                            updateDraft(`short${side}`, event.target.value)
+                          }
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {draft.marketType === "multi" && (
+                <fieldset className="min-w-0 space-y-2">
+                  <legend className="mb-2 text-sm font-semibold">Teams</legend>
+                  {teams.map((team, index) => (
+                    <div key={team.id} className="flex items-center gap-2">
+                      <ImagePicker
+                        compact
+                        file={team.file}
+                        label={`team ${index + 1} logo`}
+                        onChange={(file) => updateTeam(team.id, { file })}
+                      />
+                      <Input
+                        aria-label={`Team ${index + 1} name`}
+                        placeholder={`Team ${index + 1} name`}
+                        value={team.name}
+                        onChange={(event) =>
+                          updateTeam(team.id, { name: event.target.value })
+                        }
+                        required
+                      />
+                      {teams.length > 2 && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="shrink-0 text-muted-foreground hover:bg-muted hover:text-destructive"
+                          aria-label={`Remove team ${index + 1}`}
+                          onClick={() =>
+                            setTeams((current) =>
+                              current.filter(({ id }) => id !== team.id),
+                            )
+                          }
+                        >
+                          <X aria-hidden="true" />
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="hover:bg-muted hover:text-foreground"
+                    onClick={() => {
+                      const id = nextTeamId.current++;
+                      setTeams((current) => [...current, { id, name: "" }]);
+                    }}
+                  >
+                    <Plus aria-hidden="true" /> Add team
+                  </Button>
+                </fieldset>
+              )}
+
+              <div className="rounded-lg border bg-muted/20">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="h-auto w-full justify-between px-3 py-3 text-left hover:bg-muted/50 hover:text-foreground"
+                  aria-expanded={advancedOpen}
+                  aria-controls="market-options"
+                  onClick={() => setAdvancedOpen((current) => !current)}
+                >
+                  <span className="font-semibold">Image &amp; liquidity</span>
+                  <span className="flex items-center gap-2 text-xs font-medium tabular-nums text-muted-foreground">
+                    {formatRupees(Number(draft.initialB))}
+                    <ChevronDown
+                      className={cn(
+                        "ui-chevron",
+                        advancedOpen && "rotate-180",
+                      )}
+                      aria-hidden="true"
+                    />
+                  </span>
+                </Button>
+                <DisclosurePanel id="market-options" open={advancedOpen}>
+                  <div className="space-y-4 border-t px-3 py-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="market-image-url">
+                        Image link{" "}
+                        <span className="font-normal text-muted-foreground">
+                          (optional)
+                        </span>
+                      </Label>
+                      <Input
+                        id="market-image-url"
+                        type="url"
+                        pattern="https?://.+"
+                        placeholder="https://example.com/image.jpg"
+                        value={draft.logoUrl}
+                        onChange={(event) =>
+                          updateDraft("logoUrl", event.target.value)
+                        }
+                        onInvalid={() => {
+                          // Reveal the input before native validation tries to focus it.
+                          if (!advancedOpen)
+                            flushSync(() => setAdvancedOpen(true));
+                        }}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="market-base-b">Base liquidity (B)</Label>
+                      <p className="text-xs text-muted-foreground">
+                        Higher liquidity makes prices harder to move.
+                      </p>
+                      <div className="flex items-center gap-3">
+                        <input
+                          aria-label="Adjust base liquidity"
+                          type="range"
+                          min={100}
+                          max={10000}
+                          step={100}
+                          value={draft.initialB}
+                          onChange={(event) =>
+                            updateDraft("initialB", event.target.value)
+                          }
+                          className="min-w-0 flex-1 accent-primary"
+                        />
+                        <Input
+                          id="market-base-b"
+                          className="w-24"
+                          type="number"
+                          min={10}
+                          step={1}
+                          value={draft.initialB}
+                          onChange={(event) =>
+                            updateDraft("initialB", event.target.value)
+                          }
+                          disabled={!advancedOpen}
+                          required
+                        />
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {liquidityPresets.map((preset) => (
+                          <Button
+                            key={preset}
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="aria-pressed:border-primary aria-pressed:bg-primary/10 hover:bg-muted hover:text-foreground"
+                            aria-pressed={Number(draft.initialB) === preset}
+                            onClick={() =>
+                              updateDraft("initialB", String(preset))
+                            }
+                          >
+                            {formatRupees(preset)}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="market-min-b">
+                        Minimum dynamic liquidity (B)
+                      </Label>
+                      <Input
+                        id="market-min-b"
+                        type="number"
+                        min={1}
+                        step={1}
+                        value={draft.minB}
+                        onChange={(event) =>
+                          updateDraft("minB", event.target.value)
+                        }
+                        disabled={!advancedOpen}
+                        required
+                      />
+                    </div>
+                    <label className="flex items-start gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={draft.isDynamic}
+                        onChange={(event) =>
+                          updateDraft("isDynamic", event.target.checked)
+                        }
+                        className="mt-0.5 size-4 shrink-0 accent-primary"
+                      />
+                      <span>
+                        <span className="block font-medium">
+                          Dynamic liquidity
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          Reduce liquidity toward the minimum as the market
+                          closes.
+                        </span>
+                      </span>
+                    </label>
+                  </div>
+                </DisclosurePanel>
+              </div>
+            </fieldset>
+          </div>
+
+          <footer className="shrink-0 space-y-2 border-t px-5 py-3">
+            {error && (
+              <p
+                role="alert"
+                className="text-sm font-medium text-red-700 dark:text-red-300"
+              >
+                {error}
+              </p>
             )}
-          </Button>
-        </footer>
-      </form>
-    </section>
+            <div className="flex justify-end gap-2">
+              <DialogClose asChild>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="hover:bg-muted hover:text-foreground"
+                  disabled={isCreating}
+                >
+                  Close
+                </Button>
+              </DialogClose>
+              <Button
+                type="submit"
+                size="sm"
+                className="admin-primary"
+                disabled={isCreating}
+              >
+                {isCreating ? (
+                  <>
+                    <Loader2
+                      className="motion-safe:animate-spin"
+                      aria-hidden="true"
+                    />{" "}
+                    Creating market…
+                  </>
+                ) : (
+                  <>
+                    <Plus aria-hidden="true" /> Create market
+                  </>
+                )}
+              </Button>
+            </div>
+          </footer>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }

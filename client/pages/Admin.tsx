@@ -1,7 +1,7 @@
 import type { Market } from "@shared/api";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowDown, Loader2, Shield, Trash2, UserPlus } from "lucide-react";
+import { Loader2, Shield, Trash2, UserPlus } from "lucide-react";
 import { Layout } from "@/components/Layout";
 import { MarketComposer } from "@/components/admin/MarketComposer";
 import { CodexWorkspace } from "@/components/admin/CodexWorkspace";
@@ -20,6 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { fetchMarkets, marketCatalogKey } from "@/lib/markets";
+import "./admin.css";
 
 interface AdminUser {
   id: string;
@@ -28,7 +29,6 @@ interface AdminUser {
 }
 
 const adminsKey = ["admin-list"];
-const toolbarButton = "border-border hover:bg-muted hover:text-foreground";
 const settingsDialog =
   "max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-xl overflow-y-auto rounded-xl";
 
@@ -83,11 +83,20 @@ function AdminManagement() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="sm" variant="outline" className={toolbarButton}>
-          <Shield aria-hidden="true" /> Administrators
+        <Button
+          size="sm"
+          variant="outline"
+          title="Administrators"
+          className="admin-secondary w-9 px-0 sm:w-auto sm:px-3"
+        >
+          <Shield aria-hidden="true" />
+          <span className="sr-only sm:not-sr-only">Administrators</span>
         </Button>
       </DialogTrigger>
-      <DialogContent className={settingsDialog}>
+      <DialogContent
+        className={settingsDialog}
+        overlayClassName="bg-black/60"
+      >
         <DialogHeader className="pr-5">
           <DialogTitle>Administrators</DialogTitle>
           <DialogDescription>
@@ -213,59 +222,29 @@ export default function Admin() {
 
   return (
     <Layout>
-      <div className="flex-1 bg-slate-50 dark:bg-background">
-        <div className="mx-auto max-w-[90rem] px-4 pb-10 pt-6 sm:px-6 lg:px-8 lg:pt-7">
-          <div className="mb-6 flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
-            <div>
-              <h1 className="text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl">
-                Market administration
-              </h1>
-              <p className="mt-1.5 text-sm text-muted-foreground">
-                Create markets, update their settings, and settle outcomes.
-              </p>
-            </div>
+      <div className="admin-page mx-auto w-full max-w-7xl px-4 pb-12 pt-7 sm:px-8 sm:pt-10 lg:px-12">
+        <header className="admin-heading mb-6 sm:mb-8">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
+              Manage markets
+            </h1>
+            <p className="mt-1.5 text-sm text-muted-foreground">
+              Review trading activity, update settings, and settle outcomes.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
             <AdminManagement />
+            <CodexWorkspace />
           </div>
-
-          <nav
-            aria-label="Market workspace"
-            className="mb-4 flex flex-wrap gap-2 lg:hidden"
-          >
-            <Button
-              size="sm"
-              variant="outline"
-              className={toolbarButton}
-              asChild
-            >
-              <a href="#market-workspace">
-                Create <ArrowDown aria-hidden="true" />
-              </a>
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className={toolbarButton}
-              asChild
-            >
-              <a href="#manage-markets">
-                Manage <ArrowDown aria-hidden="true" />
-              </a>
-            </Button>
-          </nav>
-
-          <div className="grid items-start gap-4 lg:grid-cols-2 lg:gap-6">
-            <CodexWorkspace>
-              <MarketComposer onCreated={syncMarket} />
-            </CodexWorkspace>
-            <MarketDirectory
-              markets={markets.data ?? []}
-              isLoading={markets.isLoading}
-              hasError={markets.isError}
-              onRetry={() => markets.refetch()}
-              onUpdated={syncMarket}
-            />
-          </div>
-        </div>
+          <MarketComposer onCreated={syncMarket} />
+        </header>
+        <MarketDirectory
+          markets={markets.data ?? []}
+          isLoading={markets.isLoading}
+          hasError={markets.isError}
+          onRetry={() => markets.refetch()}
+          onUpdated={syncMarket}
+        />
       </div>
     </Layout>
   );

@@ -16,6 +16,7 @@ import {
 import { Layout } from "@/components/Layout";
 import { LmsrBetModal } from "@/components/LmsrBetModal";
 import { marketCatalogKey } from "@/lib/markets";
+import { useRamayanaBoxOffice } from "@/hooks/use-ramayana-box-office";
 import { cn } from "@/lib/utils";
 import type { Market } from "@shared/api";
 import {
@@ -23,7 +24,6 @@ import {
   RAMAYANA_MARKET_ID,
   RAMAYANA_SOURCE,
   RAMAYANA_TARGET,
-  ramayanaBoxOfficeSnapshot,
   type RamayanaBoxOffice,
 } from "@shared/ramayana";
 import "./ramayana-market.css";
@@ -76,10 +76,7 @@ function BoxOfficeTracker({ report }: { report: RamayanaBoxOffice }) {
           <div>
             <h2 id="box-office-chart">Worldwide box office</h2>
             <p className="ramayana-muted mt-1 text-sm">
-              {report.sourceStatus === "saved"
-                ? "Saved figures"
-                : "Reported figures"}{" "}
-              through {shortDate.format(latest.date)}
+              Daily figures through {shortDate.format(latest.date)}
             </p>
           </div>
           <div className="ramayana-switch" role="group" aria-label="Chart view">
@@ -246,6 +243,7 @@ function BoxOfficeTracker({ report }: { report: RamayanaBoxOffice }) {
 export default function RamayanaMarket() {
   const queryClient = useQueryClient();
   const [option, setOption] = useState<string>();
+  const [tradeOpen, setTradeOpen] = useState(false);
   const {
     data: market,
     isPending,
@@ -257,18 +255,8 @@ export default function RamayanaMarket() {
       fetchReport<Market>(`/markets/${RAMAYANA_MARKET_ID}`, signal),
     refetchInterval: 15_000,
   });
-  const { data: boxOffice = ramayanaBoxOfficeSnapshot } = useQuery({
-    queryKey: ["ramayana", "box-office"],
-    queryFn: ({ signal }) =>
-      fetchReport<RamayanaBoxOffice>("/ramayana/box-office", signal),
-    staleTime: 5 * 60_000,
-    refetchInterval: 5 * 60_000,
-  });
-  const gross =
-    boxOffice.dailyGross.reduce(
-      (total, day) => total + Math.round(day * 100),
-      0,
-    ) / 100;
+  const boxOffice = useRamayanaBoxOffice();
+  const gross = boxOffice.worldwideGross;
   const progress = Math.min(gross / RAMAYANA_TARGET, 1);
   const remaining = Math.max(
     0,
@@ -305,10 +293,13 @@ export default function RamayanaMarket() {
               <div className="ramayana-progress">
                 <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
                   <span className="ramayana-gross">
-                    ₹{crore.format(gross)} <small>cr</small>
+                    ₹{dailyCrore.format(gross)} <small>cr</small>
                   </span>
                   <span className="ramayana-muted text-sm">
-                    Worldwide gross
+                    Worldwide gross ·{" "}
+                    {boxOffice.sourceStatus === "saved"
+                      ? "Saved figure"
+                      : "Sacnilk"}
                   </span>
                 </div>
                 <div
@@ -317,7 +308,7 @@ export default function RamayanaMarket() {
                   aria-label="Progress toward ₹2,000 crore"
                   aria-valuenow={Math.round(progress * 100)}
                 >
-                  <span style={{ width: `${progress * 100}%` }} />
+                  <span style={{ transform: `scaleX(${progress})` }} />
                 </div>
                 <p className="ramayana-muted text-sm">
                   {remaining > 0
@@ -355,7 +346,10 @@ export default function RamayanaMarket() {
                           "ramayana-outcome",
                           outcome.id === "yes" && "ramayana-outcome-yes",
                         )}
-                        onClick={() => setOption(outcome.id)}
+                        onClick={() => {
+                          setOption(outcome.id);
+                          setTradeOpen(true);
+                        }}
                         aria-label={`Trade ${outcome.name} at ${outcome.price.toFixed(0)} paise`}
                       >
                         {outcome.name} <span>{outcome.price.toFixed(0)}p</span>
@@ -418,8 +412,9 @@ export default function RamayanaMarket() {
         <LmsrBetModal
           market={market}
           initialOptionId={option}
-          isOpen
-          onClose={() => setOption(undefined)}
+          isOpen={tradeOpen}
+          onClose={() => setTradeOpen(false)}
+          onDismissed={() => setOption(undefined)}
           onTrade={(_marketId, updatedMarket: Market) => {
             queryClient.setQueryData(marketKey, updatedMarket);
             void queryClient.invalidateQueries({ queryKey: marketCatalogKey });

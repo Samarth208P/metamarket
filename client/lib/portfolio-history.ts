@@ -10,7 +10,7 @@ interface MarketHistory {
 
 // Binary rounds store the asset, side and execution price or payout in the history title.
 const binaryHistoryTitle =
-  /^(BTC|ETH) (?:UP|DOWN) (?:@ (\d+p)|Payout) \(Tgt: (\$[^)]+)\)$/;
+  /^(BTC|ETH) (?:UP|DOWN) (?:@ (\d+(?:\.\d+)?p)|Payout) \(Tgt: (\$[^)]+)\)$/;
 
 export function groupPortfolioHistory(history: TradeHistoryEntry[] = []) {
   const sortedHistory = [...history].sort(

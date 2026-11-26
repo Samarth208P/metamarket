@@ -91,7 +91,7 @@ export function BinaryChart({
             >
               <span
                 className={`w-1.5 h-1.5 rounded-full ${
-                  isConnected ? "bg-emerald-400 animate-pulse" : "bg-red-400"
+                  isConnected ? "bg-emerald-400" : "bg-red-400"
                 }`}
               />
               {isConnected ? "LIVE" : "OFFLINE"}
@@ -195,6 +195,7 @@ export function BinaryChart({
                 orientation="right"
               />
               <Tooltip
+                isAnimationActive={false}
                 contentStyle={{
                   backgroundColor: "rgba(9, 9, 11, 0.9)",
                   border: "1px solid rgba(255,255,255,0.08)",

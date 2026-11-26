@@ -33,57 +33,6 @@
   border-radius: inherit;
 }
 
-.magic-bento__effects,
-.magic-bento__effects::after {
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  pointer-events: none;
-}
-
-.magic-bento__effects {
-  z-index: -1;
-  overflow: hidden;
-}
-
-.magic-bento__tile[data-lit] .magic-bento__effects {
-  background: radial-gradient(
-    circle var(--bento-spotlight-radius) at var(--bento-x) var(--bento-y),
-    color-mix(
-      in srgb,
-      var(--bento-accent, hsl(var(--primary))) 7%,
-      transparent
-    ),
-    transparent
-  );
-}
-
-.magic-bento__tile[data-lit] .magic-bento__effects::after {
-  content: "";
-  padding: 1px;
-  background: radial-gradient(
-    circle var(--bento-spotlight-radius) at var(--bento-x) var(--bento-y),
-    color-mix(
-      in srgb,
-      var(--bento-accent, hsl(var(--primary))) 40%,
-      transparent
-    ),
-    transparent
-  );
-  mask:
-    linear-gradient(#000 0 0) content-box exclude,
-    linear-gradient(#000 0 0);
-}
-
-.magic-bento__ripple {
-  position: absolute;
-  aspect-ratio: 1;
-  border: 2px solid var(--bento-accent, hsl(var(--primary)));
-  border-radius: 50%;
-  box-shadow: 0 0 22px var(--bento-accent, hsl(var(--primary)));
-  opacity: 0;
-}
-
 @media (min-width: 640px) {
   .magic-bento {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -101,8 +50,51 @@
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .magic-bento__ripple {
-    display: none;
+@media (hover: hover) and (pointer: fine) {
+  .magic-bento__tile {
+    transition: box-shadow 210ms ease;
+  }
+  .magic-bento__tile:hover {
+    box-shadow: inset 0 0 0 1px
+      color-mix(
+        in srgb,
+        var(--bento-accent, hsl(var(--primary))) 35%,
+        hsl(var(--border))
+      );
+  }
+}
+
+.magic-bento__effects {
+  display: none;
+}
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  .magic-bento__effects {
+    display: block;
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    border-radius: inherit;
+    z-index: -1;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 200ms ease;
+  }
+  .magic-bento__tile:hover .magic-bento__effects {
+    opacity: 1;
+  }
+  .magic-bento__light {
+    position: absolute;
+    inset: -12rem auto auto -12rem;
+    width: 24rem;
+    height: 24rem;
+    background: radial-gradient(
+      closest-side,
+      color-mix(
+        in srgb,
+        var(--bento-accent, hsl(var(--primary))) 8%,
+        transparent
+      ),
+      transparent
+    );
   }
 }

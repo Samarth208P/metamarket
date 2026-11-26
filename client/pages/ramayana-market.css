@@ -123,6 +123,7 @@
   display: block;
   height: 100%;
   border-radius: inherit;
+  transform-origin: left;
   background: linear-gradient(90deg, #a76138, var(--ram-gold));
 }
 
@@ -171,8 +172,10 @@
   color: #ffe1a9;
 }
 
-.ramayana-outcome:hover:not(:disabled) {
-  filter: brightness(1.2);
+@media (hover: hover) and (pointer: fine) {
+  .ramayana-outcome:hover:not(:disabled) {
+    filter: brightness(1.12);
+  }
 }
 
 .ramayana-outcome:disabled {
@@ -198,6 +201,25 @@
 .ramayana-switch button[aria-pressed="true"] {
   background: #48331f;
   color: var(--ram-gold);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .ramayana-progress-track span {
+    transition: transform 260ms var(--ease-ui);
+  }
+  .ramayana-outcome {
+    transition:
+      filter 180ms ease,
+      scale 150ms var(--ease-ui);
+  }
+  .ramayana-outcome:active:not(:disabled):not(:focus-visible) {
+    scale: 0.98;
+  }
+  .ramayana-switch button {
+    transition:
+      color 180ms ease,
+      background-color 180ms ease;
+  }
 }
 
 .ramayana-table {

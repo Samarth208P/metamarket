@@ -1,3 +1,4 @@
+import { TradeModeSwitch } from "./TradeModeSwitch";
 // @ts-nocheck
 import { useState, useMemo, useEffect } from "react";
 import { Button } from "@/components/ui/button";
@@ -34,7 +35,6 @@ import {
 } from "recharts";
 import { X, Loader2 } from "lucide-react";
 import { CommentsSection } from "./CommentsSection";
-import { motion, AnimatePresence } from "framer-motion";
 
 interface BetModalProps {
   isOpen: boolean;
@@ -91,16 +91,7 @@ export function BetModal({
   const isMobile = useIsMobile();
 
   const [isConfirming, setIsConfirming] = useState(false);
-  const [isGraphLoading, setIsGraphLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  useEffect(() => {
-    if (isOpen) {
-      setIsGraphLoading(true);
-      const timer = setTimeout(() => setIsGraphLoading(false), 4000);
-      return () => clearTimeout(timer);
-    }
-  }, [isOpen]);
 
   // Multi-market team selection (when opened without a specific team)
   const [internalTeamIdx, setInternalTeamIdx] = useState<number | null>(
@@ -351,14 +342,7 @@ export function BetModal({
       </div>
     ) : null;
 
-  const graphElement = isGraphLoading ? (
-    <div className="h-[200px] md:h-[300px] flex flex-col items-center justify-center gap-4 bg-muted/5 rounded-xl border border-border/50">
-      <img src="/animated-logo.svg" alt="Loading" className="w-24 h-24" />
-      <p className="text-[10px] font-black uppercase text-muted-foreground tracking-[0.2em]">
-        Fetching Real-time Odds...
-      </p>
-    </div>
-  ) : (
+  const graphElement = (
     <div className="flex flex-col h-full">
       <div className="h-[200px] md:h-[300px] bg-muted/10 rounded-xl p-4 border border-border/50 relative overflow-hidden">
         {market.priceHistory && market.priceHistory.length > 0 ? (
@@ -397,6 +381,7 @@ export function BetModal({
                 tickFormatter={(val) => `${val}p`}
               />
               <Tooltip
+                isAnimationActive={false}
                 content={({ active, payload }) => {
                   if (active && payload && payload.length) {
                     return (
@@ -473,6 +458,7 @@ export function BetModal({
               {market.marketType === "multi" && market.teams ? (
                 market.teams.map((t, idx) => (
                   <Area
+                    isAnimationActive={false}
                     key={idx}
                     type="monotone"
                     dataKey={`team_${idx}`}
@@ -480,18 +466,17 @@ export function BetModal({
                     fillOpacity={1}
                     fill={`url(#colorTeam${idx % lineColors.length})`}
                     strokeWidth={idx === internalTeamIdx ? 4 : 2}
-                    animationDuration={500}
                   />
                 ))
               ) : (
                 <Area
+                  isAnimationActive={false}
                   type="stepAfter"
                   dataKey="yesPrice"
                   stroke="hsl(var(--yes-color))"
                   fillOpacity={1}
                   fill="url(#colorTeam0)"
                   strokeWidth={3}
-                  animationDuration={500}
                 />
               )}
               <ReferenceLine
@@ -559,7 +544,7 @@ export function BetModal({
         {market.teams.map((team, idx) => (
           <div
             key={idx}
-            className="flex items-center justify-between p-3 rounded-xl bg-muted/30 border border-border/50 hover:border-primary/30 transition-all"
+            className="flex items-center justify-between p-3 rounded-xl bg-muted/30 border border-border/50 hover:border-primary/30 transition-colors"
           >
             <div className="flex items-center gap-3 min-w-0">
               {team.imageUrl ? (
@@ -583,7 +568,7 @@ export function BetModal({
                   setInternalTeamIdx(idx);
                   setOutcome("yes");
                 }}
-                className="px-3 py-1.5 bg-yes/10 hover:bg-yes hover:text-white text-yes text-xs font-bold rounded-lg transition-all"
+                className="px-3 py-1.5 bg-yes/10 hover:bg-yes hover:text-white text-yes text-xs font-bold rounded-lg transition-colors"
               >
                 Yes {team.yesPrice.toFixed(0)}p
               </button>
@@ -592,7 +577,7 @@ export function BetModal({
                   setInternalTeamIdx(idx);
                   setOutcome("no");
                 }}
-                className="px-3 py-1.5 bg-no/10 hover:bg-no hover:text-white text-no text-xs font-bold rounded-lg transition-all"
+                className="px-3 py-1.5 bg-no/10 hover:bg-no hover:text-white text-no text-xs font-bold rounded-lg transition-colors"
               >
                 No {team.noPrice.toFixed(0)}p
               </button>
@@ -608,36 +593,11 @@ export function BetModal({
       {/* Countdown */}
       {countdownDisplay}
 
-      {/* Buy / Sell Toggle */}
-      <div
-        className={cn(
-          "flex p-1 bg-muted rounded-lg",
-          isSubmitting && "opacity-50 pointer-events-none",
-        )}
-      >
-        <button
-          onClick={() => setIsBuying(true)}
-          className={cn(
-            "flex-1 py-1.5 text-sm font-semibold rounded-md transition-colors",
-            isBuying
-              ? "bg-background shadow-sm text-foreground"
-              : "text-muted-foreground",
-          )}
-        >
-          Buy
-        </button>
-        <button
-          onClick={() => setIsBuying(false)}
-          className={cn(
-            "flex-1 py-1.5 text-sm font-semibold rounded-md transition-colors",
-            !isBuying
-              ? "bg-background shadow-sm text-foreground"
-              : "text-muted-foreground",
-          )}
-        >
-          Sell
-        </button>
-      </div>
+      <TradeModeSwitch
+        value={isBuying ? "buy" : "sell"}
+        disabled={isSubmitting}
+        onChange={(mode) => setIsBuying(mode === "buy")}
+      />
 
       {/* Outcome Toggle */}
       <div
@@ -652,15 +612,16 @@ export function BetModal({
               setInternalTeamIdx(null);
               setIsConfirming(false);
             }}
-            className="px-2 py-4 rounded-xl border-2 border-transparent bg-muted/50 hover:bg-muted transition-all text-xs font-bold text-muted-foreground"
+            className="px-2 py-4 rounded-xl border-2 border-transparent bg-muted/50 hover:bg-muted transition-colors text-xs font-bold text-muted-foreground"
           >
             ←
           </button>
         )}
         <button
+          aria-pressed={outcome === "yes"}
           onClick={() => setOutcome("yes")}
           className={cn(
-            "flex-1 flex flex-col items-center py-4 rounded-xl border-2 transition-all",
+            "flex-1 flex flex-col items-center py-4 rounded-xl border-2 transition-colors",
             outcome === "yes"
               ? "border-yes bg-yes/15 ring-2 ring-yes/20"
               : "border-transparent bg-muted/50 hover:bg-muted",
@@ -679,9 +640,10 @@ export function BetModal({
           </span>
         </button>
         <button
+          aria-pressed={outcome === "no"}
           onClick={() => setOutcome("no")}
           className={cn(
-            "flex-1 flex flex-col items-center py-4 rounded-xl border-2 transition-all",
+            "flex-1 flex flex-col items-center py-4 rounded-xl border-2 transition-colors",
             outcome === "no"
               ? "border-no bg-no/15 ring-2 ring-no/20"
               : "border-transparent bg-muted/50 hover:bg-muted",
@@ -805,7 +767,7 @@ export function BetModal({
             )}
           >
             {isSubmitting ? (
-              <Loader2 className="w-5 h-5 animate-spin mx-auto" />
+              <Loader2 className="w-5 h-5 motion-safe:animate-spin mx-auto" />
             ) : (
               <span className="relative z-10">
                 Confirm{" "}
@@ -835,7 +797,7 @@ export function BetModal({
                   0.01)
           }
           className={cn(
-            "w-full h-12 text-base font-bold transition-all active:scale-95",
+            "w-full h-12 text-base font-bold transition-colors",
             isBuying
               ? "bg-primary text-primary-foreground hover:bg-primary/90"
               : "bg-foreground text-background hover:bg-foreground/90",
@@ -854,7 +816,7 @@ export function BetModal({
       <Drawer open={isOpen} onOpenChange={onClose}>
         <DrawerContent
           className={cn(
-            "max-h-[90vh] transition-all duration-500",
+            "max-h-[90vh]",
             isConfirming
               ? "ring-4 ring-green-500/50 shadow-[0_0_30px_rgba(34,197,94,0.3)] shadow-green-500/20"
               : "",
@@ -1004,7 +966,7 @@ export function BetModal({
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent
         className={cn(
-          "sm:max-w-[900px] p-0 gap-0 overflow-hidden bg-card border-border rounded-xl transition-all duration-500",
+          "sm:max-w-[900px] p-0 gap-0 overflow-hidden bg-card border-border rounded-xl",
           isConfirming
             ? "ring-4 ring-green-500/50 shadow-[0_0_40px_rgba(34,197,94,0.4)] border-green-500/40"
             : "",

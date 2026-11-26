@@ -1,0 +1,107 @@
+.admin-heading {
+  display: grid;
+  align-items: center;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 1rem 0.5rem;
+}
+
+.admin-primary,
+.admin-secondary {
+  border-radius: 0.5rem;
+  font-weight: 600;
+}
+
+.admin-secondary {
+  background: transparent;
+  border-color: hsl(var(--border));
+}
+
+.admin-filter {
+  transition:
+    background-color 220ms ease,
+    border-color 220ms ease;
+}
+
+.admin-filter[aria-pressed="true"] {
+  border-color: hsl(var(--primary) / 0.5);
+  background: hsl(var(--primary) / 0.085);
+}
+
+.admin-filter:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 3px;
+}
+
+.admin-columns {
+  display: grid;
+  grid-template-columns:
+    minmax(0, 1fr) 9.5rem 10.5rem clamp(5rem, 8vw, 7rem)
+    1rem;
+  align-items: center;
+  gap: 1rem;
+  padding-inline: 1.25rem;
+}
+
+.admin-column-labels {
+  padding-block: 0.625rem;
+}
+
+.admin-row {
+  padding-block: 1.125rem;
+  transition: background-color 180ms ease;
+}
+
+.admin-market-volume {
+  text-align: right;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .admin-secondary:hover {
+    background: hsl(var(--muted) / 0.65);
+    color: hsl(var(--foreground));
+  }
+  .admin-filter[aria-pressed="false"]:hover {
+    border-color: hsl(var(--muted-foreground) / 0.35);
+    background: hsl(var(--muted) / 0.55);
+  }
+
+  .admin-row:hover {
+    background: hsl(var(--muted) / 0.4);
+  }
+}
+
+@media (max-width: 767px) {
+  .admin-heading {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .admin-heading > :first-child {
+    grid-column: 1 / -1;
+  }
+
+  .admin-columns {
+    grid-template-columns: auto minmax(0, 1fr) auto 1rem;
+    grid-template-areas: "name name name expand" "status close volume volume";
+    gap: 0.75rem 0.5rem;
+    padding-inline: 1rem;
+  }
+
+  .admin-column-labels {
+    display: none;
+  }
+  .admin-market-name {
+    grid-area: name;
+  }
+  .admin-market-status {
+    grid-area: status;
+  }
+  .admin-market-close {
+    grid-area: close;
+  }
+  .admin-market-volume {
+    grid-area: volume;
+  }
+  .admin-row-chevron {
+    grid-area: expand;
+  }
+}

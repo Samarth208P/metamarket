@@ -28,3 +28,6 @@ verify_jwt = false
 
 [functions.btc-cycle]
 verify_jwt = false
+
+[functions.ramayana-feed]
+verify_jwt = false

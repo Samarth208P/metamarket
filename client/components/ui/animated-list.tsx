@@ -30,10 +30,10 @@ export function AnimatedListItem({
           transition: { duration: 0.18, ease: "easeOut" },
         }
       : {
-          initial: { scale: 0, opacity: 0 },
+          initial: { scale: 0.985, opacity: 0 },
           animate: { scale: 1, opacity: 1, originY: 0 },
-          exit: { scale: 0, opacity: 0 },
-          transition: { type: "spring", stiffness: 350, damping: 40 },
+          exit: { scale: 0.985, opacity: 0 },
+          transition: { duration: 0.22, ease: [0.22, 0.68, 0.2, 1] },
         };
 
   return (

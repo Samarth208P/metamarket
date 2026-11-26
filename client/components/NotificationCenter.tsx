@@ -79,7 +79,7 @@ export function NotificationCenter() {
           dialogRef.current?.focus({ preventScroll: true });
         }}
         overlayClassName="bg-black/40"
-        className="left-auto right-4 top-[4.5rem] w-[calc(100%-2rem)] max-w-sm translate-x-0 translate-y-0 gap-0 overflow-hidden rounded-xl p-0 !animate-none focus:outline-none sm:right-6"
+        className="left-auto right-4 top-[4.5rem] w-[calc(100%-2rem)] max-w-sm translate-x-0 translate-y-0 gap-0 overflow-hidden rounded-xl p-0 origin-top-right focus:outline-none sm:right-6"
       >
         <DialogHeader className="border-b px-4 py-4 pr-12 text-left">
           <DialogTitle>Notifications</DialogTitle>

@@ -286,6 +286,18 @@ describe.skipIf(import.meta.env.MODE !== "db")(
         method: "POST",
         body: { optionId: "yes", type: "buy", amount: 100 },
       });
+      expect(quote).toMatchObject({ fee: 1.1, totalCost: 101.1 });
+      await api(`/markets/${market.id}/trade`, {
+        account: player,
+        method: "POST",
+        status: 400,
+        body: {
+          optionId: "yes",
+          type: "buy",
+          amount: 1000,
+          quotedAt: quote.quotedAt,
+        },
+      });
       const trade = await api(`/markets/${market.id}/trade`, {
         account: player,
         method: "POST",
@@ -297,7 +309,13 @@ describe.skipIf(import.meta.env.MODE !== "db")(
           quotedAt: quote.quotedAt,
         },
       });
-      expect(trade.user.balance).toBe(900);
+      expect(trade.user.balance).toBe(898.9);
+      expect(trade.market.volume).toBe(market.volume + 100);
+      expect(trade.user.tradeHistory.at(-1)).toMatchObject({
+        amount: 100,
+        fee: 1.1,
+        cashDelta: -101.1,
+      });
       expect(trade.user.positions[0].shares).toBeGreaterThan(0);
       const nextMarket = await api("/markets", {
         account: admin,
@@ -708,6 +726,19 @@ describe.skipIf(import.meta.env.MODE !== "db")(
           priceSnapshots: [{ price: target, timestamp: new Date() }],
         });
         binaryMarkets.push(market.id);
+        const before = await api("/user", { account: player });
+        await api(`/binary-markets/${market.id}/trade`, {
+          account: player,
+          method: "POST",
+          status: 400,
+          body: { side: "up", amount: before.balance },
+        });
+        await api(`/binary-markets/${market.id}/trade`, {
+          account: player,
+          method: "POST",
+          status: 409,
+          body: { side: "up", amount: 25, maxPrice: 0.01 },
+        });
         const result = await api(`/binary-markets/${market.id}/trade`, {
           account: player,
           method: "POST",
@@ -715,7 +746,14 @@ describe.skipIf(import.meta.env.MODE !== "db")(
         });
         expect(result.market.trades).toHaveLength(1);
         expect(result.market.trades[0].entryProbability).toBeLessThan(0.51);
-        expect(result.user.tradeHistory.at(-1).tradeType).toBe("buy");
+        expect(result.totalCost).toBe(26.03);
+        expect(result.market.volume).toBe(25);
+        expect(result.user.balance).toBeCloseTo(before.balance - 26.03, 2);
+        expect(result.user.tradeHistory.at(-1)).toMatchObject({
+          tradeType: "buy",
+          fee: 1.03,
+          cashDelta: -26.03,
+        });
         expect(result.user.tradeHistory.at(-1).marketTitle).toMatch(
           new RegExp(`^${assetPair.slice(0, 3)} UP`),
         );
@@ -738,6 +776,12 @@ describe.skipIf(import.meta.env.MODE !== "db")(
         );
         expect(ownTrades.rows).toEqual([{ user_id: player.id }]);
 
+        await api(`/binary-markets/${market.id}/sell`, {
+          account: player,
+          method: "POST",
+          status: 409,
+          body: { side: "up", minPrice: 0.99 },
+        });
         const cashOut = await api(`/binary-markets/${market.id}/sell`, {
           account: player,
           method: "POST",
@@ -947,11 +991,11 @@ describe.skipIf(import.meta.env.MODE !== "db")(
       "credits an expired %s round once when two scheduled jobs settle it",
       async (assetPair) => {
         await setup(player, `player_${fixture.slice(0, 10)}`);
-        const target = assetPair === "BTCUSDT" ? 100000 : 3000;
+        const target = assetPair === "BTCUSDT" ? 99000 : 2970;
         const market = await BinaryMarket.openSlot({
           assetPair,
-          startTime: new Date(Date.now() - 180000),
-          endTime: new Date(Date.now() + 120000),
+          startTime: new Date(Date.now() - 290000),
+          endTime: new Date(Date.now() + 10000),
           targetPrice: target,
           priceSnapshots: [],
         });
@@ -959,8 +1003,11 @@ describe.skipIf(import.meta.env.MODE !== "db")(
         const purchase = await api(`/binary-markets/${market.id}/trade`, {
           account: player,
           method: "POST",
-          body: { side: "up", amount: 20 },
+          body: { side: "up", amount: 500 },
         });
+        expect(purchase.trade.entryProbability).toBeGreaterThanOrEqual(0.99);
+        expect(purchase.trade.entryProbability).toBeLessThan(1);
+        expect(purchase.totalCost).toBe(501.5);
 
         await withSystem(() =>
           query(
@@ -998,6 +1045,11 @@ describe.skipIf(import.meta.env.MODE !== "db")(
           account: player,
         });
         expect(settled.status).toBe("settled_up");
+        expect(settled.trades[0].payout).toBeCloseTo(
+          500 / purchase.trade.entryProbability,
+          2,
+        );
+        expect(settled.trades[0].payout).toBeGreaterThan(purchase.totalCost);
         expect(settled.priceSnapshots.map(({ price }) => price)).toEqual([
           target,
           target + 1000,

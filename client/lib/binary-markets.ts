@@ -4,7 +4,11 @@ import {
   type BinaryAsset,
   type BinaryAssetPair,
 } from "@shared/binaryAssets";
-import type { BinaryMarket, PricePoint } from "@shared/binaryPrice";
+import type {
+  BinaryMarket,
+  BinaryQuotes,
+  PricePoint,
+} from "@shared/binaryPrice";
 
 export const binaryMarketCategory = "Crypto";
 
@@ -15,7 +19,7 @@ export function binaryMarketTitle(asset: BinaryAsset) {
 interface ActiveBinaryMarket {
   market: BinaryMarket | null;
   livePrice: number;
-  probability?: { up: number; down: number };
+  quotes?: BinaryQuotes;
 }
 
 async function fetchBinaryMarket<T>(

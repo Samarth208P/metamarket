@@ -4,31 +4,39 @@ import {
   type RamayanaBoxOffice,
 } from "../../../shared/ramayana.ts";
 
+export const refreshInterval = 60_000;
+
+function plainText(html: string) {
+  return html
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;|&#160;|&#xa0;/gi, " ")
+    .replace(/&#8377;|&#x20b9;/gi, "\u20b9")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function cells(row: string, element: "th" | "td") {
-  return Array.from(
-    row.matchAll(
-      new RegExp(`<${element}\\b[^>]*>([\\s\\S]*?)<\/${element}>`, "gi"),
-    ),
-    (cell) => cell[1].replace(/<[^>]*>/g, " ").trim(),
+  const pattern = new RegExp(
+    "<" + element + "\\b[^>]*>([\\s\\S]*?)</" + element + ">",
+    "gi",
   );
+  return Array.from(row.matchAll(pattern), (cell) => plainText(cell[1]));
 }
 
-function grossInHundredths(value = "") {
-  const match = value.match(
-    /^(?:₹|&#8377;|&#x20b9;)\s*([\d,]+(?:\.\d{1,2})?)\s*Cr$/i,
-  );
-  return match ? Math.round(Number(match[1].replace(/,/g, "")) * 100) : null;
+function amount(digits: string) {
+  return Number(digits.replace(/,/g, ""));
 }
 
-export function parseRamayanaBoxOffice(html: string): RamayanaBoxOffice | null {
+function dailyFigures(html: string) {
   const table = html.match(
     /<table\b[^>]*\bclass=["'][^"']*\bbr-dw\b[^"']*["'][^>]*>([\s\S]*?)<\/table>/i,
   )?.[1];
   if (!table) return null;
-
   const header = table.match(/<thead\b[^>]*>([\s\S]*?)<\/thead>/i)?.[1] ?? "";
-  const worldwideColumn = cells(header, "th").indexOf("Worldwide");
-  if (worldwideColumn < 1) return null;
+  const column = cells(header, "th").findIndex((name) =>
+    /^worldwide$/i.test(name),
+  );
+  if (column < 1) return null;
 
   const body = table.match(/<tbody\b[^>]*>([\s\S]*?)<\/tbody>/i)?.[1] ?? "";
   const dailyGross: number[] = [];
@@ -37,35 +45,47 @@ export function parseRamayanaBoxOffice(html: string): RamayanaBoxOffice | null {
     const values = cells(row[1], "td");
     const day = Number(values[0]?.match(/^Day\s+(\d+)\b/i)?.[1]);
     if (!day) continue;
-    if (day !== dailyGross.length + 1 || pendingDay !== null) return null;
-
-    const gross = grossInHundredths(values[worldwideColumn]);
-    if (gross === null) {
-      if (!values[0].includes("live estimate")) return null;
+    if (day !== dailyGross.length + 1) break;
+    const gross = values[column]?.match(
+      /^\u20b9\s*([\d,]+(?:\.\d{1,2})?)\s*Cr$/i,
+    );
+    if (!gross) {
       pendingDay = day;
-    } else {
-      dailyGross.push(gross);
+      break;
     }
+    dailyGross.push(amount(gross[1]));
   }
+  return { dailyGross, pendingDay };
+}
 
-  const footer = table.match(/<tfoot\b[^>]*>([\s\S]*?)<\/tfoot>/i)?.[1] ?? "";
-  const total = grossInHundredths(cells(footer, "td")[worldwideColumn]);
-  if (
-    dailyGross.length < ramayanaBoxOfficeSnapshot.dailyGross.length ||
-    dailyGross.reduce((sum, gross) => sum + gross, 0) !== total
-  ) {
-    return null;
-  }
-
+export function parseRamayanaBoxOffice(
+  html: string,
+  previous = ramayanaBoxOfficeSnapshot,
+): RamayanaBoxOffice | null {
+  // The daily table can lag behind the desk's published worldwide total.
+  const summary = html.match(
+    /<h[1-6]\b[^>]*>\s*Overseas and worldwide\s*<\/h[1-6]>([\s\S]*?)(?=<table\b|<h[1-6]\b|<\/section>|$)/i,
+  );
+  const gross =
+    summary &&
+    plainText(summary[1]).match(
+      /\u20b9\s*([\d,]+(?:\.\d{1,2})?)\s*Cr\s+Worldwide gross\b/i,
+    );
+  if (!gross || !Number.isFinite(amount(gross[1]))) return null;
+  const daily = dailyFigures(html);
+  const history =
+    daily && daily.dailyGross.length >= previous.dailyGross.length
+      ? daily
+      : previous;
   return {
-    dailyGross: dailyGross.map((gross) => gross / 100),
-    pendingDay,
+    worldwideGross: amount(gross[1]),
+    checkedAt: Date.now(),
+    dailyGross: history.dailyGross,
+    pendingDay: history.pendingDay,
     sourceStatus: "current",
   };
 }
 
-const refreshInterval = 15 * 60 * 1000;
-const retryInterval = 5 * 60 * 1000;
 let nextRefresh = 0;
 let lastReport = ramayanaBoxOfficeSnapshot;
 let refresh: Promise<RamayanaBoxOffice> | undefined;
@@ -75,19 +95,17 @@ async function refreshBoxOffice() {
     const source = new URL(RAMAYANA_DAILY_SOURCE);
     source.hash = "";
     const response = await fetch(source, {
-      signal: AbortSignal.timeout(3500),
+      signal: AbortSignal.timeout(10_000),
+      headers: { Accept: "text/html" },
     });
     if (!response.ok) throw new Error("Sacnilk returned an error");
-    const report = parseRamayanaBoxOffice(await response.text());
-    if (!report || report.dailyGross.length < lastReport.dailyGross.length) {
-      throw new Error("Incomplete worldwide box office report");
-    }
+    const report = parseRamayanaBoxOffice(await response.text(), lastReport);
+    if (!report) throw new Error("Missing published worldwide gross");
     lastReport = report;
-    nextRefresh = Date.now() + refreshInterval;
   } catch {
     lastReport = { ...lastReport, sourceStatus: "saved" };
-    nextRefresh = Date.now() + retryInterval;
   }
+  nextRefresh = Date.now() + refreshInterval;
   return lastReport;
 }
 
@@ -97,4 +115,21 @@ export function getRamayanaBoxOffice() {
     refresh = undefined;
   });
   return refresh;
+}
+
+// Send the first snapshot immediately. Subsequent snapshots also act as heartbeats.
+export function subscribeRamayanaBoxOffice(send: (data: string) => void) {
+  let active = true;
+  let timer: ReturnType<typeof setTimeout>;
+  async function update() {
+    const report = await getRamayanaBoxOffice();
+    if (!active) return;
+    send(JSON.stringify(report));
+    timer = setTimeout(update, Math.max(1, nextRefresh - Date.now()));
+  }
+  void update();
+  return () => {
+    active = false;
+    clearTimeout(timer);
+  };
 }

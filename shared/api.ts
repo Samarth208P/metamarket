@@ -80,6 +80,7 @@ export interface QuoteResponse {
   minShares: number;
   grossPayout: number;
   netPayout: number;
+  totalCost: number;
   fee: number;
   averagePrice: number;
   currentPrice: number;

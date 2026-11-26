@@ -58,19 +58,19 @@ export default function Portfolio() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-            <div className="bg-card border border-border rounded-2xl p-6 shadow-sm hover:shadow-md transition-shadow">
+            <div className="bg-card border border-border rounded-2xl p-6 shadow-sm">
               <div className="flex items-center justify-between mb-2">
                 <p className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
                   Available Balance
                 </p>
-                <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+                <div className="h-2 w-2 rounded-full bg-green-500" />
               </div>
               <p className="text-4xl font-black text-foreground">
                 ₹{user?.balance.toLocaleString()}
               </p>
             </div>
 
-            <div className="bg-card border border-border rounded-2xl p-6 shadow-sm hover:shadow-md transition-shadow flex flex-col justify-center">
+            <div className="bg-card border border-border rounded-2xl p-6 shadow-sm flex flex-col justify-center">
               <p className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-2">
                 Total Trades
               </p>
@@ -101,7 +101,7 @@ export default function Portfolio() {
             ) : (
               <div className="divide-y divide-border">
                 {markets.map((market) => (
-                  <details key={market.id} className="group">
+                  <details key={market.id} className="ui-details group">
                     <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-4 hover:bg-muted/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
                       <div className="min-w-0">
                         <div className="break-words font-semibold">
@@ -134,7 +134,7 @@ export default function Portfolio() {
                           </div>
                         )}
                         <ChevronDown
-                          className="size-4 text-muted-foreground group-open:rotate-180"
+                          className="ui-chevron size-4 text-muted-foreground group-open:rotate-180"
                           aria-hidden="true"
                         />
                       </div>
@@ -188,6 +188,11 @@ export default function Portfolio() {
                                 <span className="text-xs uppercase tracking-wider opacity-80">
                                   {entry.tradeType}
                                 </span>
+                                {isBuy && entry.fee > 0 && (
+                                  <div className="text-xs text-muted-foreground">
+                                    Includes {cashAmount.format(entry.fee)} fee
+                                  </div>
+                                )}
                               </div>
                             </li>
                           );

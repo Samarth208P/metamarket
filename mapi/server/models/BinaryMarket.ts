@@ -17,6 +17,7 @@ export interface IBinaryTrade {
   userName?: string;
   side: "up" | "down";
   amount: number;
+  fee?: number;
   entryProbability: number;
   payout: number;
   timestamp: Date;

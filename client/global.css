@@ -12,6 +12,8 @@
    * A different format will require also updating the theme in tailwind.config.ts.
   */
   :root {
+    --ease-ui: cubic-bezier(0.22, 0.68, 0.2, 1);
+    --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
     --background: 0 0% 100%;
     --foreground: 15 10% 10%;
 
@@ -136,6 +138,183 @@
     --yes-color: 142 71% 45%;
     --no-color: 348 83% 47%;
     --neutral-color: 215 75% 60%;
+  }
+}
+
+/* Keep the transform used to position a Radix surface throughout its animation. */
+@keyframes surface-in {
+  from {
+    opacity: 0;
+    transform: translate(var(--tw-translate-x, 0px), var(--tw-translate-y, 0px))
+      translateY(var(--surface-offset, 0px)) scale(var(--surface-scale, 0.98));
+  }
+}
+
+@keyframes surface-out {
+  to {
+    opacity: 0;
+    transform: translate(var(--tw-translate-x, 0px), var(--tw-translate-y, 0px))
+      translateY(var(--surface-offset, 0px)) scale(var(--surface-scale, 0.98));
+  }
+}
+
+@keyframes overlay-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes overlay-out {
+  to {
+    opacity: 0;
+  }
+}
+
+.ui-modal {
+  --surface-offset: 6px;
+  --surface-scale: 0.985;
+}
+
+.ui-modal[data-state="open"] {
+  animation: surface-in 260ms var(--ease-ui);
+}
+.ui-modal[data-state="closed"] {
+  animation: surface-out 200ms var(--ease-ui);
+}
+.ui-overlay[data-state="open"] {
+  animation: overlay-in 240ms ease;
+}
+.ui-overlay[data-state="closed"] {
+  animation: overlay-out 200ms ease;
+}
+.ui-popup:is([data-state="open"], [data-state="delayed-open"]) {
+  animation: surface-in 180ms var(--ease-ui);
+}
+.ui-popup[data-state="closed"] {
+  animation: surface-out 140ms var(--ease-ui);
+}
+
+.ui-sheet[data-state],
+.ui-drawer[data-state],
+.ui-drawer-overlay[data-state] {
+  animation-duration: 290ms;
+  animation-timing-function: var(--ease-drawer);
+}
+
+.ui-sheet[data-state="closed"],
+.ui-drawer[data-state="closed"],
+.ui-drawer-overlay[data-state="closed"] {
+  animation-duration: 220ms;
+}
+
+.ui-toast[data-state] {
+  animation-duration: 230ms;
+  animation-timing-function: var(--ease-ui);
+}
+.ui-toast[data-state="closed"] {
+  animation-duration: 180ms;
+}
+
+.ui-press {
+  transition:
+    scale 150ms var(--ease-ui),
+    color 180ms ease,
+    background-color 180ms ease,
+    border-color 180ms ease;
+}
+
+.ui-press:active:not(:disabled):not(:focus-visible) {
+  scale: 0.98;
+}
+
+.ui-disclosure {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition:
+    grid-template-rows 260ms var(--ease-ui),
+    opacity 180ms ease;
+}
+
+.ui-disclosure[data-open="true"] {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+.ui-chevron {
+  transition: transform 260ms var(--ease-ui);
+}
+
+.trade-mode::before {
+  content: "";
+  position: absolute;
+  inset: 0.25rem auto 0.25rem 0.25rem;
+  width: calc(50% - 0.25rem);
+  background: hsl(var(--background));
+  border-radius: 0.375rem;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.12);
+  transition: transform 240ms var(--ease-ui);
+}
+
+.trade-mode[data-mode="sell"]::before {
+  transform: translateX(100%);
+}
+
+/* Browsers without intrinsic size transitions retain native details behavior. */
+@supports (interpolate-size: allow-keywords) and
+  selector(details::details-content) {
+  .ui-details {
+    interpolate-size: allow-keywords;
+  }
+  .ui-details::details-content {
+    block-size: 0;
+    overflow: clip;
+    transition:
+      block-size 260ms var(--ease-ui),
+      content-visibility 260ms allow-discrete;
+  }
+  .ui-details[open]::details-content {
+    block-size: auto;
+  }
+}
+
+/* Keyboard navigation and focus restoration should be immediate. */
+:root[data-input="keyboard"]
+  :is(
+    .ui-modal,
+    .ui-overlay,
+    .ui-popup,
+    .ui-sheet,
+    .ui-drawer,
+    .ui-drawer-overlay
+  )[data-state] {
+  animation: none;
+}
+:root[data-input="keyboard"] :is(.ui-disclosure, .ui-chevron),
+:root[data-input="keyboard"] .ui-details::details-content,
+:root[data-input="keyboard"] .trade-mode::before {
+  transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :is(
+    .ui-modal,
+    .ui-overlay,
+    .ui-popup,
+    .ui-sheet,
+    .ui-drawer,
+    .ui-drawer-overlay,
+    .ui-toast
+  )[data-state] {
+    animation: none;
+  }
+  .ui-disclosure,
+  .ui-chevron,
+  .ui-drawer,
+  .ui-details::details-content,
+  .trade-mode::before {
+    transition: none;
+  }
+  .ui-press:active:not(:disabled):not(:focus-visible) {
+    scale: none;
   }
 }
 

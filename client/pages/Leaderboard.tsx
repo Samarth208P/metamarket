@@ -1,7 +1,6 @@
 import { Layout } from "@/components/Layout";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
-import { Trophy, Medal, Award, TrendingUp } from "lucide-react";
-import { motion } from "framer-motion";
+import { Trophy } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -53,18 +52,14 @@ export default function Leaderboard() {
       case 3:
         return "border-amber-600 border-2 shadow-[0_0_15px_rgba(217,119,6,0.15)] bg-amber-600/5";
       default:
-        return "border-border hover:border-primary/30";
+        return "border-border";
     }
   };
 
   return (
     <Layout>
       <section className="container mx-auto px-4 py-8 md:py-12">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="max-w-4xl mx-auto"
-        >
+        <div className="max-w-4xl mx-auto">
           <div className="text-center mb-12">
             <div className="flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 mx-auto mb-2">
               <Trophy className="w-8 h-8 text-primary" />
@@ -98,64 +93,53 @@ export default function Leaderboard() {
           ) : users.length > 0 ? (
             <div className="space-y-4">
               {users.map((user) => (
-                <motion.div
-                  key={user.id}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ duration: 0.3 }}
-                >
-                  <Card
-                    className={`transition-all hover:shadow-lg ${getRankBorder(user.rank)}`}
-                  >
-                    <CardContent className="p-6">
-                      <div className="flex items-center justify-between gap-4 flex-wrap">
-                        <div className="flex items-center gap-4">
-                          <div className="flex flex-col items-center justify-center w-12 h-12">
-                            <span className="text-2xl font-black text-foreground">
-                              #{user.rank}
-                            </span>
-                            {getRankIndicator(user.rankTrend)}
-                          </div>
-                          <ProfileAvatar
-                            username={user.name}
-                            avatarUrl={user.avatarUrl}
-                            className="h-10 w-10 text-sm"
-                          />
-                          <div>
-                            <h3 className="text-lg font-bold text-foreground">
-                              {user.name}
-                            </h3>
-                          </div>
+                <Card key={user.id} className={getRankBorder(user.rank)}>
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between gap-4 flex-wrap">
+                      <div className="flex items-center gap-4">
+                        <div className="flex flex-col items-center justify-center w-12 h-12">
+                          <span className="text-2xl font-black text-foreground">
+                            #{user.rank}
+                          </span>
+                          {getRankIndicator(user.rankTrend)}
                         </div>
-
-                        <div className="text-right">
-                          <div className="flex flex-col items-end">
-                            <span className="text-2xl font-black text-foreground">
-                              ₹{user.totalNetWorth.toLocaleString()}
-                            </span>
-                            <div className="flex gap-2 text-[10px] uppercase tracking-wider font-bold text-muted-foreground mt-1">
-                              <span>
-                                Cash: ₹{user.balance.toLocaleString()}
-                              </span>
-                              <span className="text-primary/40">•</span>
-                              <span>
-                                Holdings: ₹{user.holdingsValue.toLocaleString()}
-                              </span>
-                            </div>
-                          </div>
-                          {user.rank <= 3 && (
-                            <Badge
-                              variant="secondary"
-                              className="bg-primary/10 text-primary mt-2 inline-flex"
-                            >
-                              Top {user.rank}
-                            </Badge>
-                          )}
+                        <ProfileAvatar
+                          username={user.name}
+                          avatarUrl={user.avatarUrl}
+                          className="h-10 w-10 text-sm"
+                        />
+                        <div>
+                          <h3 className="text-lg font-bold text-foreground">
+                            {user.name}
+                          </h3>
                         </div>
                       </div>
-                    </CardContent>
-                  </Card>
-                </motion.div>
+
+                      <div className="text-right">
+                        <div className="flex flex-col items-end">
+                          <span className="text-2xl font-black text-foreground">
+                            ₹{user.totalNetWorth.toLocaleString()}
+                          </span>
+                          <div className="flex gap-2 text-[10px] uppercase tracking-wider font-bold text-muted-foreground mt-1">
+                            <span>Cash: ₹{user.balance.toLocaleString()}</span>
+                            <span className="text-primary/40">•</span>
+                            <span>
+                              Holdings: ₹{user.holdingsValue.toLocaleString()}
+                            </span>
+                          </div>
+                        </div>
+                        {user.rank <= 3 && (
+                          <Badge
+                            variant="secondary"
+                            className="bg-primary/10 text-primary mt-2 inline-flex"
+                          >
+                            Top {user.rank}
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
               ))}
             </div>
           ) : (
@@ -171,7 +155,7 @@ export default function Leaderboard() {
               </p>
             </div>
           )}
-        </motion.div>
+        </div>
       </section>
     </Layout>
   );

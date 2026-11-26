@@ -1,28 +1,25 @@
+import { TradeModeSwitch } from "./TradeModeSwitch";
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  calculateLiveProbability,
-  calculatePotentialPayout,
-  formatPaise,
+import { calculatePotentialPayout, formatPaise } from "@shared/binaryPrice";
+import type {
+  BinaryMarket as BinaryMarketType,
+  BinaryQuotes,
 } from "@shared/binaryPrice";
-import type { BinaryMarket as BinaryMarketType } from "@shared/binaryPrice";
 import type { BinaryAsset } from "@shared/binaryAssets";
+import { maxPurchaseAmount, pricePurchase } from "@shared/purchase";
 import { ArrowUp, ArrowDown, TrendingUp, Loader2 } from "lucide-react";
 
 interface BinaryTradePanelProps {
   asset: BinaryAsset;
   initialSide?: "up" | "down";
   market: BinaryMarketType | null;
-  currentPrice: number;
-  recentPrices: number[];
-  isConnected: boolean;
-  isFrozen?: boolean;
-  serverProbability?: { up: number; down: number } | null;
+  quotes?: BinaryQuotes;
 }
 
 const PRESET_AMOUNTS = [10, 50, 100, 500];
@@ -31,14 +28,11 @@ export function BinaryTradePanel({
   asset,
   initialSide = "up",
   market,
-  currentPrice,
-  recentPrices,
-  isConnected,
-  isFrozen,
-  serverProbability,
+  quotes,
 }: BinaryTradePanelProps) {
   const { user, updateUser } = useAuth();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [tradeType, setTradeType] = useState<"buy" | "sell">("buy");
   const [amount, setAmount] = useState<string>("");
   const [selectedSide, setSelectedSide] = useState(initialSide);
@@ -58,70 +52,49 @@ export function BinaryTradePanel({
     return () => clearInterval(interval);
   }, [market]);
 
-  // ── Live probabilities (Computed locally for smooth UI ticks) ────
-  const { pUp, pDown } = useMemo(() => {
-    if (market && (!isConnected || currentPrice <= 0) && serverProbability) {
-      return { pUp: serverProbability.up, pDown: serverProbability.down };
-    }
-    if (!market || currentPrice <= 0) {
-      return { pUp: 0.5, pDown: 0.5 };
-    }
-    const result = calculateLiveProbability({
-      currentPrice,
-      targetPrice: market.targetPrice,
-      timeRemainingMs,
-      recentPrices,
-    });
-    return { pUp: result.probability, pDown: 1 - result.probability };
-  }, [
-    market,
-    currentPrice,
-    isConnected,
-    recentPrices,
-    serverProbability,
-    timeRemainingMs,
-  ]);
+  const sidePrices = quotes?.[tradeType];
+  const buyPrice = quotes?.buy[selectedSide];
+  const sellPrice = quotes?.sell[selectedSide];
 
   // ── User positions ─────────────────────────────────────────────
-  const userTrades = useMemo(() => {
-    return (
-      market?.trades?.filter((t) => t.userId === user?.id && !t.sold) || []
+  const currentHolding = useMemo(() => {
+    const positions =
+      market?.trades.filter(
+        (t) => t.userId === user?.id && t.side === selectedSide && !t.sold,
+      ) ?? [];
+    const invested = positions.reduce(
+      (sum, t) => sum + t.amount + (t.fee ?? 0),
+      0,
     );
-  }, [market, user]);
-
-  const upPositions = userTrades.filter((t) => t.side === "up");
-  const downPositions = userTrades.filter((t) => t.side === "down");
-
-  const upInvested = upPositions.reduce((s, t) => s + t.amount, 0);
-  const upValue = upPositions.reduce(
-    (s, t) => s + (t.amount / Math.max(t.entryProbability, 0.01)) * pUp,
-    0,
-  );
-  const downInvested = downPositions.reduce((s, t) => s + t.amount, 0);
-  const downValue = downPositions.reduce(
-    (s, t) => s + (t.amount / Math.max(t.entryProbability, 0.01)) * pDown,
-    0,
-  );
-
-  const currentHolding =
-    selectedSide === "up"
-      ? { positions: upPositions, invested: upInvested, value: upValue }
-      : { positions: downPositions, invested: downInvested, value: downValue };
+    const shares = positions.reduce(
+      (sum, t) => sum + calculatePotentialPayout(t.amount, t.entryProbability),
+      0,
+    );
+    return {
+      positions,
+      invested,
+      value: sellPrice ? shares * sellPrice : null,
+    };
+  }, [market, user?.id, selectedSide, sellPrice]);
 
   const numericAmount = Number(amount) || 0;
-  const potentialPayoutUp = calculatePotentialPayout(numericAmount, pUp);
-  const potentialPayoutDown = calculatePotentialPayout(numericAmount, pDown);
-
+  const { fee, totalCost } = pricePurchase(numericAmount);
   const isMarketActive = market?.status === "active" && timeRemainingMs > 0;
+  const canBuy =
+    isMarketActive &&
+    !!buyPrice &&
+    !isTrading &&
+    numericAmount >= 1 &&
+    totalCost <= (user?.balance ?? 0);
 
   // ── Trade handler ──────────────────────────────────────────────
   const handleTrade = useCallback(async () => {
-    if (!market || !user || isTrading) return;
+    if (!market || !user || !isMarketActive || !buyPrice || isTrading) return;
     if (numericAmount < 1) {
       toast({ title: "Minimum bet is ₹1", variant: "destructive" });
       return;
     }
-    if (numericAmount > (user.balance || 0)) {
+    if (totalCost > (user.balance || 0)) {
       toast({ title: "Insufficient balance", variant: "destructive" });
       return;
     }
@@ -132,10 +105,17 @@ export function BinaryTradePanel({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ side: selectedSide, amount: numericAmount }),
+        body: JSON.stringify({
+          side: selectedSide,
+          amount: numericAmount,
+          maxPrice: buyPrice,
+        }),
       });
 
       const data = await res.json();
+      void queryClient.invalidateQueries({
+        queryKey: ["binary-market-active", market.assetPair],
+      });
       if (!res.ok) throw new Error(data.error || "Trade failed");
 
       updateUser(data.user);
@@ -143,9 +123,7 @@ export function BinaryTradePanel({
         title: `${asset.symbol} ${selectedSide.toUpperCase()} position opened`,
         notificationKind: "trade",
         notificationHref: asset.path,
-        description: `₹${numericAmount} at ${formatPaise(
-          selectedSide === "up" ? pUp : pDown,
-        )}`,
+        description: `₹${data.totalCost.toFixed(2)} paid, including ₹${data.trade.fee.toFixed(2)} fee, at ${formatPaise(data.trade.entryProbability)} per share.`,
       });
       setAmount("");
       setIsConfirming(false);
@@ -164,8 +142,10 @@ export function BinaryTradePanel({
     user,
     numericAmount,
     selectedSide,
-    pUp,
-    pDown,
+    totalCost,
+    buyPrice,
+    isMarketActive,
+    queryClient,
     isTrading,
     toast,
     updateUser,
@@ -174,7 +154,8 @@ export function BinaryTradePanel({
   // ── Sell handler ───────────────────────────────────────────────
   const handleSell = useCallback(
     async (ratio: number = 1) => {
-      if (!market || !user || isTrading) return;
+      if (!market || !user || !isMarketActive || !sellPrice || isTrading)
+        return;
       if (currentHolding.positions.length === 0) {
         toast({ title: "No position to sell", variant: "destructive" });
         return;
@@ -186,9 +167,16 @@ export function BinaryTradePanel({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
-          body: JSON.stringify({ side: selectedSide, ratio }),
+          body: JSON.stringify({
+            side: selectedSide,
+            ratio,
+            minPrice: sellPrice,
+          }),
         });
         const data = await res.json();
+        void queryClient.invalidateQueries({
+          queryKey: ["binary-market-active", market.assetPair],
+        });
         if (!res.ok) throw new Error(data.error || "Sell failed");
 
         updateUser(data.user);
@@ -218,6 +206,9 @@ export function BinaryTradePanel({
       market,
       user,
       isTrading,
+      isMarketActive,
+      sellPrice,
+      queryClient,
       selectedSide,
       currentHolding,
       toast,
@@ -233,7 +224,7 @@ export function BinaryTradePanel({
     <div className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-muted/50 border border-border/50">
       {!market || timeRemainingMs <= 0 ? (
         <>
-          <Loader2 className="w-3.5 h-3.5 text-muted-foreground animate-spin mr-1" />
+          <Loader2 className="w-3.5 h-3.5 text-muted-foreground motion-safe:animate-spin mr-1" />
           <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
             Next round starting...
           </span>
@@ -261,7 +252,7 @@ export function BinaryTradePanel({
   const handleMax = () => {
     if (!user) return;
     if (tradeType === "buy") {
-      setAmount(String(user.balance));
+      setAmount(String(maxPurchaseAmount(user.balance)));
     } else {
       // For sell, max = 100% (will use ratio)
       setAmount("100");
@@ -274,46 +265,16 @@ export function BinaryTradePanel({
       <div className="p-6 flex flex-col gap-5">
         {countdownDisplay}
 
-        {/* Buy / Sell Toggle — matches LmsrBetModal */}
-        <div
-          className={cn(
-            "flex p-1 bg-muted rounded-lg",
-            isTrading && "opacity-50 pointer-events-none",
-          )}
-        >
-          <button
-            onClick={() => {
-              setTradeType("buy");
-              setIsConfirming(false);
-              setIsSellConfirming(false);
-              setAmount("");
-            }}
-            className={cn(
-              "flex-1 py-1.5 text-sm font-semibold rounded-md transition-colors",
-              tradeType === "buy"
-                ? "bg-background shadow-sm text-foreground"
-                : "text-muted-foreground",
-            )}
-          >
-            Buy
-          </button>
-          <button
-            onClick={() => {
-              setTradeType("sell");
-              setIsConfirming(false);
-              setIsSellConfirming(false);
-              setAmount("");
-            }}
-            className={cn(
-              "flex-1 py-1.5 text-sm font-semibold rounded-md transition-colors",
-              tradeType === "sell"
-                ? "bg-background shadow-sm text-foreground"
-                : "text-muted-foreground",
-            )}
-          >
-            Sell
-          </button>
-        </div>
+        <TradeModeSwitch
+          value={tradeType}
+          disabled={isTrading}
+          onChange={(mode) => {
+            setTradeType(mode);
+            setIsConfirming(false);
+            setIsSellConfirming(false);
+            setAmount("");
+          }}
+        />
 
         {/* Outcome Selector — Up / Down */}
         <div className="grid grid-cols-2 gap-2">
@@ -321,7 +282,7 @@ export function BinaryTradePanel({
             aria-pressed={selectedSide === "up"}
             onClick={() => setSelectedSide("up")}
             className={cn(
-              "flex flex-col items-center py-4 rounded-xl border-2 transition-all",
+              "flex flex-col items-center py-4 rounded-xl border-2 transition-colors",
               selectedSide === "up"
                 ? "border-yes bg-yes/15 ring-2 ring-yes/20"
                 : "border-transparent bg-muted/50 hover:bg-muted",
@@ -335,13 +296,15 @@ export function BinaryTradePanel({
             >
               Up
             </span>
-            <span className="text-xl font-black">{formatPaise(pUp)}</span>
+            <span className="text-xl font-black">
+              {sidePrices ? formatPaise(sidePrices.up) : "—"}
+            </span>
           </button>
           <button
             aria-pressed={selectedSide === "down"}
             onClick={() => setSelectedSide("down")}
             className={cn(
-              "flex flex-col items-center py-4 rounded-xl border-2 transition-all",
+              "flex flex-col items-center py-4 rounded-xl border-2 transition-colors",
               selectedSide === "down"
                 ? "border-no bg-no/15 ring-2 ring-no/20"
                 : "border-transparent bg-muted/50 hover:bg-muted",
@@ -355,7 +318,9 @@ export function BinaryTradePanel({
             >
               Down
             </span>
-            <span className="text-xl font-black">{formatPaise(pDown)}</span>
+            <span className="text-xl font-black">
+              {sidePrices ? formatPaise(sidePrices.down) : "—"}
+            </span>
           </button>
         </div>
 
@@ -377,7 +342,7 @@ export function BinaryTradePanel({
                 value={amount}
                 disabled={isTrading}
                 onChange={(e) => setAmount(e.target.value)}
-                className="h-12 text-lg font-bold bg-muted/20 border-border focus:border-primary/50 focus:ring-1 focus:ring-primary/50 transition-all pr-16 rounded-xl"
+                className="h-12 text-lg font-bold bg-muted/20 border-border focus:border-primary/50 focus:ring-1 focus:ring-primary/50 transition-colors pr-16 rounded-xl"
               />
               <div className="absolute right-3 top-1/2 -translate-y-1/2">
                 <button
@@ -395,7 +360,7 @@ export function BinaryTradePanel({
                   key={val}
                   variant="outline"
                   size="sm"
-                  className="h-8 text-[10px] font-bold border-border bg-muted/10 hover:bg-primary/10 hover:text-primary hover:border-primary/30 rounded-lg transition-all"
+                  className="h-8 text-[10px] font-bold border-border bg-muted/10 hover:bg-primary/10 hover:text-primary hover:border-primary/30 rounded-lg transition-colors"
                   onClick={() =>
                     setAmount((prev) => String((Number(prev) || 0) + val))
                   }
@@ -407,7 +372,7 @@ export function BinaryTradePanel({
 
             {/* Quote box */}
             <div className="rounded-xl border border-border bg-muted/20 p-4 text-xs">
-              {numericAmount > 0 ? (
+              {numericAmount > 0 && buyPrice ? (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">
@@ -415,22 +380,32 @@ export function BinaryTradePanel({
                     </span>
                     <span className="font-bold text-yes">
                       ₹
-                      {(selectedSide === "up"
-                        ? potentialPayoutUp
-                        : potentialPayoutDown
+                      {calculatePotentialPayout(
+                        numericAmount,
+                        buyPrice,
                       ).toFixed(2)}
                     </span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">Entry Price</span>
-                    <span className="font-bold">
-                      {formatPaise(selectedSide === "up" ? pUp : pDown)}
+                    <span className="font-bold">{formatPaise(buyPrice)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">
+                      Purchase fee (₹1 + 0.1%)
                     </span>
+                    <span className="font-bold">₹{fee.toFixed(2)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Total to pay</span>
+                    <span className="font-bold">₹{totalCost.toFixed(2)}</span>
                   </div>
                 </div>
               ) : (
                 <div className="text-muted-foreground italic text-center">
-                  Enter an amount to see potential returns.
+                  {buyPrice
+                    ? "Enter an amount to see potential returns."
+                    : "Waiting for a live quote."}
                 </div>
               )}
             </div>
@@ -445,12 +420,15 @@ export function BinaryTradePanel({
                 Sell Position
               </span>
               <span className="font-bold text-primary bg-primary/5 px-2 py-1 rounded-md">
-                Holding: ₹{currentHolding.invested.toFixed(0)} → ₹
-                {currentHolding.value.toFixed(2)}
+                Cost basis ₹{currentHolding.invested.toFixed(2)}
               </span>
             </div>
 
-            {currentHolding.positions.length > 0 ? (
+            {currentHolding.positions.length > 0 && !sellPrice ? (
+              <p className="text-sm text-muted-foreground">
+                Waiting for a live sell quote.
+              </p>
+            ) : currentHolding.positions.length > 0 ? (
               <>
                 {/* Current Position Card */}
                 <div
@@ -481,7 +459,7 @@ export function BinaryTradePanel({
                       ₹{currentHolding.value.toFixed(2)}
                     </span>
                     <p className="text-[10px] text-muted-foreground">
-                      Invested: ₹{currentHolding.invested.toFixed(0)}
+                      Invested: ₹{currentHolding.invested.toFixed(2)}
                     </p>
                   </div>
                 </div>
@@ -500,7 +478,7 @@ export function BinaryTradePanel({
                       size="sm"
                       disabled={isTrading}
                       className={cn(
-                        "h-10 text-xs font-bold border-border bg-muted/10 hover:bg-primary/10 hover:text-primary hover:border-primary/30 rounded-lg transition-all",
+                        "h-10 text-xs font-bold border-border bg-muted/10 hover:bg-primary/10 hover:text-primary hover:border-primary/30 rounded-lg transition-colors",
                         pendingSellRatio === ratio &&
                           isSellConfirming &&
                           "border-primary bg-primary/10 text-primary",
@@ -526,7 +504,7 @@ export function BinaryTradePanel({
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">Cost Basis</span>
                     <span className="font-bold">
-                      ₹{currentHolding.invested.toFixed(0)}
+                      ₹{currentHolding.invested.toFixed(2)}
                     </span>
                   </div>
                   <div className="flex items-center justify-between border-t border-border/50 pt-2">
@@ -602,7 +580,7 @@ export function BinaryTradePanel({
                 </Button>
                 <Button
                   onClick={() => handleSell(pendingSellRatio)}
-                  disabled={isTrading}
+                  disabled={isTrading || !isMarketActive || !sellPrice}
                   className={cn(
                     "flex-[2] h-12 text-base font-black uppercase tracking-widest",
                     selectedSide === "up"
@@ -611,7 +589,7 @@ export function BinaryTradePanel({
                   )}
                 >
                   {isTrading ? (
-                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <Loader2 className="w-5 h-5 motion-safe:animate-spin" />
                   ) : (
                     `Confirm Sell ${Math.round(pendingSellRatio * 100)}%`
                   )}
@@ -620,7 +598,7 @@ export function BinaryTradePanel({
             ) : (
               <Button
                 onClick={() => setIsSellConfirming(true)}
-                disabled={!isMarketActive || isTrading}
+                disabled={!isMarketActive || !sellPrice || isTrading}
                 className="w-full h-12 text-base font-bold bg-primary"
               >
                 Review Sell — {Math.round(pendingSellRatio * 100)}%
@@ -646,7 +624,7 @@ export function BinaryTradePanel({
                 </Button>
                 <Button
                   onClick={handleTrade}
-                  disabled={isTrading || numericAmount <= 0}
+                  disabled={!canBuy}
                   className={cn(
                     "flex-[2] h-12 text-base font-black uppercase tracking-widest",
                     selectedSide === "up"
@@ -655,7 +633,7 @@ export function BinaryTradePanel({
                   )}
                 >
                   {isTrading ? (
-                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <Loader2 className="w-5 h-5 motion-safe:animate-spin" />
                   ) : (
                     "Confirm Order"
                   )}
@@ -664,11 +642,7 @@ export function BinaryTradePanel({
             ) : (
               <Button
                 onClick={() => setIsConfirming(true)}
-                disabled={
-                  numericAmount <= 0 ||
-                  !isMarketActive ||
-                  numericAmount > (user?.balance || 0)
-                }
+                disabled={!canBuy}
                 className="w-full h-12 text-base font-bold bg-primary"
               >
                 Review Purchase
@@ -687,7 +661,7 @@ export function BinaryTradePanel({
           ₹
           {(user?.balance ?? 0).toLocaleString("en-IN", {
             minimumFractionDigits: 0,
-            maximumFractionDigits: 0,
+            maximumFractionDigits: 2,
           })}
         </span>
       </div>

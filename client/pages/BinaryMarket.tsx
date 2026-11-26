@@ -65,12 +65,6 @@ export default function BinaryMarket({
 
   const { data: historyData } = useQuery(binaryOutcomeHistoryQuery(assetPair));
 
-  // Build recent prices array from our client-side feed
-  const recentPrices = priceHistory.slice(-30).map((p) => p.price);
-
-  // Server-authoritative probability from /active endpoint
-  const serverProbability = activeData?.probability ?? null;
-
   // Periodic user balance refresh (every 10 seconds)
   useEffect(() => {
     if (!user) return;
@@ -171,7 +165,9 @@ export default function BinaryMarket({
                   below a target snapshot in 5-minute cycles. Markets resolve
                   based on the final price against the target price. If Final ≥
                   Target, <strong>UP</strong> wins. Otherwise,{" "}
-                  <strong>DOWN</strong> wins.
+                  <strong>DOWN</strong> wins. Buy and sell quotes vary by up to
+                  half a paisa on either side of the market price. The spread
+                  updates every five seconds.
                 </p>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 pt-6 border-t border-white/5">
@@ -209,14 +205,11 @@ export default function BinaryMarket({
               </p>
             ) : (
               <BinaryTradePanel
-                key={initialSide}
+                key={`${activeMarket?.id}:${initialSide}`}
                 asset={asset}
                 initialSide={initialSide}
                 market={activeMarket}
-                currentPrice={price}
-                recentPrices={recentPrices}
-                isConnected={isConnected}
-                serverProbability={serverProbability}
+                quotes={activeMarketError ? undefined : activeData?.quotes}
               />
             )}
           </div>

@@ -88,7 +88,7 @@ export function BinaryMarketCard({
     endTime !== expiredRound;
   const quotes =
     isRoundOpen && livePrice > 0 && !active.isError
-      ? active.data?.probability
+      ? active.data?.quotes?.buy
       : undefined;
   const quoteStatus = active.isPending
     ? "Loading quotes"
@@ -129,7 +129,6 @@ export function BinaryMarketCard({
           size="icon"
           aria-label={`Bookmark ${asset.symbol} market`}
           aria-pressed={isBookmarked}
-          data-bento-no-ripple
           onClick={onToggleBookmark}
           className="shrink-0 rounded-full text-muted-foreground hover:bg-muted"
         >

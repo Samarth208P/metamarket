@@ -42,6 +42,12 @@ function expressPlugin(): Plugin {
     async configureServer(server) {
       const { connectDB, createServer } = await import("./mapi/server");
       await connectDB();
+      if (server.httpServer) {
+        const { attachRamayanaSocket } = await import(
+          "./mapi/server/services/ramayanaNodeSocket.ts"
+        );
+        attachRamayanaSocket(server.httpServer);
+      }
       const app = await createServer({
         onShutdown: (stop) => server.httpServer?.once("close", stop),
       });

@@ -9,6 +9,7 @@ import { Layout } from "@/components/Layout";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DisclosurePanel } from "@/components/ui/disclosure-panel";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/use-auth";
 import { MAX_IMAGE_BYTES, USERNAME_PATTERN } from "@shared/api";
@@ -128,12 +129,17 @@ function ProfilePictureSettings() {
 export default function Settings() {
   const { user, updateUsername } = useAuth();
   const changeUsernameButton = useRef<HTMLButtonElement>(null);
+  const usernameInput = useRef<HTMLInputElement>(null);
   const [draft, setDraft] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
   const username = user?.username ?? "";
   const editing = draft !== null;
+
+  useEffect(() => {
+    if (editing) usernameInput.current?.focus({ preventScroll: true });
+  }, [editing]);
 
   useEffect(() => {
     if (saved) changeUsernameButton.current?.focus();
@@ -206,53 +212,51 @@ export default function Settings() {
                 {editing ? "Cancel" : "Change username"}
               </Button>
             </div>
-            <div id="username-editor" hidden={!editing}>
-              {editing && (
-                <form onSubmit={save} className="space-y-3">
-                  <div className="space-y-2">
-                    <Label htmlFor="settings-username">New username</Label>
-                    <Input
-                      id="settings-username"
-                      autoFocus
-                      autoComplete="username"
-                      aria-describedby={
-                        error ? "username-hint username-error" : "username-hint"
-                      }
-                      aria-invalid={error ? true : undefined}
-                      value={draft}
-                      maxLength={24}
-                      disabled={saving}
-                      onChange={(event) => {
-                        setDraft(event.target.value);
-                        setError("");
-                      }}
-                    />
-                    <p
-                      id="username-hint"
-                      className="text-sm text-muted-foreground"
-                    >
-                      Use 3–24 letters, numbers, or underscores.
-                    </p>
-                  </div>
-                  {error && (
-                    <p
-                      id="username-error"
-                      role="alert"
-                      className="text-sm text-destructive"
-                    >
-                      {error}
-                    </p>
-                  )}
-                  <Button
-                    type="submit"
-                    size="sm"
-                    disabled={saving || draft.trim() === username}
+            <DisclosurePanel id="username-editor" open={editing}>
+              <form onSubmit={save} className="space-y-3">
+                <div className="space-y-2">
+                  <Label htmlFor="settings-username">New username</Label>
+                  <Input
+                    id="settings-username"
+                    ref={usernameInput}
+                    autoComplete="username"
+                    aria-describedby={
+                      error ? "username-hint username-error" : "username-hint"
+                    }
+                    aria-invalid={error ? true : undefined}
+                    value={draft ?? username}
+                    maxLength={24}
+                    disabled={saving}
+                    onChange={(event) => {
+                      setDraft(event.target.value);
+                      setError("");
+                    }}
+                  />
+                  <p
+                    id="username-hint"
+                    className="text-sm text-muted-foreground"
                   >
-                    {saving ? "Saving…" : "Save username"}
-                  </Button>
-                </form>
-              )}
-            </div>
+                    Use 3–24 letters, numbers, or underscores.
+                  </p>
+                </div>
+                {error && (
+                  <p
+                    id="username-error"
+                    role="alert"
+                    className="text-sm text-destructive"
+                  >
+                    {error}
+                  </p>
+                )}
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={saving || !editing || draft.trim() === username}
+                >
+                  {saving ? "Saving…" : "Save username"}
+                </Button>
+              </form>
+            </DisclosurePanel>
             {saved && (
               <p role="status" className="text-sm">
                 Username saved.

@@ -7,6 +7,7 @@ import { AnimatedShinyText } from "@/components/ui/animated-shiny-text";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
+import { DisclosurePanel } from "@/components/ui/disclosure-panel";
 import { useToast } from "@/hooks/use-toast";
 import { NotificationCenter } from "@/components/NotificationCenter";
 import {
@@ -177,6 +178,7 @@ export function Layout({ children }: LayoutProps) {
               type="button"
               aria-label="Navigation menu"
               aria-expanded={mobileMenuOpen}
+              aria-controls="mobile-navigation"
               className="-mr-2 rounded-md p-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:hidden"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             >
@@ -190,58 +192,62 @@ export function Layout({ children }: LayoutProps) {
         </div>
 
         {/* Mobile Navigation */}
-        {mobileMenuOpen && (
-          <nav className="md:hidden border-t border-border bg-background px-4 py-4 flex flex-col gap-4">
-            {user && (
-              <Link
-                to="/portfolio"
-                onClick={() => setMobileMenuOpen(false)}
-                className="flex items-center justify-between p-3 bg-muted/30 rounded-md"
-              >
-                <span className="text-sm font-semibold">Portfolio Balance</span>
-                <span className="font-bold text-foreground">
-                  ₹{user.balance.toLocaleString()}
-                </span>
-              </Link>
-            )}
-
-            <div className="flex flex-col gap-2">
-              {currentNavLinks.map((link) => (
-                <Link
-                  key={link.href}
-                  to={link.href}
-                  className="text-sm font-semibold text-muted-foreground hover:text-foreground py-2"
-                  onClick={() => setMobileMenuOpen(false)}
-                >
-                  {link.label}
-                </Link>
-              ))}
+        <div className="md:hidden">
+          <DisclosurePanel open={mobileMenuOpen} id="mobile-navigation">
+            <nav className="md:hidden border-t border-border bg-background px-4 py-4 flex flex-col gap-4">
               {user && (
                 <Link
-                  to="/settings"
-                  className="flex items-center text-sm font-semibold text-muted-foreground hover:text-foreground py-2"
+                  to="/portfolio"
                   onClick={() => setMobileMenuOpen(false)}
+                  className="flex items-center justify-between p-3 bg-muted/30 rounded-md"
                 >
-                  <Settings className="w-4 h-4 mr-2" /> Settings
+                  <span className="text-sm font-semibold">
+                    Portfolio Balance
+                  </span>
+                  <span className="font-bold text-foreground">
+                    ₹{user.balance.toLocaleString()}
+                  </span>
                 </Link>
               )}
-            </div>
 
-            {user ? (
-              <Button
-                variant="outline"
-                onClick={signOut}
-                className="w-full justify-start text-destructive mt-2"
-              >
-                <LogOut className="w-4 h-4 mr-2" /> Sign Out
-              </Button>
-            ) : (
-              <Link to="/login" onClick={() => setMobileMenuOpen(false)}>
-                <Button className="w-full font-bold">Log In</Button>
-              </Link>
-            )}
-          </nav>
-        )}
+              <div className="flex flex-col gap-2">
+                {currentNavLinks.map((link) => (
+                  <Link
+                    key={link.href}
+                    to={link.href}
+                    className="text-sm font-semibold text-muted-foreground hover:text-foreground py-2"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    {link.label}
+                  </Link>
+                ))}
+                {user && (
+                  <Link
+                    to="/settings"
+                    className="flex items-center text-sm font-semibold text-muted-foreground hover:text-foreground py-2"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    <Settings className="w-4 h-4 mr-2" /> Settings
+                  </Link>
+                )}
+              </div>
+
+              {user ? (
+                <Button
+                  variant="outline"
+                  onClick={signOut}
+                  className="w-full justify-start text-destructive mt-2"
+                >
+                  <LogOut className="w-4 h-4 mr-2" /> Sign Out
+                </Button>
+              ) : (
+                <Link to="/login" onClick={() => setMobileMenuOpen(false)}>
+                  <Button className="w-full font-bold">Log In</Button>
+                </Link>
+              )}
+            </nav>
+          </DisclosurePanel>
+        </div>
       </header>
 
       <main className="flex-1">

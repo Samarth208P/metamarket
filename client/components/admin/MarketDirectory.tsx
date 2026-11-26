@@ -3,9 +3,11 @@ import { useState, type FormEvent } from "react";
 import { useMutation } from "@tanstack/react-query";
 import {
   ArrowUpRight,
-  CalendarClock,
+  Activity,
+  CheckCheck,
   ChevronDown,
-  ListFilter,
+  Clock3,
+  Layers3,
   Loader2,
   Search,
 } from "lucide-react";
@@ -32,6 +34,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { adminRequest, formatRupees, marketTypeLabels } from "./markets";
+import { DisclosurePanel } from "@/components/ui/disclosure-panel";
 
 const dateFormat = new Intl.DateTimeFormat("en-IN", {
   day: "numeric",
@@ -55,10 +58,30 @@ const statuses = {
 };
 
 const filters = [
-  { id: "all", label: "All" },
-  { id: "open", label: "Open" },
-  { id: "closed", label: "Awaiting resolution" },
-  { id: "resolved", label: "Resolved" },
+  {
+    id: "all",
+    label: "All markets",
+    icon: Layers3,
+    color: "bg-primary/10 text-primary",
+  },
+  {
+    id: "open",
+    label: "Open",
+    icon: Activity,
+    color: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+  },
+  {
+    id: "closed",
+    label: "Awaiting resolution",
+    icon: Clock3,
+    color: "bg-amber-500/10 text-amber-800 dark:text-amber-300",
+  },
+  {
+    id: "resolved",
+    label: "Resolved",
+    icon: CheckCheck,
+    color: "bg-violet-500/10 text-violet-700 dark:text-violet-300",
+  },
 ] as const;
 
 function getMarketStatus(market: Market, now: number): keyof typeof statuses {
@@ -159,7 +182,10 @@ function EditMarket({ market, onUpdated }: MarketActionProps) {
           Edit settings
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] overflow-y-auto rounded-xl">
+      <DialogContent
+        className="max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] overflow-y-auto rounded-xl"
+        overlayClassName="bg-black/60"
+      >
         <DialogHeader className="pr-5">
           <DialogTitle>Edit market settings</DialogTitle>
           <DialogDescription>{market.title}</DialogDescription>
@@ -301,7 +327,10 @@ function ResolveMarket({ market, onUpdated }: MarketActionProps) {
           Resolve market
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] overflow-y-auto rounded-xl">
+      <DialogContent
+        className="max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] overflow-y-auto rounded-xl"
+        overlayClassName="bg-black/60"
+      >
         <DialogHeader className="pr-5">
           <DialogTitle>Resolve market</DialogTitle>
           <DialogDescription>{market.title}</DialogDescription>
@@ -382,6 +411,9 @@ export function MarketDirectory({
   const [expandedId, setExpandedId] = useState<string>();
   const now = Date.now();
   const term = search.trim().toLowerCase();
+  const counts = { all: markets.length, open: 0, closed: 0, resolved: 0 };
+  for (const market of markets) counts[getMarketStatus(market, now)]++;
+  const countAvailable = !isLoading && !(hasError && !markets.length);
   const visibleMarkets = markets.filter((market) => {
     const matchesStatus =
       filter === "all" || filter === getMarketStatus(market, now);
@@ -394,249 +426,267 @@ export function MarketDirectory({
   });
 
   return (
-    <section
-      id="manage-markets"
-      aria-labelledby="manage-markets-title"
-      className="min-w-0 scroll-mt-20 self-start rounded-2xl border bg-card shadow-sm lg:sticky lg:top-20"
-    >
-      <header className="flex items-center gap-3 border-b px-4 py-3.5 sm:px-6">
-        <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
-          <ListFilter className="size-5" aria-hidden="true" />
-        </span>
-        <div>
-          <h2
-            id="manage-markets-title"
-            className="text-lg font-bold tracking-tight"
+    <div className="space-y-5 sm:space-y-6">
+      <div
+        role="group"
+        aria-label="Filter markets by status"
+        className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3"
+      >
+        {filters.map(({ id, label, icon: Icon, color }) => (
+          <button
+            key={id}
+            type="button"
+            aria-pressed={filter === id}
+            aria-controls="manage-markets"
+            onClick={() => setFilter(id)}
+            className="admin-filter relative flex min-w-0 flex-col items-start gap-2 rounded-xl border bg-card/60 px-3.5 py-3 text-left sm:gap-3 sm:px-5 sm:py-4"
           >
-            Manage markets
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            Find, edit, and resolve existing markets.
-          </p>
-        </div>
-      </header>
-
-      <div className="space-y-3 border-b px-4 py-4 sm:px-6">
-        <div className="relative">
-          <Search
-            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-            aria-hidden="true"
-          />
-          <Input
-            type="search"
-            aria-label="Search managed markets"
-            placeholder="Search by title or category"
-            className="bg-background pl-9"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-          />
-        </div>
-        <div
-          role="group"
-          aria-label="Market status"
-          className="flex flex-wrap gap-1.5"
-        >
-          {filters.map(({ id, label }) => (
-            <Button
-              key={id}
-              type="button"
-              variant="outline"
-              size="sm"
-              aria-pressed={filter === id}
-              className="h-8 border-transparent bg-transparent px-2.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground aria-pressed:border-primary/20 aria-pressed:bg-primary/10 aria-pressed:font-semibold aria-pressed:text-foreground"
-              onClick={() => setFilter(id)}
-            >
-              {label}
-            </Button>
-          ))}
-        </div>
+            <span className="flex w-full items-center justify-between gap-1.5">
+              <span className="text-xs font-medium sm:text-sm">{label}</span>
+              <span
+                className={cn(
+                  "grid size-6 shrink-0 place-items-center rounded-md sm:size-7",
+                  color,
+                )}
+              >
+                <Icon className="size-3.5 sm:size-4" aria-hidden="true" />
+              </span>
+            </span>
+            <span className="text-2xl font-semibold leading-none tracking-tight tabular-nums sm:text-3xl">
+              {countAvailable ? counts[id] : "—"}
+            </span>
+          </button>
+        ))}
       </div>
-
-      {isLoading ? (
-        <div
-          role="status"
-          className="flex items-center justify-center gap-2 px-4 py-14 text-sm text-muted-foreground"
-        >
-          <Loader2
-            className="size-4 motion-safe:animate-spin"
-            aria-hidden="true"
-          />{" "}
-          Loading markets…
-        </div>
-      ) : hasError && !markets.length ? (
-        <div className="space-y-3 px-4 py-12 text-center">
-          <p role="alert" className="text-sm font-semibold">
-            Unable to load markets.
-          </p>
-          <Button type="button" variant="outline" size="sm" onClick={onRetry}>
-            Try again
-          </Button>
-        </div>
-      ) : (
-        <>
-          <p
-            role="status"
-            className="border-b bg-muted/20 px-4 py-2 text-xs font-medium text-muted-foreground sm:px-6"
+      <section
+        id="manage-markets"
+        aria-labelledby="market-directory-title"
+        className="min-w-0 overflow-hidden rounded-xl border bg-card"
+      >
+        <header className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-4 sm:px-5">
+          <h2
+            id="market-directory-title"
+            className="text-lg font-semibold tracking-tight"
           >
-            {visibleMarkets.length === markets.length
-              ? `${markets.length} ${markets.length === 1 ? "market" : "markets"}`
-              : `${visibleMarkets.length} of ${markets.length} markets`}
-          </p>
-          {visibleMarkets.length === 0 ? (
-            <div className="space-y-3 px-4 py-12 text-center">
-              <p className="text-sm font-semibold">
-                {markets.length ? "No matching markets" : "No markets yet"}
-              </p>
-              {markets.length ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setSearch("");
-                    setFilter("all");
-                  }}
-                >
-                  Clear filters
-                </Button>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  New markets will appear here after you create them.
-                </p>
-              )}
-            </div>
-          ) : (
-            <ul
-              aria-label="Markets"
-              className="divide-y overflow-y-auto rounded-b-2xl lg:max-h-[max(15rem,calc(100dvh-19rem))]"
-            >
-              {visibleMarkets.map((market) => {
-                const status = getMarketStatus(market, now);
-                const isExpanded = market.id === expandedId;
-                const winnerId =
-                  market.resolvedOptionId ||
-                  (market.status === "resolved_yes" ? "yes" : "no");
-                const winner =
-                  status === "resolved" &&
-                  getOutcomes(market).find(({ id }) => id === winnerId)?.name;
+            Market directory
+          </h2>
+          <div className="relative w-full sm:w-64">
+            <Search
+              className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+              aria-hidden="true"
+            />
+            <Input
+              type="search"
+              aria-label="Search managed markets"
+              placeholder="Search by title or category"
+              className="h-9 bg-background/70 pl-9"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
+          </div>
+        </header>
 
-                return (
-                  <li key={market.id}>
-                    <button
-                      type="button"
-                      aria-expanded={isExpanded}
-                      aria-controls={`market-details-${market.id}`}
-                      className="flex w-full items-start gap-3 px-4 py-4 text-left hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring aria-expanded:bg-primary/[0.045] sm:px-6"
-                      onClick={() =>
-                        setExpandedId(isExpanded ? undefined : market.id)
-                      }
-                    >
-                      {market.logoUrl && (
-                        <img
-                          src={market.logoUrl}
-                          alt=""
-                          loading="lazy"
-                          className="size-9 shrink-0 rounded-lg border object-cover"
-                        />
-                      )}
-                      <span className="min-w-0 flex-1">
-                        <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-medium text-muted-foreground">
+        {isLoading ? (
+          <div
+            role="status"
+            className="flex items-center justify-center gap-2 px-4 py-14 text-sm text-muted-foreground"
+          >
+            <Loader2
+              className="size-4 motion-safe:animate-spin"
+              aria-hidden="true"
+            />{" "}
+            Loading markets…
+          </div>
+        ) : hasError && !markets.length ? (
+          <div className="space-y-3 px-4 py-12 text-center">
+            <p role="alert" className="text-sm font-semibold">
+              Unable to load markets.
+            </p>
+            <Button type="button" variant="outline" size="sm" onClick={onRetry}>
+              Try again
+            </Button>
+          </div>
+        ) : (
+          <>
+            <p role="status" className="sr-only">
+              {visibleMarkets.length === markets.length
+                ? `${markets.length} ${markets.length === 1 ? "market" : "markets"}`
+                : `${visibleMarkets.length} of ${markets.length} markets`}
+            </p>
+            {visibleMarkets.length === 0 ? (
+              <div className="space-y-3 px-4 py-12 text-center">
+                <p className="text-sm font-semibold">
+                  {markets.length ? "No matching markets" : "No markets yet"}
+                </p>
+                {markets.length ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setSearch("");
+                      setFilter("all");
+                    }}
+                  >
+                    Clear filters
+                  </Button>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    New markets will appear here after you create them.
+                  </p>
+                )}
+              </div>
+            ) : (
+              <>
+                <div
+                  aria-hidden="true"
+                  className="admin-columns admin-column-labels border-b bg-background/35 text-xs font-medium text-muted-foreground"
+                >
+                  <span>Market</span>
+                  <span>Status</span>
+                  <span>Closes</span>
+                  <span className="text-right">Volume</span>
+                </div>
+                <ul aria-label="Markets" className="divide-y">
+                  {visibleMarkets.map((market) => {
+                    const status = getMarketStatus(market, now);
+                    const isExpanded = market.id === expandedId;
+                    const winnerId =
+                      market.resolvedOptionId ||
+                      (market.status === "resolved_yes" ? "yes" : "no");
+                    const winner =
+                      status === "resolved" &&
+                      getOutcomes(market).find(({ id }) => id === winnerId)
+                        ?.name;
+
+                    return (
+                      <li key={market.id}>
+                        <button
+                          type="button"
+                          aria-expanded={isExpanded}
+                          aria-controls={`market-details-${market.id}`}
+                          className="admin-columns admin-row w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring aria-expanded:bg-primary/[0.035]"
+                          onClick={() =>
+                            setExpandedId(isExpanded ? undefined : market.id)
+                          }
+                        >
+                          <span className="admin-market-name flex min-w-0 items-center gap-3">
+                            {market.logoUrl ? (
+                              <img
+                                src={market.logoUrl}
+                                alt=""
+                                loading="lazy"
+                                className="size-11 shrink-0 rounded-lg border object-cover"
+                              />
+                            ) : (
+                              <span className="grid size-11 shrink-0 place-items-center rounded-lg border bg-muted/50 text-muted-foreground">
+                                <Layers3
+                                  className="size-5"
+                                  aria-hidden="true"
+                                />
+                              </span>
+                            )}
+                            <span className="min-w-0">
+                              <span className="block text-sm font-semibold leading-snug text-foreground">
+                                {market.title}
+                              </span>
+                              <span className="mt-1 block text-xs text-muted-foreground">
+                                {market.category}{" "}
+                                <span aria-hidden="true">·</span>{" "}
+                                {marketTypeLabels[market.marketType]}
+                              </span>
+                            </span>
+                          </span>
                           <span
                             className={cn(
-                              "inline-flex items-center gap-1.5 rounded-md px-1.5 py-0.5 font-medium",
+                              "admin-market-status inline-flex w-fit items-center gap-1.5 rounded-full px-2 py-1 text-xs font-medium leading-none",
                               statuses[status].style,
                             )}
                           >
                             <span
-                              className="size-1.5 rounded-full bg-current"
+                              className="size-1.5 shrink-0 rounded-full bg-current"
                               aria-hidden="true"
                             />
                             {statuses[status].label}
                           </span>
-                          <span>{market.category}</span>
-                          <span aria-hidden="true">/</span>
-                          <span>{marketTypeLabels[market.marketType]}</span>
-                        </span>
-                        <span className="mt-1.5 block text-sm font-semibold leading-snug text-foreground">
-                          {market.title}
-                        </span>
-                        <span className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                          {market.endDate && (
-                            <span className="inline-flex items-center gap-1.5">
-                              <CalendarClock
-                                className="size-3.5 shrink-0"
-                                aria-hidden="true"
-                              />
+                          <span className="admin-market-close text-xs text-muted-foreground">
+                            <span className="sr-only">Closes </span>
+                            {market.endDate ? (
                               <time dateTime={market.endDate}>
                                 {dateFormat.format(new Date(market.endDate))}
                               </time>
-                            </span>
-                          )}
-                          <span className="tabular-nums">
-                            {formatRupees(market.volume)} volume
-                          </span>
-                        </span>
-                      </span>
-                      <ChevronDown
-                        className={cn(
-                          "mt-0.5 size-4 shrink-0 text-muted-foreground",
-                          isExpanded && "rotate-180",
-                        )}
-                        aria-hidden="true"
-                      />
-                    </button>
-                    <div
-                      id={`market-details-${market.id}`}
-                      hidden={!isExpanded}
-                      className="space-y-3 border-t bg-muted/15 px-4 py-4 sm:px-6"
-                    >
-                      {isExpanded && (
-                        <>
-                          <p className="whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">
-                            {market.description}
-                          </p>
-                          {winner && (
-                            <p className="text-sm font-medium">
-                              Winner{" "}
-                              <span className="ml-1 font-semibold text-primary">
-                                {winner}
-                              </span>
-                            </p>
-                          )}
-                          <div className="flex flex-wrap items-center gap-2">
-                            {status !== "resolved" && !market.codexSourceUrl && (
-                              <>
-                                <EditMarket
-                                  market={market}
-                                  onUpdated={onUpdated}
-                                />
-                                <ResolveMarket
-                                  market={market}
-                                  onUpdated={onUpdated}
-                                />
-                              </>
+                            ) : (
+                              "No cutoff"
                             )}
-                            <Button
-                              asChild
-                              size="sm"
-                              variant="ghost"
-                              className="hover:bg-muted hover:text-foreground"
-                            >
-                              <Link to={`/market/${market.id}`}>
-                                View market <ArrowUpRight aria-hidden="true" />
-                              </Link>
-                            </Button>
+                          </span>
+                          <span className="admin-market-volume text-sm font-medium tabular-nums">
+                            {formatRupees(market.volume)}
+                            <span className="text-xs font-normal text-muted-foreground md:sr-only">
+                              {" "}
+                              volume
+                            </span>
+                          </span>
+                          <ChevronDown
+                            className={cn(
+                              "ui-chevron admin-row-chevron size-4 text-muted-foreground",
+                              isExpanded && "rotate-180",
+                            )}
+                            aria-hidden="true"
+                          />
+                        </button>
+                        <DisclosurePanel
+                          id={`market-details-${market.id}`}
+                          open={isExpanded}
+                        >
+                          <div className="space-y-3 border-t bg-background/35 px-4 py-4 md:pl-[4.75rem] md:pr-6">
+                            <p className="whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">
+                              {market.description}
+                            </p>
+                            {winner && (
+                              <p className="text-sm font-medium">
+                                Winner{" "}
+                                <span className="ml-1 font-semibold text-primary">
+                                  {winner}
+                                </span>
+                              </p>
+                            )}
+                            <div className="flex flex-wrap items-center gap-2">
+                              {status !== "resolved" &&
+                                !market.codexSourceUrl && (
+                                  <>
+                                    <EditMarket
+                                      market={market}
+                                      onUpdated={onUpdated}
+                                    />
+                                    <ResolveMarket
+                                      market={market}
+                                      onUpdated={onUpdated}
+                                    />
+                                  </>
+                                )}
+                              <Button
+                                asChild
+                                size="sm"
+                                variant="ghost"
+                                className="hover:bg-muted hover:text-foreground"
+                              >
+                                <Link to={`/market/${market.id}`}>
+                                  View market{" "}
+                                  <ArrowUpRight aria-hidden="true" />
+                                </Link>
+                              </Button>
+                            </div>
                           </div>
-                        </>
-                      )}
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </>
-      )}
-    </section>
+                        </DisclosurePanel>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </>
+            )}
+          </>
+        )}
+      </section>
+    </div>
   );
 }

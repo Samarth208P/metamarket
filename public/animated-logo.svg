@@ -42,6 +42,9 @@
         stroke-width: 0;
       }
     }
+    @media (prefers-reduced-motion: reduce) {
+      .logo-path { animation: none; fill: white; stroke-width: 0; stroke-dashoffset: 0; }
+    }
   </style>
 
   <path class="logo-path" d="M 190.6 490.5

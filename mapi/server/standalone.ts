@@ -1,5 +1,6 @@
 import "dotenv/config";
 import { createServer, connectDB } from "./index.ts";
+import { attachRamayanaSocket } from "./services/ramayanaNodeSocket.ts";
 
 const PORT = process.env.PORT || 10000;
 
@@ -13,9 +14,10 @@ async function startStandaloneServer() {
     const app = await createServer();
 
     // 3. Listen continuously
-    app.listen(PORT, () => {
+    const server = app.listen(PORT, () => {
       console.log(`[Standalone] Server is running on port ${PORT}`);
     });
+    attachRamayanaSocket(server);
   } catch (error) {
     console.error("[Standalone] Startup error:", error);
     process.exit(1);

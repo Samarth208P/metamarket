@@ -11,11 +11,11 @@
 export const MARKET_DURATION_MS = 5 * 60 * 1000; // 5 minutes
 export const BINARY_OUTCOME_HISTORY_LIMIT = 5;
 export const DEFAULT_VOLATILITY = 0.04; // Increased from 0.0015 for more realistic (less jumpy) pricing
-export const VIV_JITTER_RANGE = 0.0001;
 export const MOMENTUM_BIAS_CAP = 0.05; // Max 5p shift from momentum
 export const MIN_PROBABILITY = 0.01; // Allow prices to go near 0
 export const MAX_PROBABILITY = 0.99; // Allow prices to go near 100p
 export const PRICE_SNAPSHOT_INTERVAL_MS = 1_000; // 1 s chart resolution
+const QUOTE_INTERVAL_MS = 5_000;
 
 // ─── Types ────────────────────────────────────────────────────────────
 
@@ -30,6 +30,7 @@ export interface BinaryTrade {
   userName?: string;
   side: "up" | "down";
   amount: number;
+  fee?: number; // Purchase fee attributable to the remaining stake
   entryProbability: number;
   payout: number; // 0 until settled
   timestamp: string;
@@ -63,12 +64,41 @@ export interface BinaryMarket {
 export interface BinaryTradeRequest {
   side: "up" | "down";
   amount: number;
+  maxPrice?: number;
 }
 
 export interface BinaryTradeResponse {
   market: BinaryMarket;
   trade: BinaryTrade;
   userBalance: number;
+  totalCost: number;
+}
+
+export interface BinaryQuotes {
+  buy: { up: number; down: number };
+  sell: { up: number; down: number };
+}
+
+// Each round has a random ID. All requests in the same five-second window
+// use the same spread, including requests handled by different API instances.
+export function binaryQuotes(
+  upProbability: number,
+  roundId: string,
+  now: number,
+): BinaryQuotes {
+  const windowKey = `${roundId}:${Math.floor(now / QUOTE_INTERVAL_MS)}`;
+  let hash = 2166136261;
+  for (const char of windowKey) {
+    hash = Math.imul(hash ^ char.charCodeAt(0), 16777619);
+  }
+  // Price in tenths of a paisa so the displayed and executable prices match.
+  const spread = (hash >>> 0) % 6;
+  const up = Math.round(clampProbability(upProbability) * 1000);
+  const down = 1000 - up;
+  return {
+    buy: { up: (up + spread) / 1000, down: (down + spread) / 1000 },
+    sell: { up: (up - spread) / 1000, down: (down - spread) / 1000 },
+  };
 }
 
 // ─── Math Helpers ─────────────────────────────────────────────────────
@@ -246,7 +276,7 @@ export function clampProbability(p: number): number {
  * Format a probability (0–1) as paise string, e.g. "67p"
  */
 export function formatPaise(probability: number): string {
-  return `${Math.round(probability * 100)}p`;
+  return `${Number((probability * 100).toFixed(1))}p`;
 }
 
 /**
