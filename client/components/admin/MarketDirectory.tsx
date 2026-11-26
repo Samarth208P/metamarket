@@ -604,7 +604,7 @@ export function MarketDirectory({
                             </p>
                           )}
                           <div className="flex flex-wrap items-center gap-2">
-                            {status !== "resolved" && (
+                            {status !== "resolved" && !market.codexSourceUrl && (
                               <>
                                 <EditMarket
                                   market={market}

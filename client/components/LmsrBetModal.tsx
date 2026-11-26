@@ -878,6 +878,16 @@ export function LmsrBetModal({
                 </h4>
                 <p className="text-sm text-muted-foreground leading-relaxed">
                   {market.description}
+                  {market.codexSourceUrl && (
+                    <a
+                      className="ml-2 text-primary underline"
+                      href={market.codexSourceUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      Resolution source
+                    </a>
+                  )}
                 </p>
               </div>
               <div className="pt-6 border-t border-border/50">

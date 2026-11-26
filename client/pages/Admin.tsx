@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { Layout } from "@/components/Layout";
 import { MarketComposer } from "@/components/admin/MarketComposer";
+import { CodexWorkspace } from "@/components/admin/CodexWorkspace";
 import { MarketDirectory } from "@/components/admin/MarketDirectory";
 import { adminRequest, formatRupees } from "@/components/admin/markets";
 import { Button } from "@/components/ui/button";
@@ -461,7 +462,7 @@ export default function Admin() {
               className={toolbarButton}
               asChild
             >
-              <a href="#create-market">
+              <a href="#market-workspace">
                 Create <ArrowDown aria-hidden="true" />
               </a>
             </Button>
@@ -478,10 +479,12 @@ export default function Admin() {
           </nav>
 
           <div className="grid items-start gap-4 lg:grid-cols-2 lg:gap-6">
-            <MarketComposer
-              blocked={solvency.data?.isBelowThreshold === true}
-              onCreated={syncMarket}
-            />
+            <CodexWorkspace blocked={solvency.data?.isBelowThreshold === true}>
+              <MarketComposer
+                blocked={solvency.data?.isBelowThreshold === true}
+                onCreated={syncMarket}
+              />
+            </CodexWorkspace>
             <MarketDirectory
               markets={markets.data ?? []}
               isLoading={markets.isLoading}

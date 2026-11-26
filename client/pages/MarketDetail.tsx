@@ -86,6 +86,16 @@ export default function MarketDetail() {
                 </h1>
                 <p className="text-sm text-muted-foreground mb-6 leading-relaxed">
                   {market.description}
+                  {market.codexSourceUrl && (
+                    <a
+                      className="ml-2 text-primary underline"
+                      href={market.codexSourceUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      Resolution source
+                    </a>
+                  )}
                 </p>
 
                 <div className="flex gap-4 border-t border-border pt-4 mt-auto">
