@@ -10,6 +10,10 @@ import { parseImageUpload } from "./imageUpload.ts";
 import { publicImageUrl, uploadImage } from "../services/images.ts";
 import { getRamayanaBoxOffice } from "../services/ramayanaBoxOffice.ts";
 import {
+  createStreamTicket,
+  ramayanaStreamPath,
+} from "../services/ramayanaStreamTicket.ts";
+import {
   QUOTE_TTL_MS,
   calculateCurrentB,
   createQuote,
@@ -346,8 +350,15 @@ async function getSolvencyOverview() {
 
 router.get(
   "/ramayana/box-office",
-  asyncRoute(async (_req, res) => {
-    res.json(await getRamayanaBoxOffice());
+  asyncRoute(async (req, res) => {
+    const report = await getRamayanaBoxOffice();
+    const endpoint = req.app.locals.edge
+      ? new URL("/functions/v1/ramayana-feed", process.env.SUPABASE_URL).href
+          .replace(/^https:/, "wss:")
+          .replace(/^http:/, "ws:")
+      : ramayanaStreamPath;
+    const ticket = createStreamTicket(process.env.SESSION_SECRET);
+    res.json({ ...report, streamUrl: endpoint + "?ticket=" + ticket });
   }),
 );
 

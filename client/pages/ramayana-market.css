@@ -123,6 +123,7 @@
   display: block;
   height: 100%;
   border-radius: inherit;
+  transform-origin: left;
   background: linear-gradient(90deg, #a76138, var(--ram-gold));
 }
 
